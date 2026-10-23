@@ -4,10 +4,14 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "check": "node --check app.js && node --check server.js && node --check server-team.js && node --check insights.js && node --check report-features.js && node --check team.js && node --check report-data.js && node --check report-worker.js && node --check import-history.js && node --check investigation-model.js && node --check investigations.js && node --check tools/team-admin.js && node --check tools/publish-report.js && node --check report-pdf.js && node --check workspace-tools.js",
+    "check": "node --check app.js && node --check server.js && node --check server-team.js && node --check insights.js && node --check report-features.js && node --check team.js && node --check report-data.js && node --check report-worker.js && node --check import-history.js && node --check investigation-model.js && node --check investigations.js && node --check tools/team-admin.js && node --check tools/publish-report.js && node --check report-pdf.js && node --check workspace-tools.js && node --check tools/check-database.js && node --check config.js && node --check json-store.js && node --check team-store.js && node --check tools/database.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test report-data.test.js investigation.test.js remaining-priorities.test.js report-pdf.test.js workspace-tools.test.js"
+    "test": "node --test report-data.test.js investigation.test.js remaining-priorities.test.js report-pdf.test.js workspace-tools.test.js database.test.js",
+    "db:check": "node tools/check-database.js",
+    "db:migrate": "node tools/database.js migrate",
+    "db:import-files": "node tools/database.js import-files",
+    "test:postgres": "node --test postgres.test.js"
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.6",
@@ -15,6 +19,7 @@
   },
   "dependencies": {
     "jspdf": "4.2.1",
-    "pdfjs-dist": "6.4.299"
+    "pdfjs-dist": "6.4.299",
+    "pg": "8.23.1"
   }
 }
