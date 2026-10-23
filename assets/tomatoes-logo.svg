@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Tomatoes</title>
+  <desc id="desc">A ripe red tomato with green leaves and a white checkmark.</desc>
+  <path d="M32 19C24 12 10 19 9 33C7.7 48 18.4 59 32 59C45.6 59 56.3 48 55 33C54 19 40 12 32 19Z" fill="#EF6554"/>
+  <path d="M15 43C20 53 34 57 45 50C49 47 52 43 54 38C52 51 43 59 32 59C20 59 10 50 9 37C10 39 12 41 15 43Z" fill="#D9483B"/>
+  <path d="M19 25C16 27 14 31 14 35" stroke="#FFB2A5" stroke-width="3" stroke-linecap="round"/>
+  <path d="M32 18C31 12 34 7 39 5" stroke="#73B895" stroke-width="4" stroke-linecap="round"/>
+  <path d="M32 18C27 11 21 10 16 13L25 21L18 25C25 27 29 25 32 22C35 26 42 27 47 24L39 20L47 13C40 11 35 13 32 18Z" fill="#73B895"/>
+  <path d="M23 36L29 42L42 29" stroke="#FFF8ED" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

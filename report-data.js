@@ -326,7 +326,155 @@
     );
     return normalized;
   }
+  function insightStats(report) {
+    const executed = report.tests.filter((test) =>
+      ["passed", "failed"].includes(test.status),
+    );
+    const ordered = executed.map((test) => test.duration).sort((a, b) => a - b);
+    const categories = new Map();
+    const folders = new Map();
+    const bins = [
+      { label: "Under 10s", max: 10000, count: 0 },
+      { label: "10–30s", max: 30000, count: 0 },
+      { label: "30–60s", max: 60000, count: 0 },
+      { label: "1–5m", max: 300000, count: 0 },
+      { label: "5m+", max: Infinity, count: 0 },
+    ];
+    for (const test of report.tests) {
+      const folder =
+        test.file.split("/").slice(0, -1).join("/") || "Root specs";
+      if (!folders.has(folder))
+        folders.set(folder, { folder, total: 0, failed: 0, duration: 0 });
+      const group = folders.get(folder);
+      group.total++;
+      group.duration += test.duration;
+      if (test.status === "failed") {
+        group.failed++;
+        const message = test.error;
+        const category = /before (all|each)|after (all|each)|hook/i.test(
+          message,
+        )
+          ? "Hook failures"
+          : /cy\.wait\(\)|No request ever occurred|route:/i.test(message)
+            ? "Network waits"
+            : /cy\.(click|type|select|check)\(\)|disabled|detached/i.test(
+                  message,
+                )
+              ? "Element interactions"
+              : /TypeError|ReferenceError|SyntaxError/i.test(message)
+                ? "Runtime errors"
+                : /AssertionError|Timed out|expected/i.test(message)
+                  ? "Assertions and timeouts"
+                  : "Other errors";
+        if (!categories.has(category))
+          categories.set(category, { label: category, tests: [] });
+        categories.get(category).tests.push(test);
+      }
+    }
+    executed.forEach(
+      (test) =>
+        bins.find((bin) => test.duration < bin.max || bin.max === Infinity)
+          .count++,
+    );
+    return {
+      executed: executed.length,
+      executedPassRate: executed.length
+        ? (report.counts.passed / executed.length) * 100
+        : 0,
+      p95: ordered.length
+        ? ordered[Math.ceil(ordered.length * 0.95) - 1]
+        : null,
+      failureTime: report.tests
+        .filter((test) => test.status === "failed")
+        .reduce((sum, test) => sum + test.duration, 0),
+      categories: [...categories.values()].sort(
+        (a, b) => b.tests.length - a.tests.length,
+      ),
+      folders: [...folders.values()].sort(
+        (a, b) => b.failed - a.failed || b.total - a.total,
+      ),
+      bins,
+    };
+  }
+  function stabilityStats(runs, currentReport) {
+    const observations = new Map();
+    const ambiguous = new Set();
+    const key = (test) => JSON.stringify([test.file, test.fullTitle]);
+    const seenRuns = new Set();
+    for (const run of runs) {
+      if (seenRuns.has(run.id)) continue;
+      seenRuns.add(run.id);
+      const grouped = new Map();
+      for (const test of run.tests) {
+        const identity = key(test);
+        if (!grouped.has(identity)) grouped.set(identity, []);
+        grouped.get(identity).push(test);
+      }
+      for (const [identity, tests] of grouped) {
+        if (tests.length !== 1) {
+          ambiguous.add(identity);
+          continue;
+        }
+        const test = tests[0];
+        if (!["passed", "failed"].includes(test.status)) continue;
+        if (!observations.has(identity))
+          observations.set(identity, {
+            identity,
+            title: test.title,
+            file: test.file,
+            observations: [],
+          });
+        observations.get(identity).observations.push({
+          runId: run.id,
+          label: run.label,
+          status: test.status,
+        });
+      }
+    }
+    const current = new Map();
+    for (const test of currentReport.tests) {
+      const identity = key(test);
+      current.set(identity, current.has(identity) ? null : test.id);
+    }
+    const comparable = [...observations.values()].filter(
+      (item) => item.observations.length >= 2 && !ambiguous.has(item.identity),
+    );
+    const changed = comparable
+      .filter(
+        (item) =>
+          new Set(item.observations.map((observation) => observation.status))
+            .size > 1,
+      )
+      .map((item) => ({
+        ...item,
+        currentId: current.get(item.identity) ?? null,
+        failures: item.observations.filter(
+          (observation) => observation.status === "failed",
+        ).length,
+      }));
+    changed.sort(
+      (a, b) => b.failures - a.failures || a.title.localeCompare(b.title),
+    );
+    return {
+      runs: seenRuns.size,
+      comparable: comparable.length,
+      changed,
+      alwaysFailed: comparable.filter((item) =>
+        item.observations.every(
+          (observation) => observation.status === "failed",
+        ),
+      ).length,
+      alwaysPassed: comparable.filter((item) =>
+        item.observations.every(
+          (observation) => observation.status === "passed",
+        ),
+      ).length,
+      ambiguous: ambiguous.size,
+    };
+  }
   const api = {
+    insightStats,
+    stabilityStats,
     normalizeReport,
     dashboardStats,
     validateReport,

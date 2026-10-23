@@ -380,3 +380,111 @@ test("unavailable browser storage fails clearly rather than claiming an import i
     /unavailable/,
   );
 });
+const { insightStats, stabilityStats } = require("./report-data");
+test("analytics reconcile failure groups, areas, and executed-duration bins", () => {
+  const report = normalizeReport(fixture);
+  const data = insightStats(report);
+  assert.equal(data.executed, 1093);
+  assert.equal(data.executedPassRate, (952 / 1093) * 100);
+  assert.equal(
+    data.categories.reduce((sum, group) => sum + group.tests.length, 0),
+    141,
+  );
+  assert.equal(
+    data.folders.reduce((sum, area) => sum + area.total, 0),
+    1261,
+  );
+  assert.equal(
+    data.folders.reduce((sum, area) => sum + area.failed, 0),
+    141,
+  );
+  assert.equal(
+    data.bins.reduce((sum, bin) => sum + bin.count, 0),
+    1093,
+  );
+  assert.equal(
+    data.failureTime,
+    report.tests
+      .filter((test) => test.status === "failed")
+      .reduce((sum, test) => sum + test.duration, 0),
+  );
+  assert.ok(data.p95 > 0);
+});
+test("analytics handle empty reports and duration boundaries", () => {
+  const empty = insightStats(normalizeReport({ stats: {}, results: [] }));
+  assert.equal(empty.p95, null);
+  assert.equal(empty.executedPassRate, 0);
+  const report = {
+    tests: [0, 10000, 30000, 60000, 300000].map((duration, id) => ({
+      file: "a.cy.ts",
+      status: "passed",
+      duration,
+      error: "",
+      id,
+    })),
+    counts: { passed: 5 },
+  };
+  assert.deepEqual(
+    insightStats(report).bins.map((bin) => bin.count),
+    [1, 1, 1, 1, 1],
+  );
+});
+test("stability compares unique executed identities and does not equate skipped tests with failures", () => {
+  const one = {
+    file: "a.cy.ts",
+    fullTitle: "suite changes",
+    title: "changes",
+    status: "passed",
+    id: 5,
+  };
+  const two = {
+    ...one,
+    fullTitle: "suite consistent",
+    title: "consistent",
+    id: 6,
+  };
+  const runs = [
+    { id: "first", label: "first", tests: [one, two] },
+    {
+      id: "second",
+      label: "second",
+      tests: [{ ...one, status: "failed" }, two],
+    },
+    {
+      id: "third",
+      label: "third",
+      tests: [{ ...one, status: "pending" }, two],
+    },
+  ];
+  const result = stabilityStats(runs, { tests: [one, two] });
+  assert.equal(result.runs, 3);
+  assert.equal(result.comparable, 2);
+  assert.equal(result.changed.length, 1);
+  assert.equal(result.changed[0].currentId, 5);
+  assert.equal(result.changed[0].observations.length, 2);
+  assert.equal(result.alwaysPassed, 1);
+  assert.equal(result.alwaysFailed, 0);
+});
+test("stability excludes ambiguous duplicate titles and duplicate run ids", () => {
+  const test = {
+    file: "a.cy.ts",
+    fullTitle: "same",
+    title: "same",
+    status: "passed",
+    id: 0,
+  };
+  const result = stabilityStats(
+    [
+      { id: "a", tests: [test, test] },
+      { id: "b", tests: [{ ...test, status: "failed" }] },
+      { id: "c", tests: [test] },
+      { id: "c", tests: [{ ...test, status: "failed" }] },
+    ],
+    { tests: [test] },
+  );
+  assert.equal(result.runs, 3);
+  assert.equal(result.ambiguous, 1);
+  assert.equal(result.changed.length, 0);
+  assert.equal(result.comparable, 0);
+  assert.equal(stabilityStats([], { tests: [] }).comparable, 0);
+});

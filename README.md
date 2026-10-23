@@ -2,6 +2,10 @@
 
 A local dashboard for exploring Mochawesome JSON reports. The bundled `results.json` is the supplied sample latest run, originally named `index.json`.
 
+## Branding
+
+Tomatoes uses a red tomato mark with green leaves and a cream checkmark to connect the name to test reporting. The scalable logo in `assets/tomatoes-logo.svg` is used in the sidebar, workspace avatar, and browser favicon.
+
 ## Run
 
 Run `npm start`, then open http://localhost:3000/#runs. No API keys are required. The dashboard fetches its bundled report through the local server.
@@ -12,8 +16,10 @@ Run `npm start`, then open http://localhost:3000/#runs. No API keys are required
 - Test results: detailed spec and test browsing, accessible from the sidebar or dashboard widgets.
 - Switch between spec summaries and individual tests. Search by spec, test title, or failure message; filter by spec and outcome.
 - Click a spec to inspect its tests. Inspect a test for its failure message, stack trace, recorded code, and context. Report text is displayed as text and never executed.
-- Failed tests lists all failures; analytics ranks specs by failure count and tests by duration.
-- Branch, commit, author, browser, operating system, flakiness, and historical trends are unavailable when absent from the report.
+- Failed tests lists all failures. Analytics groups failure messages, ranks affected directories, shows executed-test duration distributions and percentiles, and charts saved-run pass rates.
+- Flaky tests compares up to 10 saved reports by exact spec path and full test title. Pass/fail changes are investigation signals, not confirmed flakiness; pending/skipped outcomes and duplicate identities are excluded. Retry evidence is required to confirm flakiness.
+- Report settings saves time-zone and page-size preferences locally, downloads the original JSON, revalidates the selected report, and surfaces data-quality discrepancies.
+- Branch, commit, author, browser, operating system, and retry-confirmed flakiness are unavailable when absent from the report. Saved-run trends reflect the reports imported into this browser.
 
 Click **Import report** to inspect another Mochawesome JSON report. Successfully rendered reports are saved in IndexedDB in this browser. **Import history** shows saved reports with dates, status, test counts, pass rate, and duration; **Open dashboard** restores any report with its complete test details. The last viewed report is restored after a browser reload. Identical file contents share one history entry; importing the same file again moves it to the top. Reopening history or clicking Reload does not create another import.
 
@@ -24,6 +30,10 @@ Imports accept .json files up to 50 MB. JSON syntax and Mochawesome statistics, 
 A modal spinner and progress bar show reading, parsing, validation, aggregation, and rendering stages. The page blocks pointer and keyboard interaction until processing finishes or an error is displayed. Parsing and validation run in a background worker.
 
 Pass rate is passed tests divided by all test records, including pending and skipped tests. Spec time is the sum of its test durations. Run time uses the report's `stats.duration`, which can differ from the sum of individual test times. Summary discrepancies are displayed when reported statistics disagree with the individual records.
+
+## Tablet and phone layouts
+
+At widths up to 1024px, labelled navigation moves into a modal drawer and content uses the full viewport. Below 768px, results become cards, widgets stack, and test details open in a scrollable bottom sheet. Controls use larger touch targets and safe-area padding; form fields avoid automatic zoom on iOS. Desktop layouts retain the sidebar and tabular results.
 
 ## Development
 

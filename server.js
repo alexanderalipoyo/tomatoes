@@ -5,6 +5,7 @@ const files = {
   "/": "index.html",
   "/index.html": "index.html",
   "/styles.css": "styles.css",
+  "/assets/tomatoes-logo.svg": "assets/tomatoes-logo.svg",
   "/app.js": "app.js",
   "/import-history.js": "import-history.js",
   "/report-data.js": "report-data.js",
@@ -16,6 +17,7 @@ const types = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml; charset=utf-8",
 };
 const server = http.createServer((req, res) => {
   const file = files[new URL(req.url, "http://localhost").pathname];
