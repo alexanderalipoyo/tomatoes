@@ -52,7 +52,10 @@
     const {
       jsPDF,
       fontData,
-      groups = [],
+      groups: sourceGroups = [],
+      mode = "detailed",
+      failureSearch = "",
+      failureSpec = "",
       timeZone = "UTC",
       generatedAt = new Date(),
       importedAt = report.importedAt,
@@ -61,6 +64,27 @@
     } = options;
     if (!jsPDF || !fontData)
       throw new Error("The PDF tools could not be loaded. Please try again.");
+    const query = failureSearch.trim().toLowerCase();
+    const matchesFailure = (test) =>
+      test.status === "failed" &&
+      (!failureSpec || test.file === failureSpec) &&
+      (!query ||
+        `${test.fullTitle || test.title} ${test.file} ${test.error}`
+          .toLowerCase()
+          .includes(query));
+    const failed = report.tests.filter(matchesFailure);
+    const selectedIds = new Set(failed.map((test) => test.id));
+    const groups = sourceGroups
+      .map((group) => {
+        const tests = group.tests.filter((test) => selectedIds.has(test.id));
+        return {
+          ...group,
+          tests,
+          specs: [...new Set(tests.map((test) => test.file))],
+        };
+      })
+      .filter((group) => group.tests.length)
+      .sort((a, b) => b.tests.length - a.tests.length);
     const doc = new jsPDF({
       unit: "mm",
       format: "a4",
@@ -161,7 +185,10 @@
       y += 6;
     }
     header();
-    paragraph("Run summary", { size: 23, gap: 4 });
+    paragraph(mode === "summary" ? "Run summary" : "Detailed run report", {
+      size: 23,
+      gap: 4,
+    });
     paragraph(name, { size: 11, color: colors.muted });
     if (importedAt != null)
       paragraph(`Imported: ${date(importedAt)}`, {
@@ -233,6 +260,11 @@
         { size: 8, color: colors.muted },
       );
     }
+    if (failureSpec || query)
+      paragraph(
+        `Failure detail filter: ${failureSpec || "All specs"}${query ? ` / search: ${failureSearch}` : ""}. ${failed.length} of ${report.counts.failed} failures match. Overview totals describe the full run.`,
+        { size: 8, color: colors.muted },
+      );
     const labels = {
       project: "Project",
       environment: "Environment",
@@ -326,7 +358,12 @@
       `Showing ${Math.min(groups.length, LIMITS.groups)} of ${groups.length} message groups. Matching messages are investigation signals, not confirmed shared causes.`,
       groups.length > 0,
     );
-    if (!groups.length) paragraph("No failed tests recorded.");
+    if (!groups.length)
+      paragraph(
+        query || failureSpec
+          ? "No failures match the selected filters."
+          : "No failed tests recorded.",
+      );
     for (const group of groups.slice(0, LIMITS.groups)) {
       ensure(20);
       paragraph(
@@ -341,53 +378,61 @@
       );
       rule();
     }
-    const failed = report.tests.filter((test) => test.status === "failed");
-    startSection(
-      "Failed test details",
-      `Showing ${Math.min(failed.length, LIMITS.failures)} of ${failed.length} failed tests in report order. Error excerpts are limited to ${LIMITS.errorCharacters} characters each; use the original JSON for full stacks and source code.`,
-      failed.length > 0,
-    );
-    if (!failed.length) paragraph("No failed tests recorded.");
-    for (
-      let index = 0;
-      index < Math.min(failed.length, LIMITS.failures);
-      index++
-    ) {
-      const test = failed[index];
-      const title = `${index + 1}. ${test.fullTitle || test.title}`;
-      const details = `${test.file}\nDuration: ${milliseconds(test.duration)}`;
-      const error = clean(test.error || "No error message recorded.");
-      const excerpt =
-        error.slice(0, LIMITS.errorCharacters) +
-        (error.length > LIMITS.errorCharacters
-          ? "\n[Error excerpt shortened; see original JSON.]"
-          : "");
-      const height =
-        lineCount(title, 10) * 4.5 +
-        lineCount(details, 8) * 3.6 +
-        lineCount(excerpt, 8) * 3.6 +
-        22;
-      ensure(height <= bottom - 33 ? height : 30);
-      doc.setFillColor(...colors.red);
-      doc.rect(
-        left - 3,
-        y - 3,
-        1,
-        Math.min(lineCount(title, 10) * 4.5 + 1, 18),
-        "F",
+    if (mode !== "summary") {
+      startSection(
+        "Failed test details",
+        `Showing ${Math.min(failed.length, LIMITS.failures)} of ${failed.length} failed tests in report order. Error excerpts are limited to ${LIMITS.errorCharacters} characters each; use the original JSON for full stacks and source code.`,
+        failed.length > 0,
       );
-      paragraph(title, { size: 10, gap: 3 });
-      paragraph(details, { size: 8, color: colors.muted, gap: 4 });
-      paragraph("ERROR DETAILS", { size: 7, color: colors.red, gap: 2 });
-      paragraph(excerpt, { size: 8 });
-      rule();
-      if (index % 10 === 0) {
-        onProgress(
-          45 +
-            Math.floor((index / Math.min(failed.length, LIMITS.failures)) * 45),
-          `Adding failed test ${index + 1} of ${Math.min(failed.length, LIMITS.failures)}`,
+      if (!failed.length)
+        paragraph(
+          query || failureSpec
+            ? "No failures match the selected filters."
+            : "No failed tests recorded.",
         );
-        await yieldControl();
+      for (
+        let index = 0;
+        index < Math.min(failed.length, LIMITS.failures);
+        index++
+      ) {
+        const test = failed[index];
+        const title = `${index + 1}. ${test.fullTitle || test.title}`;
+        const details = `${test.file}\nDuration: ${milliseconds(test.duration)}`;
+        const error = clean(test.error || "No error message recorded.");
+        const excerpt =
+          error.slice(0, LIMITS.errorCharacters) +
+          (error.length > LIMITS.errorCharacters
+            ? "\n[Error excerpt shortened; see original JSON.]"
+            : "");
+        const height =
+          lineCount(title, 10) * 4.5 +
+          lineCount(details, 8) * 3.6 +
+          lineCount(excerpt, 8) * 3.6 +
+          22;
+        ensure(height <= bottom - 33 ? height : 30);
+        doc.setFillColor(...colors.red);
+        doc.rect(
+          left - 3,
+          y - 3,
+          1,
+          Math.min(lineCount(title, 10) * 4.5 + 1, 18),
+          "F",
+        );
+        paragraph(title, { size: 10, gap: 3 });
+        paragraph(details, { size: 8, color: colors.muted, gap: 4 });
+        paragraph("ERROR DETAILS", { size: 7, color: colors.red, gap: 2 });
+        paragraph(excerpt, { size: 8 });
+        rule();
+        if (index % 10 === 0) {
+          onProgress(
+            45 +
+              Math.floor(
+                (index / Math.min(failed.length, LIMITS.failures)) * 45,
+              ),
+            `Adding failed test ${index + 1} of ${Math.min(failed.length, LIMITS.failures)}`,
+          );
+          await yieldControl();
+        }
       }
     }
     const pages = doc.getNumberOfPages();
@@ -449,7 +494,148 @@ if (typeof document !== "undefined") {
     }
     return pdfResources;
   }
-  async function exportReportPDF(historyId = null) {
+  let pdfPreviewURL = null;
+  let disposePDFPreview = () => {};
+  async function renderPDFPreview(doc) {
+    const host = document.querySelector("#pdf-page-preview");
+    let disposed = false,
+      task,
+      loadingTask,
+      pdf;
+    disposePDFPreview = () => {
+      disposed = true;
+      task?.cancel();
+      if (pdf) pdf.destroy();
+      else loadingTask?.destroy();
+    };
+    try {
+      const renderer = await import("/vendor/pdf.mjs");
+      if (disposed) return;
+      renderer.GlobalWorkerOptions.workerSrc = "/vendor/pdf.worker.mjs";
+      loadingTask = renderer.getDocument({
+        data: new Uint8Array(doc.output("arraybuffer")),
+        isEvalSupported: false,
+        useSystemFonts: false,
+      });
+      pdf = await loadingTask.promise;
+      if (disposed) {
+        pdf.destroy();
+        return;
+      }
+      host.innerHTML =
+        '<div class="pdf-page-toolbar"><button class="button" id="pdf-previous-page" disabled>Previous page</button><span id="pdf-page-number" role="status"></span><button class="button" id="pdf-next-page">Next page</button></div><div class="pdf-page-canvas"><canvas aria-label="PDF report page preview" role="img"></canvas></div>';
+      let pageNumber = 1;
+      const previous = host.querySelector("#pdf-previous-page"),
+        next = host.querySelector("#pdf-next-page"),
+        label = host.querySelector("#pdf-page-number"),
+        canvas = host.querySelector("canvas");
+      async function renderPage() {
+        previous.disabled = true;
+        next.disabled = true;
+        label.textContent = `Rendering page ${pageNumber} of ${pdf.numPages}`;
+        try {
+          const page = await pdf.getPage(pageNumber);
+          if (disposed) return;
+          const base = page.getViewport({ scale: 1 }),
+            targetWidth = Math.max(
+              240,
+              (host.clientWidth || Math.min(innerWidth - 64, 820)) - 24,
+            ),
+            ratio = Math.min(devicePixelRatio || 1, 2);
+          const viewport = page.getViewport({
+            scale: targetWidth / base.width,
+          });
+          canvas.width = Math.floor(viewport.width * ratio);
+          canvas.height = Math.floor(viewport.height * ratio);
+          canvas.style.width = viewport.width + "px";
+          canvas.style.height = viewport.height + "px";
+          canvas.setAttribute(
+            "aria-label",
+            `PDF report preview, page ${pageNumber} of ${pdf.numPages}`,
+          );
+          task = page.render({
+            canvasContext: canvas.getContext("2d"),
+            viewport,
+            transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null,
+          });
+          await task.promise;
+          if (disposed) return;
+          label.textContent = `Page ${pageNumber} of ${pdf.numPages}`;
+          previous.disabled = pageNumber === 1;
+          next.disabled = pageNumber === pdf.numPages;
+          host.querySelector(".pdf-page-canvas").scrollTop = 0;
+        } catch (error) {
+          if (!disposed)
+            label.textContent =
+              "Page preview unavailable. You can still download the PDF.";
+        }
+      }
+      previous.onclick = () => {
+        pageNumber--;
+        renderPage();
+      };
+      next.onclick = () => {
+        pageNumber++;
+        renderPage();
+      };
+      await renderPage();
+    } catch (error) {
+      if (!disposed && host.isConnected)
+        host.innerHTML =
+          '<p role="status">The preview could not load. Use Download PDF or Open full preview.</p>';
+    }
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelector("#detail").addEventListener("close", () => {
+      disposePDFPreview();
+      disposePDFPreview = () => {};
+      if (pdfPreviewURL) URL.revokeObjectURL(pdfPreviewURL);
+      pdfPreviewURL = null;
+    });
+  });
+  async function exportReportPDF(historyId = null, initialOptions = {}) {
+    if (loading) return;
+    const entry = historyEntries.find(
+      (item) => item.id === (historyId || activeHistoryId),
+    );
+    let optionReport = report;
+    if (historyId && historyId !== activeHistoryId) {
+      optionReport = null;
+      await investigationBusy(
+        "Reading PDF export options",
+        async () => {
+          optionReport = await readInvestigationReport(historyId);
+        },
+        (error) => historyNotice(error.message),
+      );
+      if (!optionReport) return;
+    }
+    document.querySelector("#detail-content").innerHTML =
+      `<div class="dialog-heading"><h2 id="detail-title">Export PDF report</h2><p>${esc(entry?.label || entry?.name || sourceName)}</p></div><form class="pdf-options preference-form" id="pdf-options"><label>Report detail<select id="pdf-mode"><option value="summary">Brief summary</option><option value="detailed" selected>Detailed report with failed tests</option></select></label><label>Failure search<input id="pdf-failure-search" type="search" maxlength="180" placeholder="Test title, path, or error message"/></label><label>Failure spec path<input id="pdf-failure-spec" list="pdf-spec-options" placeholder="All specs (or enter an exact spec path)"/><datalist id="pdf-spec-options">${
+        optionReport
+          ? optionReport.specs
+              .filter((spec) => spec.counts.failed)
+              .map((spec) => `<option value="${esc(spec.file)}"></option>`)
+              .join("")
+          : ""
+      }</datalist></label><p class="widget-footnote">Overview totals always cover the full run. Filters apply to failure patterns and failed-test details. The summary includes top specs and patterns; detailed reports add up to 200 matching failed tests.</p><button class="button primary" type="submit">Preview PDF</button></form>`;
+    document.querySelector("#pdf-mode").value =
+      initialOptions.mode || "detailed";
+    document.querySelector("#pdf-failure-search").value =
+      initialOptions.failureSearch || "";
+    document.querySelector("#pdf-failure-spec").value =
+      initialOptions.failureSpec || "";
+    document.querySelector("#pdf-options").onsubmit = (event) => {
+      event.preventDefault();
+      generatePDFPreview(historyId, {
+        mode: document.querySelector("#pdf-mode").value,
+        failureSearch: document.querySelector("#pdf-failure-search").value,
+        failureSpec: document.querySelector("#pdf-failure-spec").value.trim(),
+      });
+    };
+    document.querySelector("#detail").showModal();
+  }
+  async function generatePDFPreview(historyId, options) {
     await investigationBusy(
       "Preparing PDF export",
       async () => {
@@ -461,6 +647,7 @@ if (typeof document !== "undefined") {
             (percent, label) => paintProgress(Math.floor(percent / 7), label),
           );
           name =
+            historyEntries.find((entry) => entry.id === historyId)?.label ||
             historyEntries.find((entry) => entry.id === historyId)?.name ||
             "report.json";
         }
@@ -480,11 +667,33 @@ if (typeof document !== "undefined") {
           groups: Investigations.failureGroups(selected),
           timeZone: preferences.timeZone,
           importedAt,
+          ...options,
           onProgress: paintProgress,
           yieldControl: allowPaint,
         });
-        await doc.save(outputName, { returnPromise: true });
-        historyNotice("PDF download started.");
+        const blob = doc.output("blob");
+        pdfPreviewURL = URL.createObjectURL(blob);
+        document.querySelector("#detail-content").innerHTML =
+          `<div class="dialog-heading"><h2 id="detail-title">PDF preview</h2><p>${esc(outputName)} · ${doc.getNumberOfPages()} pages · ${(blob.size / 1024).toFixed(0)} KB</p></div><div class="pdf-preview-actions"><button class="button primary" id="download-preview-pdf">Download PDF</button><a class="button" href="${pdfPreviewURL}" target="_blank" rel="noopener">Open full preview</a><button class="button" id="change-pdf-options">Change options</button></div><p class="widget-footnote">If your browser cannot show the embedded preview, use Open full preview or Download PDF.</p><div id="pdf-page-preview" aria-label="PDF page preview"><p role="status">Loading PDF preview…</p></div>`;
+        document.querySelector("#download-preview-pdf").onclick = async () => {
+          const button = document.querySelector("#download-preview-pdf");
+          button.disabled = true;
+          try {
+            await doc.save(outputName, { returnPromise: true });
+            historyNotice("PDF download started.");
+          } catch (error) {
+            historyNotice(`PDF download failed: ${error.message}`);
+          } finally {
+            if (button.isConnected) button.disabled = false;
+          }
+        };
+        document.querySelector("#change-pdf-options").onclick = () => {
+          document.querySelector("#detail").close();
+          exportReportPDF(historyId, options);
+        };
+        paintProgress(97, "Rendering PDF preview");
+        await renderPDFPreview(doc);
+        document.querySelector("#detail").showModal();
       },
       (error) => historyNotice(`PDF export failed: ${error.message}`),
     );

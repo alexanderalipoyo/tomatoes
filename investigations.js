@@ -283,6 +283,7 @@ function renderFailureGroups() {
       )
       .join("") || '<p class="widget-empty">No failures to group.</p>'
   }</div>`;
+  appendFailureTrends(host);
   if (groups.length > 8) {
     host.insertAdjacentHTML(
       "beforeend",

@@ -3,7 +3,7 @@ function insightMetric(label, value, note) {
 }
 function renderAnalytics(alt) {
   const data = ReportData.insightStats(report);
-  const trends = [...historyEntries]
+  const trends = [...filteredTrendEntries()]
     .sort(
       (a, b) =>
         (Date.parse(a.start) || a.lastImportedAt) -
@@ -18,7 +18,8 @@ function renderAnalytics(alt) {
           `<button class="analysis-row" data-area="${index}"><span>${esc(area.folder)}<small>${area.total} tests · ${duration(area.duration)} cumulative time</small></span><strong class="${area.failed ? "fail-text" : ""}">${area.failed} failed</strong></button>`,
       )
       .join("") || "<p>No spec data available.</p>"
-  }</article><article class="insight-card"><div class="widget-heading"><div><h2>Saved-run trends</h2><p>Registered-test pass rate, ordered by run start</p></div><a class="widget-link" href="#history">History →</a></div>${trends.map((entry) => `<button class="trend-row ${entry.id === activeHistoryId ? "selected-trend" : ""}" data-trend="${entry.id}"><span>${esc(entry.name)}<small>${esc(date(entry.start))}</small></span><span class="trend-track"><i style="width:${entry.passRate}%"></i></span><strong>${entry.passRate.toFixed(1)}%<small>${entry.counts.failed} failed</small></strong></button>`).join("") || '<p class="widget-empty">Import reports to build a trend.</p>'}<p class="widget-footnote">Saved reports can contain different test sets and environments.</p></article></div>`;
+  }</article><article class="insight-card"><div class="widget-heading"><div><h2>Saved-run trends</h2><p>Registered-test pass rate, ordered by run start</p></div><a class="widget-link" href="#history">History →</a></div>${trends.map((entry) => `<button class="trend-row ${entry.id === activeHistoryId ? "selected-trend" : ""}" data-trend="${entry.id}"><span>${esc(entry.label || entry.name)}<small>${esc(date(entry.start))}</small></span><span class="trend-track"><i style="width:${entry.passRate}%"></i></span><strong>${entry.passRate.toFixed(1)}%<small>${entry.counts.failed} failed</small></strong></button>`).join("") || '<p class="widget-empty">Import reports to build a trend.</p>'}<p class="widget-footnote">Saved reports can contain different test sets and environments.</p></article></div>`;
+  appendTrendFilters(alt);
   alt.querySelectorAll("[data-pattern]").forEach(
     (button) =>
       (button.onclick = () => {
@@ -204,7 +205,9 @@ function renderSettings(alt) {
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = sourceName.replace(/[\\/:*?"<>|]/g, "_");
+      link.download = sourceName
+        .replace(/[\\/:*?"<>|]/g, "_")
+        .replace(/(?:\.json)?$/i, ".json");
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       $("#export-feedback").textContent = "Original JSON download started.";

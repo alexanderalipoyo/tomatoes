@@ -207,6 +207,9 @@ if (typeof document !== "undefined") {
           );
         await ImportHistory.updateMetadata(activeHistoryId, next);
         report.metadata = next;
+        investigationCache.delete(activeHistoryId);
+        comparison = null;
+        stability = null;
         await refreshHistory();
         renderSummary();
         feedback.textContent = "Run identity saved.";

@@ -78,6 +78,12 @@ On tablets and phones, navigation moves into a labelled drawer. Phone results us
 - Cross-run pass/fail changes are investigation signals. Code, test data, and environment changes can affect outcomes; retry evidence is needed to confirm flakiness. Pending/skipped outcomes and ambiguous duplicate test identities are excluded from comparisons.
 - Project, environment, branch, commit, and build URL can be supplied in report metadata or edited in Report settings. Retry evidence appears only when explicit attempt records are present. The supplied reports do not contain attempt records; missing evidence is never inferred from duration or final outcome.
 
+### Filter trends and investigate recurring failures
+
+In **Analytics**, filter **Saved-run trends** by project, environment, and branch. The other analytics continue to describe the selected report. Filters include an explicit **Unlabelled** choice; trend rows show the latest eight matching reports ordered by run start.
+
+In **Failed tests**, choose **Analyze comparable runs** under **Failure history**. It examines up to 20 saved reports with exactly matching project, environment, and branch labels (blank labels match other blank labels). Each message pattern shows first seen, last seen, and its frequency across distinct reports. Reports with matching run times and normalized test results count once, even when JSON formatting differs. Frequency measures reports containing a failure pattern, rather than a test failure rate; a missing pattern alone does not establish a fix. The top 30 recurring patterns are displayed.
+
 ## Investigate changes
 
 Choose **Compare runs**, select a baseline and target, then click **Compare reports**. A regression means passed → failed, and a fix means failed → passed. Added and missing tests are separate categories; a failed test becoming pending or skipped is an outcome change. Duration comparisons apply to tests executed in both runs. Ambiguous duplicate test identities are excluded.
@@ -87,6 +93,10 @@ In **Failed tests**, expand a failure group to see its representative error and 
 Open any test and choose **View test history** to follow its outcomes and recorded durations across up to 20 saved reports. Missing tests and duplicate matches are shown separately. **Inspect run** opens the exact saved report and test.
 
 ## History and local storage
+
+Each saved import supports **Edit name & notes**. Display names and notes stay separate from the original JSON. **Move to trash** hides a report from history and trends, with **Undo** immediately available. **View trash** lets you restore it later, including its attachments. Trash remains in browser storage; it is not permanently deleted.
+
+**Download backup** saves a versioned JSON archive of browser reports, import dates, metadata, display names, notes, attachments, and trash. **Restore backup** validates all reports and attachment signatures before applying changes in one transaction. Restore merges missing entries and attachments, preserves existing local edits, and rejects conflicting report contents. It does not switch the currently viewed report. Backups support up to 100 MB, 1,000 reports, and 5,000 attachments. They contain browser data only; the local server store, user accounts, and CI tokens are separate. The storage estimate shows total usage for this browser origin, including trash.
 
 Successfully rendered reports are saved in **IndexedDB** in the current browser. The last viewed report is restored after a page reload. Identical file contents within the same project share one history entry; importing the same file again moves that entry to the top. Opening a saved report or clicking **Reload** does not create another import.
 
@@ -100,7 +110,7 @@ In **Report settings**, save the project, environment, branch, commit, and build
 
 Open a test to attach a screenshot or recording. Tomatoes validates the file type, signature, and size before saving it in this browser's IndexedDB. Supported formats are PNG, JPEG, WebP, MP4, and WebM, up to **25 MB per file**. Previews load on demand. Evidence attachments stay in this browser and are not included in JSON downloads or server publishing.
 
-**Export PDF** on a saved import, or **Download PDF report** in Report settings, downloads a branded PDF directly. It includes outcome totals, run metadata, the top 20 specs, the top 10 failure patterns, and up to 200 failed tests with error excerpts of up to 2,000 characters each. Included counts and any shortened excerpts are labelled. PDF dates follow your display time zone. Downloads use the saved import time in `YYYY-MM-DD_HH-mm-ss-report.pdf` format (for example, `2026-10-23_16-10-14-report.pdf`), matching the import time shown in history. Re-exporting uses that same import time. The PDF separates the overview, aligned spec table, failure patterns, and failure details into clear sections. Generation stays in the browser, shows a blocking progress overlay, and does not upload your report. Screenshot and video attachments remain separate.
+**Export PDF** on a saved import, or **Download PDF report** in Report settings, opens export options. Choose a brief summary or a detailed report, optionally filter failure details by title/path/error text or an exact spec path, then choose **Preview PDF**. Use Previous page / Next page to inspect the locally rendered preview, then download it or open it in a separate browser tab. Changing export options preserves your current choices. Overview totals always cover the full run; failure filters affect the patterns and details only. It includes outcome totals, run metadata, the top 20 specs, the top 10 failure patterns, and up to 200 failed tests with error excerpts of up to 2,000 characters each. Included counts and any shortened excerpts are labelled. PDF dates follow your display time zone. Downloads use the saved import time in `YYYY-MM-DD_HH-mm-ss-report.pdf` format (for example, `2026-10-23_16-10-14-report.pdf`), matching the import time shown in history. Re-exporting uses that same import time. The PDF separates the overview, aligned spec table, failure patterns, and failure details into clear sections. Generation stays in the browser, shows a blocking progress overlay, and does not upload your report. Screenshot and video attachments remain separate.
 
 **Download run summary** exports a Markdown report with totals, run identity, and the leading failure groups. Compare runs has a separate comparison summary.
 

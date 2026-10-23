@@ -455,10 +455,11 @@ function renderHistory() {
     historyEntries
       .map(
         (entry, index) =>
-          `<article class="history-card ${entry.id === activeHistoryId ? "is-current" : ""}"><div class="history-card-title"><div>${badge(entry.status)}${index === 0 ? '<span class="history-tag">Latest import</span>' : ""}${entry.id === activeHistoryId ? '<span class="history-tag current-tag">Viewing</span>' : ""}<h3>${esc(entry.name)}</h3><p>${entry.source === "bundled" ? "Bundled report saved" : "Imported"} ${esc(date(new Date(entry.lastImportedAt).toISOString()))}</p><p>Run started ${esc(date(entry.start))}</p></div><div class="history-actions"><button class="button" data-export-pdf="${esc(entry.id)}" aria-label="Export PDF for ${esc(entry.name)}">Export PDF</button><button class="button ${entry.id === activeHistoryId ? "" : "primary"}" data-open-history="${esc(entry.id)}">Open dashboard</button></div></div><dl class="history-stats"><div><dt>Tests</dt><dd>${number(entry.counts.total)}</dd></div><div><dt>Passed</dt><dd>${number(entry.counts.passed)}</dd></div><div><dt>Failed</dt><dd class="fail-text">${number(entry.counts.failed)}</dd></div><div><dt>Pending / skipped</dt><dd>${number(entry.counts.pending)} / ${number(entry.counts.skipped)}</dd></div><div><dt>Pass rate</dt><dd>${entry.passRate.toFixed(1)}%</dd></div><div><dt>Duration</dt><dd>${duration(entry.duration)}</dd></div></dl></article>`,
+          `<article class="history-card ${entry.id === activeHistoryId ? "is-current" : ""}"><div class="history-card-title"><div>${badge(entry.status)}${index === 0 ? '<span class="history-tag">Latest import</span>' : ""}${entry.id === activeHistoryId ? '<span class="history-tag current-tag">Viewing</span>' : ""}<h3>${esc(entry.label || entry.name)}</h3>${entry.label ? `<p>Source: ${esc(entry.name)}</p>` : ""}${entry.notes ? `<p class="history-note">${esc(entry.notes)}</p>` : ""}<p>${entry.source === "bundled" ? "Bundled report saved" : "Imported"} ${esc(date(new Date(entry.lastImportedAt).toISOString()))}</p><p>Run started ${esc(date(entry.start))}</p></div><div class="history-actions"><button class="button" data-manage-history="${esc(entry.id)}">Edit name &amp; notes</button><button class="button" data-trash-history="${esc(entry.id)}">Move to trash</button><button class="button" data-export-pdf="${esc(entry.id)}" aria-label="Export PDF for ${esc(entry.name)}">Export PDF</button><button class="button ${entry.id === activeHistoryId ? "" : "primary"}" data-open-history="${esc(entry.id)}">Open dashboard</button></div></div><dl class="history-stats"><div><dt>Tests</dt><dd>${number(entry.counts.total)}</dd></div><div><dt>Passed</dt><dd>${number(entry.counts.passed)}</dd></div><div><dt>Failed</dt><dd class="fail-text">${number(entry.counts.failed)}</dd></div><div><dt>Pending / skipped</dt><dd>${number(entry.counts.pending)} / ${number(entry.counts.skipped)}</dd></div><div><dt>Pass rate</dt><dd>${entry.passRate.toFixed(1)}%</dd></div><div><dt>Duration</dt><dd>${duration(entry.duration)}</dd></div></dl></article>`,
       )
       .join("") ||
     '<div class="history-empty"><h3>No saved imports yet</h3><p>Import a valid Mochawesome JSON report to start your history.</p></div>';
+  appendHistoryTools();
   $("#history-list")
     .querySelectorAll("[data-export-pdf]")
     .forEach((button) => {
@@ -631,7 +632,7 @@ async function loadReport(file = currentFile, options = {}) {
     comparison = null;
     currentFile = file;
     activeHistoryId = saved?.entry.id || null;
-    sourceName = file ? file.name : "index.json";
+    sourceName = saved?.entry.label || (file ? file.name : "index.json");
     page = 1;
     $("#search").value = "";
     $("#status").value = "all";

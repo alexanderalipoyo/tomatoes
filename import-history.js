@@ -59,15 +59,17 @@
         tx.onerror = () => {};
       });
     }
-    async function list() {
+    async function list(includeDeleted = false) {
       const db = await open();
       const tx = db.transaction("entries", "readonly");
       const request = tx.objectStore("entries").getAll();
       return complete(tx, () =>
-        request.result.sort(
-          (a, b) =>
-            b.lastImportedAt - a.lastImportedAt || a.id.localeCompare(b.id),
-        ),
+        request.result
+          .filter((entry) => includeDeleted || !entry.deletedAt)
+          .sort(
+            (a, b) =>
+              b.lastImportedAt - a.lastImportedAt || a.id.localeCompare(b.id),
+          ),
       );
     }
     async function get(id) {
@@ -140,6 +142,9 @@
           duration: report.duration,
           status: report.status,
           metadata: previous?.metadata || report.metadata || {},
+          label: previous?.label || "",
+          notes: previous?.notes || "",
+          deletedAt: null,
           counts: { ...report.counts },
           specs: report.specs.length,
           passRate: report.passRate,
@@ -167,6 +172,84 @@
       };
       return complete(tx, () => updated);
     }
+    async function updateDetails(id, changes) {
+      const db = await open();
+      const tx = db.transaction("entries", "readwrite");
+      const store = tx.objectStore("entries"),
+        request = store.get(id);
+      let updated;
+      request.onsuccess = () => {
+        if (!request.result) {
+          tx.abort();
+          return;
+        }
+        updated = { ...request.result, ...changes, id };
+        store.put(updated);
+      };
+      return complete(tx, () => updated);
+    }
+    async function snapshot() {
+      const db = await open();
+      const tx = db.transaction(["entries", "reports", "evidence"], "readonly");
+      const entries = tx.objectStore("entries").getAll();
+      const reports = tx.objectStore("reports").getAll();
+      const evidence = tx.objectStore("evidence").getAll();
+      return complete(tx, () => ({
+        entries: entries.result,
+        reports: reports.result,
+        evidence: evidence.result,
+      }));
+    }
+    async function restoreSnapshot(data) {
+      const db = await open();
+      const tx = db.transaction(
+        ["entries", "reports", "evidence"],
+        "readwrite",
+      );
+      const entries = tx.objectStore("entries"),
+        reports = tx.objectStore("reports"),
+        evidence = tx.objectStore("evidence");
+      let added = 0,
+        skipped = 0,
+        conflict = false;
+      const textById = new Map(
+        data.reports.map((item) => [item.id, item.text]),
+      );
+      for (const entry of data.entries) {
+        const existing = entries.get(entry.id);
+        existing.onsuccess = () => {
+          if (!existing.result) {
+            entries.put(entry);
+            reports.put({ id: entry.id, text: textById.get(entry.id) });
+            added++;
+          } else {
+            skipped++;
+            const source = reports.get(entry.id);
+            source.onsuccess = () => {
+              if (source.result?.text !== textById.get(entry.id)) {
+                conflict = true;
+                tx.abort();
+              }
+            };
+          }
+        };
+      }
+      for (const record of data.evidence) {
+        const existing = evidence.get(record.id);
+        existing.onsuccess = () => {
+          if (!existing.result) evidence.put(record);
+        };
+      }
+      try {
+        return await complete(tx, () => ({ added, skipped }));
+      } catch (error) {
+        if (conflict)
+          throw new Error(
+            "Backup conflicts with an existing report. No data was restored.",
+          );
+        throw error;
+      }
+    }
     async function saveEvidence(record) {
       const db = await open();
       const tx = db.transaction("evidence", "readwrite");
@@ -192,6 +275,9 @@
       lastActive,
       markActive,
       updateMetadata,
+      updateDetails,
+      snapshot,
+      restoreSnapshot,
       saveEvidence,
       listEvidence,
       close,

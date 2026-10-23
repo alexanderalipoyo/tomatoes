@@ -123,3 +123,30 @@ test("PDF filenames use the saved import time and configured timezone", async ()
     /tools could not be loaded/,
   );
 });
+
+test("PDF options filter failure details while preserving full-run totals, and summary omits the appendix", async () => {
+  const report = fixture([
+    {
+      title: "Login error",
+      state: "failed",
+      duration: 10,
+      err: { message: "Missing button" },
+    },
+    {
+      title: "Checkout error",
+      state: "failed",
+      duration: 20,
+      err: { message: "Payment timeout" },
+    },
+  ]);
+  const filtered = await generate(report, { failureSearch: "Login" });
+  assert.match(filtered.content, /Registered tests\n2/);
+  assert.match(filtered.content, /1 of 2 failures match/);
+  assert.match(filtered.content, /1\. Login error/);
+  assert.doesNotMatch(filtered.content, /2\. Checkout error/);
+  const summary = await generate(report, { mode: "summary" });
+  assert.doesNotMatch(summary.content, /Failed test details|ERROR DETAILS/);
+  assert.ok(summary.doc.getNumberOfPages() < filtered.doc.getNumberOfPages());
+  const absent = await generate(report, { failureSpec: "different.cy.ts" });
+  assert.match(absent.content, /0 of 2 failures match/);
+});

@@ -21,8 +21,11 @@ const files = {
   "/assets/tomatoes-logo.svg": "assets/tomatoes-logo.svg",
   "/app.js": "app.js",
   "/insights.js": "insights.js",
+  "/workspace-tools.js": "workspace-tools.js",
   "/report-features.js": "report-features.js",
   "/report-pdf.js": "report-pdf.js",
+  "/vendor/pdf.mjs": "node_modules/pdfjs-dist/build/pdf.mjs",
+  "/vendor/pdf.worker.mjs": "node_modules/pdfjs-dist/build/pdf.worker.mjs",
   "/vendor/jspdf.umd.min.js": "node_modules/jspdf/dist/jspdf.umd.min.js",
   "/assets/fonts/NotoSans-Regular.ttf": "assets/fonts/NotoSans-Regular.ttf",
   "/team.js": "team.js",
@@ -38,6 +41,7 @@ const types = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
   ".ttf": "font/ttf",
   ".svg": "image/svg+xml; charset=utf-8",
 };
@@ -72,7 +76,7 @@ const server = http.createServer(async (req, res) => {
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' blob: https://fonts.gstatic.com; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; frame-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     });
     res.end(data);
   });
