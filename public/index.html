@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="/css/team.css" />
     <script src="/js/report-data.js" defer></script>
     <script src="/js/import-history.js" defer></script>
+    <script src="/js/report-import.js" defer></script>
     <script src="/js/investigation-model.js" defer></script>
     <script src="/js/investigations.js" defer></script>
     <script src="/js/workspace-model.js" defer></script>
@@ -142,14 +143,14 @@
           <div class="heading-actions">
             <button class="button" id="refresh">
               <span data-icon="refresh"></span>Reload</button
-            ><button class="button primary" id="import-report">
-              <span data-icon="plus"></span>Import report</button
-            ><input
-              type="file"
-              accept=".json,application/json"
-              id="report-file"
-              hidden
-            />
+            ><button
+              class="button primary"
+              id="import-report"
+              aria-haspopup="dialog"
+              aria-controls="import-dialog"
+            >
+              <span data-icon="plus"></span>Import report
+            </button>
           </div>
         </div>
         <div id="load-state" class="notice" role="alert">
@@ -383,6 +384,62 @@
       </nav>
       <p class="mobile-navigation-note">
         Your test results, wherever you work.
+      </p>
+    </dialog>
+    <dialog
+      id="import-dialog"
+      aria-labelledby="import-title"
+      aria-describedby="import-description"
+    >
+      <button
+        class="icon-button import-dialog-close"
+        id="close-import"
+        aria-label="Close import dialog"
+      >
+        ×
+      </button>
+      <span class="eyebrow">BRING YOUR RESULTS</span>
+      <h2 id="import-title">Import report</h2>
+      <p id="import-description">
+        Add your latest Mochawesome JSON report to Tomatoes.
+      </p>
+      <input
+        type="file"
+        accept=".json,application/json"
+        id="report-file"
+        hidden
+      />
+      <div class="report-drop-zone" id="report-drop-zone">
+        <svg
+          class="import-upload-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path
+            d="M12 16V3m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"
+          />
+        </svg>
+        <h3>Drag &amp; drop your report here</h3>
+        <p>or choose a file from your device</p>
+        <button class="button primary" id="browse-report" autofocus>
+          Browse files
+        </button>
+        <small>One .json report at a time · Up to 50 MB</small>
+      </div>
+      <p
+        class="notice data-warning"
+        id="import-selection-error"
+        role="alert"
+        hidden
+      ></p>
+      <p class="import-hint">
+        We check the format before saving. Your previous report stays available
+        if the file is invalid.
       </p>
     </dialog>
     <dialog id="detail" aria-labelledby="detail-title">

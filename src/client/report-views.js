@@ -114,52 +114,6 @@ if (typeof document !== "undefined") {
         });
   }
   function appendReportSettings(alt) {
-    const metadata = report.metadata || {};
-    const host = alt.querySelector(".settings-layout > div") || alt;
-    host.insertAdjacentHTML(
-      "beforeend",
-      `<form id="run-metadata-form" class="settings-card preference-form"><h2>Run identity</h2><p>Labels are saved with this browser import and included when publishing to the local team store.</p>${[
-        ["project", "Project", "tomatoes"],
-        ["environment", "Environment", "staging"],
-        ["branch", "Branch", "main"],
-        ["commit", "Commit", "Commit SHA"],
-        ["buildUrl", "Build URL", "https://ci.example/build/123"],
-      ]
-        .map(
-          ([key, label, placeholder]) =>
-            `<label>${label}<input id="metadata-${key}" value="${esc(metadata[key] || "")}" placeholder="${placeholder}" maxlength="${key === "buildUrl" ? 2048 : 160}" ${key === "buildUrl" ? 'type="url"' : ""}/></label>`,
-        )
-        .join(
-          "",
-        )}<button class="button primary" type="submit">Save run identity</button><p id="metadata-feedback" role="status"></p></form>`,
-    );
-    document.querySelector("#run-metadata-form").onsubmit = async (event) => {
-      event.preventDefault();
-      const feedback = document.querySelector("#metadata-feedback");
-      try {
-        const next = ReportData.normalizeMetadata(
-          Object.fromEntries(
-            ["project", "environment", "branch", "commit", "buildUrl"].map(
-              (key) => [key, document.querySelector("#metadata-" + key).value],
-            ),
-          ),
-        );
-        if (!activeHistoryId)
-          throw new Error(
-            "Save the report in import history before editing its identity.",
-          );
-        await ImportHistory.updateMetadata(activeHistoryId, next);
-        report.metadata = next;
-        investigationCache.delete(activeHistoryId);
-        comparison = null;
-        stability = null;
-        await refreshHistory();
-        renderSummary();
-        feedback.textContent = "Run identity saved.";
-      } catch (error) {
-        feedback.textContent = error.message;
-      }
-    };
     const actions = alt
       .querySelector("#export-report")
       ?.closest(".settings-buttons");

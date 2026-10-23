@@ -753,12 +753,11 @@ $("#refresh").onclick = () =>
     ? loadReport(null, { historyId: activeHistoryId })
     : loadReport();
 $("#load-bundled").onclick = () => loadReport(null, { openDashboard: true });
-$("#import-report").onclick = () => $("#report-file").click();
-$("#report-file").onchange = async () => {
-  const file = $("#report-file").files[0];
-  if (file) await loadReport(file, { recordImport: true });
-  $("#report-file").value = "";
-};
+ReportImport.setup({
+  document,
+  isBusy: () => loading || document.body.classList.contains("is-rendering"),
+  importFile: (file) => loadReport(file, { recordImport: true }),
+});
 $(".dialog-close").onclick = () => $("#detail").close();
 $("#detail").onclick = (event) => {
   if (event.target !== $("#detail")) return;

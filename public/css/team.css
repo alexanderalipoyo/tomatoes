@@ -52,7 +52,6 @@
   margin-top: 12px;
 }
 #evidence-status,
-#metadata-feedback,
 #team-feedback,
 #team-login-error {
   font-size: 12px;
@@ -167,7 +166,6 @@
     flex-direction: column;
   }
   .team-project-label select,
-  #run-metadata-form input,
   #team-login input,
   #publish-current input {
     font-size: 16px;

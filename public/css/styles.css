@@ -2412,3 +2412,79 @@ body.is-rendering {
     height: 32px;
   }
 }
+
+/* File import picker */
+#import-dialog {
+  position: fixed;
+  width: min(520px, calc(100% - 32px));
+  max-width: 520px;
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  border: 1px solid #e1e8e6;
+  border-radius: 16px;
+  padding: clamp(20px, 5vw, 32px);
+}
+#import-dialog h2 {
+  margin: 8px 36px 10px 0;
+  font-size: 24px;
+}
+#import-description,
+.import-hint {
+  color: #687784;
+  font-size: 13px;
+  line-height: 1.6;
+}
+#import-dialog .import-dialog-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 22px;
+}
+.report-drop-zone {
+  margin: 24px 0 16px;
+  padding: 28px 16px;
+  border: 2px dashed #c6d9cf;
+  border-radius: 12px;
+  background: #f7fbf8;
+  text-align: center;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.report-drop-zone.is-dragging {
+  background: #e4f4eb;
+  border-color: #14835e;
+}
+.import-upload-icon {
+  width: 36px;
+  height: 36px;
+  color: #14835e;
+  display: block;
+  margin: 0 auto 12px;
+}
+.report-drop-zone h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.report-drop-zone p {
+  font-size: 13px;
+  color: #687784;
+  margin: 0 0 20px;
+}
+.report-drop-zone .button {
+  margin: 0 auto 16px;
+}
+.report-drop-zone small {
+  display: block;
+  color: #687784;
+  font-size: 12px;
+}
+#import-dialog .import-hint {
+  margin-bottom: 0;
+  font-size: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .report-drop-zone {
+    transition: none;
+  }
+}

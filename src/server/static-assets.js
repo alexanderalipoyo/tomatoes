@@ -9,6 +9,7 @@ add("/index.html", "public/index.html");
 for (const name of [
   "app",
   "import-history",
+  "report-import",
   "insights",
   "investigations",
   "team",

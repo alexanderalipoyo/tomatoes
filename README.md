@@ -34,7 +34,7 @@ The project includes a sample run in `examples/reports/results.json`, originally
 1. Execute your Cypress tests locally or through your cloud CI pipeline.
 2. Generate a Mochawesome-compatible JSON report from the run. For a run with several report files, use a merged report to review the complete run together.
 3. Download the report artifact from your pipeline, if applicable.
-4. Select **Import report** in Tomatoes and choose the `.json` file.
+4. Select **Import report** in Tomatoes, then drag a `.json` file into the drop area or use **Browse files**. Import one report at a time, up to 50 MB.
 5. Review the dashboard, browse tests, or open Analytics to investigate the run.
 
 Tomatoes imports exported reports. Running tests and collecting artifacts remain part of your Cypress setup and CI workflow.
@@ -104,9 +104,9 @@ History belongs to this browser and origin, including the localhost port. Cleari
 
 To change the bundled report, replace `examples/reports/results.json`, then select **Open bundled report** in Import history.
 
-## Run identity, evidence, and summaries
+## Evidence and summaries
 
-In **Report settings**, save the project, environment, branch, commit, and build URL for the selected import. These details are stored separately from the original JSON, which remains available unchanged. Run summaries and explicit comparisons include the available identity fields.
+Run summaries and explicit comparisons include project, environment, branch, commit, and build details when available in imported report metadata. The original JSON remains available unchanged.
 
 Open a test to attach a screenshot or recording. Tomatoes validates the file type, signature, and size before saving it in this browser's IndexedDB. Supported formats are PNG, JPEG, WebP, MP4, and WebM, up to **25 MB per file**. Previews load on demand. Evidence attachments remain separate from JSON downloads. With PostgreSQL enabled, new attachments are also saved to the server when access is available. Publishing or bulk-saving a browser report copies its attachments as well.
 
