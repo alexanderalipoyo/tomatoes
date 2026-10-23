@@ -1,47 +1,100 @@
-# Tomatoes test results dashboard
+# Tomatoes
 
-A local dashboard for exploring Mochawesome JSON reports. The bundled `results.json` is the supplied sample latest run, originally named `index.json`.
+**A test report dashboard for Cypress-generated cloud test results.**
 
-## Branding
+Tomatoes turns JSON reports from Cypress test runs into a dashboard for reviewing outcomes, investigating failures, and comparing previous runs. Reports can come from tests executed in a cloud CI environment or on a local machine.
 
-Tomatoes uses a red tomato mark with green leaves and a cream checkmark to connect the name to test reporting. The scalable logo in `assets/tomatoes-logo.svg` is used in the sidebar, workspace avatar, and browser favicon.
+Tomatoes is an independent application with its own branding. It is not the Cypress Cloud product. Cypress is the tool that executes the tests; Tomatoes reads the resulting **Mochawesome-compatible JSON report** and presents the results.
 
-## Run
+The current application runs locally and stores imported reports in your browser. It does not require a Cypress Cloud account, recording key, or API connection.
 
-Run `npm start`, then open http://localhost:3000/#runs. No API keys are required. The dashboard fetches its bundled report through the local server.
+## See Tomatoes in action
 
-## Explore results
+[![Watch the Tomatoes animated promo](media/tomatoes-promo-poster.png)](media/tomatoes-promo.mp4)
 
-- Latest run: a widget dashboard with outcome distribution, failure hotspots, clickable spec health, slowest tests, execution coverage, and timing. All widgets update when a report is imported.
-- Test results: detailed spec and test browsing, accessible from the sidebar or dashboard widgets.
-- Switch between spec summaries and individual tests. Search by spec, test title, or failure message; filter by spec and outcome.
-- Click a spec to inspect its tests. Inspect a test for its failure message, stack trace, recorded code, and context. Report text is displayed as text and never executed.
-- Failed tests lists all failures. Analytics groups failure messages, ranks affected directories, shows executed-test duration distributions and percentiles, and charts saved-run pass rates.
-- Flaky tests compares up to 10 saved reports by exact spec path and full test title. Pass/fail changes are investigation signals, not confirmed flakiness; pending/skipped outcomes and duplicate identities are excluded. Retry evidence is required to confirm flakiness.
-- Report settings saves time-zone and page-size preferences locally, downloads the original JSON, revalidates the selected report, and surfaces data-quality discrepancies.
-- Branch, commit, author, browser, operating system, and retry-confirmed flakiness are unavailable when absent from the report. Saved-run trends reflect the reports imported into this browser.
+[Watch or download the 28-second animated promo](media/tomatoes-promo.mp4), featuring the dashboard, insights, and responsive layouts with an original soundtrack.
 
-Click **Import report** to inspect another Mochawesome JSON report. Successfully rendered reports are saved in IndexedDB in this browser. **Import history** shows saved reports with dates, status, test counts, pass rate, and duration; **Open dashboard** restores any report with its complete test details. The last viewed report is restored after a browser reload. Identical file contents share one history entry; importing the same file again moves it to the top. Reopening history or clicking Reload does not create another import.
+**Created by Alex Ali.**
 
-History is local to this browser and origin (including the localhost port). Clearing site data removes it. Imports made before this feature need to be imported again. If browser storage is unavailable or full, the dashboard still displays valid reports and explains that history could not be saved. To load a changed bundled run, replace `results.json`, then choose **Open bundled report** in Import history.
+## Get started
 
-Imports accept .json files up to 50 MB. JSON syntax and Mochawesome statistics, spec/suite arrays, test outcomes, field types, durations, and dates are validated before replacing the displayed report. Format errors identify the offending field; invalid imports preserve the current report. Reports are limited to 100,000 suite/test records and 100 levels of nesting.
+With Node.js and npm installed, run:
 
-A modal spinner and progress bar show reading, parsing, validation, aggregation, and rendering stages. The page blocks pointer and keyboard interaction until processing finishes or an error is displayed. Parsing and validation run in a background worker.
+```sh
+npm install
+npm start
+```
 
-Pass rate is passed tests divided by all test records, including pending and skipped tests. Spec time is the sum of its test durations. Run time uses the report's `stats.duration`, which can differ from the sum of individual test times. Summary discrepancies are displayed when reported statistics disagree with the individual records.
+Open [Tomatoes](http://localhost:3000/#runs).
 
-## Tablet and phone layouts
+The project includes a sample run in `results.json`, originally supplied as `index.json`. You can explore it immediately or choose **Import report** to open your own JSON file.
 
-At widths up to 1024px, labelled navigation moves into a modal drawer and content uses the full viewport. Below 768px, results become cards, widgets stack, and test details open in a scrollable bottom sheet. Controls use larger touch targets and safe-area padding; form fields avoid automatic zoom on iOS. Desktop layouts retain the sidebar and tabular results.
+## Bring in a Cypress report
+
+1. Execute your Cypress tests locally or through your cloud CI pipeline.
+2. Generate a Mochawesome-compatible JSON report from the run. For a run with several report files, use a merged report to review the complete run together.
+3. Download the report artifact from your pipeline, if applicable.
+4. Select **Import report** in Tomatoes and choose the `.json` file.
+5. Review the dashboard, browse tests, or open Analytics to investigate the run.
+
+Tomatoes imports exported reports. Running tests and collecting artifacts remain part of your Cypress setup and CI workflow.
+
+### Supported format and validation
+
+Reports must contain a Mochawesome `stats` object and a `results` array with spec files, nested suites, and test records. A `.json` extension alone is insufficient.
+
+Before displaying a report, Tomatoes checks JSON syntax, required statistics, suite and test structure, outcome values, field types, dates, and durations. Invalid imports show a specific error and preserve the displayed report.
+
+Import limits:
+
+- Maximum file size: **50 MB**.
+- Maximum combined suite and test records: **100,000**.
+- Maximum suite nesting depth: **100**.
+
+A blocking loading overlay shows progress through reading, parsing, validation, aggregation, and rendering. Parsing and validation run in a background worker.
+
+## Explore your results
+
+| View                | What you can do                                                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Latest run**      | Review outcome totals, pass rate, failure hotspots, spec health, slow tests, execution coverage, and timing.                   |
+| **Test results**    | Switch between specs and individual tests; search titles, paths, and errors; filter by spec and outcome.                       |
+| **Failed tests**    | Inspect recorded failure messages, stack traces, test code, and context.                                                       |
+| **Import history**  | Reopen a saved report and its complete dashboard and test details.                                                             |
+| **Analytics**       | Explore failure message patterns, affected directories, duration distributions, performance percentiles, and saved-run trends. |
+| **Flaky tests**     | Compare matching tests across up to 10 saved reports to investigate pass/fail changes.                                         |
+| **Report settings** | Save time-zone and page-size preferences, download the original JSON, revalidate a report, and review data quality.            |
+
+On tablets and phones, navigation moves into a labelled drawer. Phone results use cards, widgets stack, and test details open in a scrollable bottom sheet.
+
+### Understanding the numbers
+
+- **Dashboard pass rate** is passed tests divided by all registered test records, including pending and skipped tests.
+- **Executed pass rate** in Analytics includes passed and failed tests only.
+- **Spec time** is the sum of its recorded test durations. **Run time** uses `stats.duration`; these measurements can differ.
+- Summary discrepancies are displayed when reported statistics disagree with individual test records.
+- Cross-run pass/fail changes are investigation signals. Code, test data, and environment changes can affect outcomes; retry evidence is needed to confirm flakiness. Pending/skipped outcomes and ambiguous duplicate test identities are excluded from comparisons.
+- Branch, commit, author, browser, operating system, and retry evidence are shown only when supported by the application and available in the report. The supplied reports do not provide these details.
+
+## History and local storage
+
+Successfully rendered reports are saved in **IndexedDB** in the current browser. The last viewed report is restored after a page reload. Identical file contents share one history entry; importing the same file again moves that entry to the top. Opening a saved report or clicking **Reload** does not create another import.
+
+History belongs to this browser and origin, including the localhost port. Clearing site data removes saved reports. Imports made before history was introduced need to be imported again. If storage is unavailable or full, valid reports remain usable for the current session and Tomatoes explains that they could not be saved.
+
+To change the bundled report, replace `results.json`, then select **Open bundled report** in Import history.
 
 ## Development
 
-Run `npm install` to install the pinned Prettier development dependency.
+```sh
+npm run format        # Apply Prettier
+npm run format:check  # Verify formatting
+npm run check         # Check JavaScript syntax
+npm test              # Run report, history, and analytics tests
+```
 
-- `npm run format` formats project source files.
-- `npm run format:check` verifies formatting.
-- `npm run check` checks JavaScript syntax.
-- `npm test` verifies report aggregation against the sample and nested/empty/inconsistent reports.
+The HTTP server binds to `127.0.0.1:3000` and serves a fixed list of project assets. Report content is displayed as text and is never executed. Imported reports can include test source and environment details, so keep sample reports appropriate for the people who can access the project.
 
-The HTTP server binds to 127.0.0.1 and serves a fixed list of project assets. Reports can contain test source, error details, and environment data; keep bundled reports appropriate for local project use.
+## Branding
+
+The Tomatoes logo combines a red tomato, green leaves, and a cream checkmark. The scalable asset, `assets/tomatoes-logo.svg`, appears in the sidebar, workspace icon, and browser favicon.
