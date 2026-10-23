@@ -3,3 +3,8 @@ node_modules/
 .tomatoes-data/
 
 tmp/pdfs/
+
+# Private local database credentials
+.env
+.env.*
+!.env.example

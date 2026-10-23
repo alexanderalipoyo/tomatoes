@@ -84,7 +84,7 @@ if (typeof document !== "undefined") {
     }
     content.insertAdjacentHTML(
       "beforeend",
-      `<section id="test-evidence" class="test-evidence"><h2>Screenshots & recordings</h2><p class="widget-footnote">Attach local test evidence to this saved report. PNG, JPEG, WebP, MP4, or WebM; up to 25 MB each.</p><button class="button" id="attach-evidence" ${activeHistoryId ? "" : "disabled"}>Attach evidence</button><input id="evidence-file" type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm" hidden /><p id="evidence-status" role="status">${activeHistoryId ? "" : "Save this report in history before attaching evidence."}</p><div id="evidence-list"></div><p class="widget-footnote">Attachments stay in this browser and are separate from the original JSON.</p></section>`,
+      `<section id="test-evidence" class="test-evidence"><h2>Screenshots & recordings</h2><p class="widget-footnote">Attach local test evidence to this saved report. PNG, JPEG, WebP, MP4, or WebM; up to 25 MB each.</p><button class="button" id="attach-evidence" ${activeHistoryId ? "" : "disabled"}>Attach evidence</button><input id="evidence-file" type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm" hidden /><p id="evidence-status" role="status">${activeHistoryId ? "" : "Save this report in history before attaching evidence."}</p><div id="evidence-list"></div><p class="widget-footnote">Attachments are stored in this browser and remain separate from the original JSON. With PostgreSQL enabled, they are also copied to the server when access is available.</p></section>`,
     );
     const section = document.querySelector("#test-evidence"),
       runId = activeHistoryId,
@@ -121,7 +121,13 @@ if (typeof document !== "undefined") {
             blob: file,
             savedAt: Date.now(),
           });
+          const sync = await syncImportedReport(
+            historyEntries.find((entry) => entry.id === runId),
+          );
           showTest(test.id);
+          document.querySelector("#evidence-status").textContent = sync.saved
+            ? "Evidence saved in this browser and the database."
+            : sync.notice || "Evidence saved in this browser.";
         },
         (error) => {
           showTest(test.id);

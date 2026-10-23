@@ -2,6 +2,10 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const ReportData = require("./report-data");
+const { createFileStore } = require("./team-store");
+const { readJSON, writeJSON } = require("./json-store");
+const Features = require("./report-features");
+const Investigations = require("./investigation-model");
 const hashToken = (value) =>
   crypto.createHash("sha256").update(value).digest("hex");
 function hashPassword(password) {
@@ -25,25 +29,6 @@ function verifyPassword(password, record) {
     Boolean(record)
   );
 }
-async function readJSON(file, fallback) {
-  try {
-    return JSON.parse(await fs.readFile(file, "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") return fallback;
-    throw error;
-  }
-}
-async function writeJSON(file, value) {
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const temporary = file + "." + crypto.randomUUID() + ".tmp";
-  try {
-    await fs.writeFile(temporary, JSON.stringify(value), { mode: 0o600 });
-    await fs.rename(temporary, file);
-  } catch (error) {
-    await fs.unlink(temporary).catch(() => {});
-    throw error;
-  }
-}
 function apiError(status, message) {
   return Object.assign(new Error(message), { status });
 }
@@ -54,18 +39,10 @@ function createTeamService({
   ciToken = "",
   ciProject = "tomatoes",
   now = () => Date.now(),
+  store = createFileStore(dataDir),
 } = {}) {
   const sessions = new Map(),
     attempts = new Map();
-  let queue = Promise.resolve();
-  const usersPath = path.join(dataDir, "users.json"),
-    tokensPath = path.join(dataDir, "tokens.json"),
-    indexPath = path.join(dataDir, "runs.json");
-  const serialize = (action) => {
-    const job = queue.catch(() => {}).then(action);
-    queue = job;
-    return job;
-  };
   const send = (res, status, value, headers = {}) => {
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
@@ -106,7 +83,7 @@ function createTeamService({
       sessions.delete(key);
       return null;
     }
-    const users = await readJSON(usersPath, []);
+    const users = await store.getUsers();
     const user = users.find((user) => user.username === saved.username);
     if (!user) {
       sessions.delete(key);
@@ -126,7 +103,7 @@ function createTeamService({
       if (!authorization.startsWith("Bearer "))
         throw apiError(401, "Invalid CI authorization.");
       const digest = hashToken(authorization.slice(7));
-      const tokens = await readJSON(tokensPath, []);
+      const tokens = await store.getTokens();
       const token =
         tokens.find((record) => record.hash === digest) ||
         (ciToken && hashToken(ciToken) === digest
@@ -209,7 +186,7 @@ function createTeamService({
       if (!validHost(req)) throw apiError(403, "Unrecognized server host.");
       if (req.method === "GET" && url.pathname === "/api/team/status") {
         const user = teamMode ? await session(req) : null;
-        const tokens = await readJSON(tokensPath, []);
+        const tokens = await store.getTokens();
         send(res, 200, {
           enabled: teamMode,
           authenticated: Boolean(user),
@@ -222,7 +199,7 @@ function createTeamService({
             : null,
           csrf: user?.csrf || null,
           ciConfigured: Boolean(ciToken || tokens.length),
-          storage: "local-server",
+          storage: store.kind === "postgres" ? "postgres" : "local-server",
         });
         return true;
       }
@@ -251,7 +228,7 @@ function createTeamService({
             429,
             "Too many sign-in attempts. Try again in 15 minutes.",
           );
-        const users = await readJSON(usersPath, []);
+        const users = await store.getUsers();
         const user = users.find((item) => item.username === username);
         if (!verifyPassword(body?.password, user)) {
           const record =
@@ -311,7 +288,7 @@ function createTeamService({
         const project = url.searchParams.get("project");
         if (project && !canAccess(user, project))
           throw apiError(403, "This project is outside your access scope.");
-        const records = await readJSON(indexPath, []);
+        const records = await store.listRuns(user.projects, project);
         send(res, 200, {
           runs: records
             .filter(
@@ -325,20 +302,32 @@ function createTeamService({
       }
       if (req.method === "POST" && url.pathname === "/api/runs") {
         canWrite(req, user);
-        const body = await bodyJSON(req);
-        const raw = body?.report || body;
+        const body = await bodyJSON(
+          req,
+          ReportData.MAX_REPORT_BYTES * 2 + 65536,
+        );
+        let raw;
+        try {
+          raw =
+            typeof body?.reportText === "string"
+              ? JSON.parse(body.reportText.replace(/^\uFEFF/, ""))
+              : body?.report || body;
+        } catch {
+          throw apiError(400, "Report text is not valid JSON.");
+        }
+        const wrapped = Boolean(
+          body?.report || typeof body?.reportText === "string",
+        );
         let report, metadata;
         try {
-          if (body?.report && body.metadata !== undefined)
+          if (wrapped && body.metadata !== undefined)
             ReportData.normalizeMetadata(body.metadata);
           report = ReportData.parseReportText(JSON.stringify(raw));
           metadata = ReportData.normalizeMetadata({
             ...report.metadata,
-            ...(body?.report ? body.metadata : {}),
+            ...(wrapped ? body.metadata : {}),
             project:
-              (body?.report
-                ? body.metadata?.project
-                : report.metadata.project) ||
+              (wrapped ? body.metadata?.project : report.metadata.project) ||
               report.metadata.project ||
               (user.kind === "token" ? user.projects[0] : "tomatoes"),
           });
@@ -348,6 +337,29 @@ function createTeamService({
         if (!canAccess(user, metadata.project))
           throw apiError(403, "This project is outside your access scope.");
         const text = JSON.stringify(raw);
+        const originalText =
+          typeof body?.reportText === "string" ? body.reportText : text;
+        if (
+          Buffer.byteLength(originalText, "utf8") > ReportData.MAX_REPORT_BYTES
+        )
+          throw apiError(413, "Report exceeds the 50 MB limit.");
+        if (
+          body?.label !== undefined &&
+          (typeof body.label !== "string" || body.label.length > 180)
+        )
+          throw apiError(400, "Report label must be up to 180 characters.");
+        if (
+          body?.notes !== undefined &&
+          (typeof body.notes !== "string" || body.notes.length > 2000)
+        )
+          throw apiError(400, "Report notes must be up to 2000 characters.");
+        if (
+          body?.importedAt !== undefined &&
+          (!Number.isFinite(body.importedAt) ||
+            body.importedAt <= 0 ||
+            body.importedAt > 8640000000000000)
+        )
+          throw apiError(400, "Report import time is invalid.");
         const id = hashToken(metadata.project + "\0" + text);
         const record = {
           id,
@@ -356,6 +368,9 @@ function createTeamService({
               ? body.name.slice(0, 180)
               : "ci-report.json",
           metadata,
+          label: body?.label || "",
+          notes: body?.notes || "",
+          importedAt: body?.importedAt || now(),
           receivedAt: now(),
           start: report.start,
           end: report.end,
@@ -364,33 +379,115 @@ function createTeamService({
           duration: report.duration,
           passRate: report.passRate,
         };
-        await serialize(async () => {
-          const records = await readJSON(indexPath, []);
-          await writeJSON(path.join(dataDir, "reports", id + ".json"), raw);
-          await writeJSON(indexPath, [
-            record,
-            ...records.filter((item) => item.id !== id),
-          ]);
-        });
+        await store.saveRun(record, raw, originalText);
         send(res, 201, { run: record });
         return true;
       }
+      const evidenceMatch = url.pathname.match(
+        /^\/api\/runs\/([0-9a-f]{64})\/evidence(?:\/([0-9a-f]{64}))?$/,
+      );
+      if (evidenceMatch) {
+        const saved = await store.getRun(evidenceMatch[1], user.projects);
+        if (!saved)
+          throw apiError(404, "Report not found in your accessible projects.");
+        if (req.method === "GET" && !evidenceMatch[2]) {
+          const evidence = await store.listEvidence(evidenceMatch[1]);
+          send(res, 200, {
+            evidence: evidence.map(({ fileName, ...item }) => item),
+          });
+          return true;
+        }
+        if (req.method === "GET" && evidenceMatch[2]) {
+          const record = (await store.listEvidence(evidenceMatch[1])).find(
+            (item) => item.id === evidenceMatch[2],
+          );
+          if (!record) throw apiError(404, "Attachment not found.");
+          const bytes = await fs.readFile(
+            path.join(dataDir, "attachments", record.id + ".bin"),
+          );
+          res.writeHead(200, {
+            "Content-Type": record.type,
+            "Content-Length": bytes.length,
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "attachment",
+          });
+          res.end(bytes);
+          return true;
+        }
+        if (req.method === "POST" && !evidenceMatch[2]) {
+          canWrite(req, user);
+          const body = await bodyJSON(req, 36 * 1024 * 1024);
+          if (
+            typeof body?.testKey !== "string" ||
+            body.testKey.length > 16000 ||
+            typeof body.name !== "string" ||
+            !body.name.trim() ||
+            body.name.length > 180 ||
+            typeof body.data !== "string" ||
+            body.data.length % 4 !== 0 ||
+            !/^[A-Za-z0-9+/]*={0,2}$/.test(body.data)
+          )
+            throw apiError(400, "Invalid attachment details.");
+          const normalized = ReportData.normalizeReport(saved.report);
+          if (
+            !normalized.tests.some(
+              (test) => Investigations.identity(test) === body.testKey,
+            )
+          )
+            throw apiError(
+              400,
+              "Attachment test was not found in this report.",
+            );
+          const bytes = Buffer.from(body.data, "base64");
+          try {
+            await Features.validateEvidence(
+              new Blob([bytes], { type: body.type }),
+            );
+          } catch (error) {
+            throw apiError(400, error.message);
+          }
+          const id = crypto
+            .createHash("sha256")
+            .update(evidenceMatch[1] + "\0" + body.testKey + "\0")
+            .update(bytes)
+            .digest("hex");
+          const record = {
+            id,
+            runId: evidenceMatch[1],
+            testKey: body.testKey,
+            name: body.name,
+            type: body.type,
+            size: bytes.length,
+            contentHash: crypto
+              .createHash("sha256")
+              .update(bytes)
+              .digest("hex"),
+            savedAt: now(),
+          };
+          const destination = path.join(dataDir, "attachments", id + ".bin");
+          await fs.mkdir(path.dirname(destination), { recursive: true });
+          try {
+            await fs.writeFile(destination, bytes, { flag: "wx", mode: 0o600 });
+          } catch (error) {
+            if (error.code !== "EEXIST") throw error;
+          }
+          await store.saveEvidence(record);
+          send(res, 201, { evidence: record });
+          return true;
+        }
+        throw apiError(404, "Attachment endpoint not found.");
+      }
       const match = url.pathname.match(/^\/api\/runs\/([0-9a-f]{64})$/);
       if (req.method === "GET" && match) {
-        const records = await readJSON(indexPath, []);
-        const record = records.find(
-          (item) =>
-            item.id === match[1] && canAccess(user, item.metadata.project),
-        );
-        if (!record)
+        const saved = await store.getRun(match[1], user.projects);
+        if (!saved)
           throw apiError(404, "Report not found in your accessible projects.");
-        const report = await readJSON(
-          path.join(dataDir, "reports", record.id + ".json"),
-          null,
-        );
-        if (!report)
-          throw apiError(404, "Stored report content is unavailable.");
-        send(res, 200, { run: record, report });
+        send(res, 200, {
+          run: saved.record,
+          report: saved.report,
+          originalText: saved.originalText,
+        });
         return true;
       }
       throw apiError(404, "API endpoint not found.");
@@ -403,7 +500,7 @@ function createTeamService({
       return true;
     }
   }
-  return { handle, authenticateData, teamMode };
+  return { handle, authenticateData, teamMode, store };
 }
 module.exports = {
   createTeamService,

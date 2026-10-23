@@ -670,6 +670,14 @@ async function loadReport(file = currentFile, options = {}) {
         "This report is loaded, but history could not be saved. Browser storage may be unavailable or full.",
       );
     }
+    if (!saved && file && options.recordImport && !options.skipServerSave) {
+      paintProgress(98, "Checking database storage");
+      await allowPaint();
+      const result = await syncImportedReport(
+        historyEntries.find((entry) => entry.id === activeHistoryId),
+      );
+      if (result.notice) historyNotice(result.notice);
+    }
     $("#run-summary .eyebrow").textContent = isPreviousImport()
       ? "PREVIOUS IMPORT"
       : "LATEST IMPORTED RUN";

@@ -261,7 +261,9 @@
       const tx = db.transaction("evidence", "readonly");
       const request = tx.objectStore("evidence").index("runId").getAll(runId);
       return complete(tx, () =>
-        request.result.filter((item) => item.testKey === testKey),
+        request.result.filter(
+          (item) => testKey === undefined || item.testKey === testKey,
+        ),
       );
     }
     async function close() {

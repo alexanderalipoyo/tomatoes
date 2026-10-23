@@ -399,3 +399,8 @@ main input::placeholder {
     min-height: 44px;
   }
 }
+
+.shared-run p {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

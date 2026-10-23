@@ -6,7 +6,7 @@ Tomatoes turns JSON reports from Cypress test runs into a dashboard for reviewin
 
 Tomatoes is an independent application with its own branding. It is not the Cypress Cloud product. Cypress is the tool that executes the tests; Tomatoes reads the resulting **Mochawesome-compatible JSON report** and presents the results.
 
-The application runs locally. Imports and evidence are saved in your browser; **Team & CI** adds an optional server-backed report store on this machine. It does not require a Cypress Cloud account, recording key, or API connection.
+The application runs locally. Imports and evidence are available in your browser; **Team & CI** uses PostgreSQL or the local file store for persistent server copies. With PostgreSQL enabled, new file imports and attachments are also saved to the server when your account has access. It does not require a Cypress Cloud account, recording key, or API connection.
 
 ## See Tomatoes in action
 
@@ -108,7 +108,7 @@ To change the bundled report, replace `results.json`, then select **Open bundled
 
 In **Report settings**, save the project, environment, branch, commit, and build URL for the selected import. These details are stored separately from the original JSON, which remains available unchanged. Run summaries and explicit comparisons include the available identity fields.
 
-Open a test to attach a screenshot or recording. Tomatoes validates the file type, signature, and size before saving it in this browser's IndexedDB. Supported formats are PNG, JPEG, WebP, MP4, and WebM, up to **25 MB per file**. Previews load on demand. Evidence attachments stay in this browser and are not included in JSON downloads or server publishing.
+Open a test to attach a screenshot or recording. Tomatoes validates the file type, signature, and size before saving it in this browser's IndexedDB. Supported formats are PNG, JPEG, WebP, MP4, and WebM, up to **25 MB per file**. Previews load on demand. Evidence attachments remain separate from JSON downloads. With PostgreSQL enabled, new attachments are also saved to the server when access is available. Publishing or bulk-saving a browser report copies its attachments as well.
 
 **Export PDF** on a saved import, or **Download PDF report** in Report settings, opens export options. Choose a brief summary or a detailed report, optionally filter failure details by title/path/error text or an exact spec path, then choose **Preview PDF**. Use Previous page / Next page to inspect the locally rendered preview, then download it or open it in a separate browser tab. Changing export options preserves your current choices. Overview totals always cover the full run; failure filters affect the patterns and details only. It includes outcome totals, run metadata, the top 20 specs, the top 10 failure patterns, and up to 200 failed tests with error excerpts of up to 2,000 characters each. Included counts and any shortened excerpts are labelled. PDF dates follow your display time zone. Downloads use the saved import time in `YYYY-MM-DD_HH-mm-ss-report.pdf` format (for example, `2026-10-23_16-10-14-report.pdf`), matching the import time shown in history. Re-exporting uses that same import time. The PDF separates the overview, aligned spec table, failure patterns, and failure details into clear sections. Generation stays in the browser, shows a blocking progress overlay, and does not upload your report. Screenshot and video attachments remain separate.
 
@@ -136,7 +136,7 @@ To provide retry evidence, add an `attempts` array to an individual test, for ex
 
 ## Local team store and CI
 
-Start normally with `npm start`, then open **Team & CI**. **Publish report** saves the selected run in `.tomatoes-data`; **Open browser copy** imports a server report into this browser. Server files survive browser storage clearing. Browser copies remain available after sign-out. The server binds to `127.0.0.1`, so this setup stays on this machine.
+Start normally with `npm start`, then open **Team & CI**. **Publish report** saves the selected run to the configured server store; **Open browser copy** imports a server report and its attachments into this browser. **Save browser imports** copies existing browser history, including display names, notes, metadata, and attachments. Trash is excluded, and browser originals are preserved. Server copies survive browser storage clearing. Browser copies remain available after sign-out. The server binds to `127.0.0.1`, so this setup stays on this machine.
 
 ### Optional accounts
 
@@ -172,7 +172,7 @@ A runner on another machine cannot reach this loopback-only server. External hos
 
 ### Storage and source layout
 
-`.tomatoes-data` contains server reports, the run index, account hashes, and token hashes, and is excluded from Git. Keep this directory private and back it up if needed. Set `TOMATOES_DATA_DIR` consistently for the server and administration tools to use another directory. To disable optional sign-in for your own local setup, remove `TOMATOES_TEAM_MODE` and restart the server.
+In file mode, `.tomatoes-data` contains server reports, the run index, account hashes, and token hashes. In PostgreSQL mode these records live in the database, while attachment bytes stay under `.tomatoes-data/attachments`. The private local folder is excluded from Git. Keep this directory private and back it up if needed. Set `TOMATOES_DATA_DIR` consistently for the server and administration tools to use another directory. To disable optional sign-in for your own local setup, remove `TOMATOES_TEAM_MODE` and restart the server.
 
 The browser UI is separated into report loading (`app.js`), insights (`insights.js`), investigations (`investigations.js`), evidence and metadata (`report-features.js`), and local team access (`team.js`). Styles are split into base, insights, investigations, responsive, and team files. Keyboard focus indicators, a skip link, and reduced-motion support complement the tablet and phone layouts.
 
@@ -190,3 +190,38 @@ The HTTP server binds to `127.0.0.1:3000` and serves a fixed list of project ass
 ## Branding
 
 The Tomatoes logo combines a red tomato, green leaves, and a cream checkmark. The scalable asset, `assets/tomatoes-logo.svg`, appears in the sidebar, workspace icon, and browser favicon.
+
+## Local PostgreSQL setup
+
+The server supports PostgreSQL through `TOMATOES_STORAGE=postgres`. Connection settings live in the ignored `.env.local` file. Copy `.env.example` when setting up another machine, then fill in `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`. Keep the password in that file or your environment rather than source code. The server, database commands, and account tools load the same configuration.
+
+For an existing local database named `tomatoes`:
+
+```sh
+npm install
+npm run db:check
+npm run db:migrate
+npm run db:import-files
+npm start
+```
+
+`db:check` opens a read-only connection and reports the database identity. `db:migrate` creates versioned tables inside the `tomatoes` schema, preserving existing data. Run it explicitly before starting PostgreSQL mode; startup checks the schema and reports a configuration failure instead of silently switching stores. `db:import-files` validates the previous file store and copies missing reports, accounts, token hashes, and attachment metadata in one transaction. Repeating it skips existing records and preserves database edits. Source files and attachment files remain in place.
+
+The schema contains:
+
+- `tomatoes.runs`: indexed report IDs, project and receipt time, summary metadata as JSONB, report data as JSONB, and the original JSON text.
+- `tomatoes.users`: application account names, roles, project scopes, and salted password hashes.
+- `tomatoes.ci_tokens`: project-scoped token hashes.
+- `tomatoes.evidence`: attachment metadata linked to reports. Screenshot and video bytes remain in the configured private local folder.
+- `tomatoes.schema_migrations`: applied schema versions.
+
+Open **Team & CI** to see **PostgreSQL connected**. Existing browser history can be copied using **Save browser imports**. New file imports are copied automatically when the database is available and the signed-in account can write to the project. If saving a server copy fails, the valid browser import remains usable and a notice explains the result. Opening an existing browser import or a server copy does not automatically republish it. Browser backup files continue to cover browser data; back up the PostgreSQL schema and private attachment folder together for server recovery.
+
+Set `TOMATOES_STORAGE=files` and restart to use the original file store. The stores remain separate; there is no automatic database-to-file overwrite. The HTTP server continues to bind to `127.0.0.1`, so this setup does not expose PostgreSQL or Tomatoes externally. A dedicated PostgreSQL application role with access to the Tomatoes schema can be configured through `PGUSER` instead of an administrator account.
+
+```sh
+npm test                # Browser models, file APIs, validation, PDF and backup tests
+npm run test:postgres   # Live database tests using isolated temporary schemas
+```
+
+The PostgreSQL tests use the configured local connection, create uniquely named test schemas and temporary attachment directories, and remove only their own test data. They verify persistence, project scoping, role enforcement, original-text fidelity, attachments, repeatable migrations, and transaction rollback.
