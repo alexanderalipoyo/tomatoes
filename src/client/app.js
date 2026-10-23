@@ -52,6 +52,7 @@ const badge = (status) =>
   `<span class="status-badge ${esc(status)}">${esc(status[0].toUpperCase() + status.slice(1))}</span>`;
 const preferenceDefaults = { ...UserPreferenceModel.DEFAULT_DISPLAY };
 let preferences = { ...preferenceDefaults };
+let appearanceDraft = null;
 const userPreferences = PreferenceClient.create({
   request: async (route, options = {}) => {
     const response = await fetch(route, {
@@ -85,6 +86,7 @@ const userPreferences = PreferenceClient.create({
 });
 async function reloadUserPreferences() {
   const state = await userPreferences.initialize();
+  appearanceDraft = null;
   preferences = state.preferences.display;
   Appearance.apply(state.preferences.appearance.colorMode);
   pageSize = preferences.rows;
@@ -455,6 +457,14 @@ function navigate(force = false) {
     view === "runs" && isPreviousImport()
       ? "Dashboard and test results for the selected saved report."
       : labels[view][1];
+  $("#refresh").hidden = isReportIndependentView();
+  if (isReportIndependentView()) {
+    $("#load-state").hidden = true;
+    if (!report) {
+      $("#source-label").textContent = "Workspace";
+      $("#report-footer").textContent = "Your local workspace";
+    }
+  }
   $("#overview").hidden = view !== "runs";
   $("#results-section").hidden = !["results", "failures"].includes(view);
   $("#alternate").hidden = ["runs", "results", "failures", "history"].includes(
@@ -969,20 +979,39 @@ matchMedia("(max-width: 1024px)").addEventListener("change", (event) => {
 });
 window.addEventListener("hashchange", () => $("#mobile-navigation").close());
 reloadUserPreferences().finally(() => {
-  renderHistory();
-  navigate();
-  try {
-    const route = ReportLinks.read(location.href);
-    if (route.importId || route.serverId) void navigateReportLocation();
-    else void loadReport(null, { restore: true });
-  } catch (error) {
-    showReportLinkError(error);
+  void refreshHistory()
+    .catch((error) =>
+      historyNotice(`Could not load import history: ${error.message}`, "error"),
+    )
+    .finally(() => navigateReportLocation());
+});
+
+window.addEventListener("beforeunload", (event) => {
+  if (hasUnsavedAppearance()) {
+    event.preventDefault();
+    event.returnValue = "";
   }
 });
+function hasUnsavedAppearance() {
+  const state = userPreferences.getState();
+  return Boolean(
+    state.ready &&
+    appearanceDraft &&
+    appearanceDraft.profileId === state.profileId &&
+    appearanceDraft.colorMode !== state.preferences.appearance.colorMode,
+  );
+}
 
 function renderWorkspaceSettings(alt) {
   const state = userPreferences.getState();
-  const selected = state.preferences.appearance.colorMode;
+  if (!appearanceDraft || appearanceDraft.profileId !== state.profileId)
+    appearanceDraft = {
+      profileId: state.profileId,
+      colorMode: state.preferences.appearance.colorMode,
+      saving: false,
+    };
+  const draft = appearanceDraft;
+  const selected = draft.colorMode;
   alt.innerHTML = `<div class="workspace-settings">
     <article class="settings-card appearance-card">
       <span class="eyebrow">APPEARANCE</span>
@@ -1005,7 +1034,8 @@ function renderWorkspaceSettings(alt) {
             )
             .join("")}
         </fieldset>
-        <div class="settings-buttons"><button class="button primary" type="submit" ${state.ready ? "" : "disabled"}>Save appearance</button></div>
+        <div class="settings-buttons"><button class="button primary" type="submit" ${state.ready ? "" : "disabled"}>Save appearance</button><button class="button" type="button" id="discard-appearance" hidden>Discard changes</button></div>
+        <p id="appearance-feedback" class="appearance-feedback" role="status" aria-live="polite"></p>
         <p class="appearance-save-note">${state.ready ? "Your color mode is saved to your user preferences and applied throughout Tomatoes." : esc(state.error)}</p>
       </form>
     </article>
@@ -1022,13 +1052,35 @@ function renderWorkspaceSettings(alt) {
     );
   };
   const form = $("#appearance-form");
+  const button = form.querySelector('button[type="submit"]');
+  const discard = $("#discard-appearance");
+  function updateFeedback() {
+    const dirty = hasUnsavedAppearance();
+    button.disabled = !state.ready || !dirty || draft.saving;
+    $("#reload-user-preferences").disabled = draft.saving;
+    button.textContent = draft.saving ? "Saving..." : "Save appearance";
+    discard.hidden = !dirty;
+    $("#appearance-feedback").textContent = dirty
+      ? "Unsaved changes. Select Save appearance to apply your choice. Your selection is kept while you move between pages."
+      : "";
+    form.inert = draft.saving;
+    form.setAttribute("aria-busy", String(draft.saving));
+  }
+  form.onchange = () => {
+    draft.colorMode = new FormData(form).get("colorMode");
+    updateFeedback();
+  };
+  discard.onclick = () => {
+    appearanceDraft = null;
+    renderWorkspaceSettings(alt);
+  };
+  updateFeedback();
   form.onsubmit = async (event) => {
     event.preventDefault();
-    const colorMode = new FormData(form).get("colorMode");
-    form.inert = true;
-    form.setAttribute("aria-busy", "true");
-    const button = form.querySelector('button[type="submit"]');
-    button.textContent = "Saving...";
+    if (!state.ready || draft.saving || !hasUnsavedAppearance()) return;
+    const colorMode = draft.colorMode;
+    draft.saving = true;
+    updateFeedback();
     try {
       const saved = await userPreferences.save({ appearance: { colorMode } });
       Appearance.apply(saved.preferences.appearance.colorMode);
@@ -1036,9 +1088,8 @@ function renderWorkspaceSettings(alt) {
     } catch (error) {
       showToast(error.message, "error");
     } finally {
-      form.inert = false;
-      form.removeAttribute("aria-busy");
-      button.textContent = "Save appearance";
+      draft.saving = false;
+      if (view === "workspace-settings") renderWorkspaceSettings(alt);
     }
   };
 }

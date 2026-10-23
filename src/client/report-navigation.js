@@ -64,9 +64,19 @@ function showReportLinkError(error) {
   $("#page-title").textContent = "Report unavailable";
   showToast(error.message, "error");
 }
+function isReportIndependentView() {
+  return ["workspace-settings", "team", "history"].includes(
+    location.hash.slice(1),
+  );
+}
 async function navigateReportLocation() {
   if (loading) {
     pendingReportNavigation = true;
+    return;
+  }
+  // Workspace and history remain usable even when report identifiers are invalid.
+  if (isReportIndependentView()) {
+    navigate();
     return;
   }
   let route;
@@ -76,7 +86,13 @@ async function navigateReportLocation() {
     showReportLinkError(error);
     return;
   }
-  if (failedReportLinkKey === location.search) return;
+  if (failedReportLinkKey === location.search) {
+    navigate();
+    $("#report-content").hidden = true;
+    $("#load-state").hidden = false;
+    $("#page-title").textContent = "Report unavailable";
+    return;
+  }
   if (
     (route.importId || route.serverId) &&
     !(route.importId && route.importId === activeHistoryId) &&
@@ -93,6 +109,8 @@ async function navigateReportLocation() {
           "The requested report could not be loaded. It may be missing, in trash, or outside your signed-in account's access.",
         ),
       );
+  } else if (!report && !route.importId && !route.serverId) {
+    await loadReport(null, { restore: true });
   } else navigate();
 }
 function openHistoryReportLink(event) {

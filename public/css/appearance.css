@@ -212,3 +212,13 @@
 .sidebar > * {
   flex-shrink: 0;
 }
+
+.appearance-feedback:not(:empty) {
+  padding: 12px 14px;
+  border: 1px solid var(--theme-border, #ead9b8);
+  border-radius: 7px;
+  color: var(--theme-warning-text, #79551c);
+  background: var(--theme-warning-surface, #fff9ec);
+  font-size: 12px;
+  line-height: 1.8;
+}
