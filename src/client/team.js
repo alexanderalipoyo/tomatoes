@@ -48,9 +48,12 @@ async function renderTeam(alt) {
             }),
           });
           $("#team-password").value = "";
+          await reloadUserPreferences();
           await renderTeam(alt);
+          showToast("Signed in. Your preferences are loaded.", "success");
         } catch (error) {
           $("#team-login-error").textContent = error.message;
+          showToast(error.message, "error");
           submit.disabled = false;
         }
       };
@@ -79,7 +82,9 @@ async function renderTeam(alt) {
         try {
           await teamRequest("/api/logout", { method: "POST", body: "{}" });
           teamState = null;
+          await reloadUserPreferences();
           renderTeam(alt);
+          showToast("Signed out.", "success");
         } catch (error) {
           historyNotice(error.message);
         }
@@ -99,10 +104,12 @@ async function renderTeam(alt) {
           await renderTeam(alt);
           $("#team-feedback").textContent =
             "Report and attachments saved to the local server store.";
+          showToast("Report and attachments saved to the server.", "success");
         },
         (error) => {
           if ($("#team-feedback"))
             $("#team-feedback").textContent = error.message;
+          showToast(`Report could not be saved: ${error.message}`, "error");
         },
       );
     };
@@ -137,8 +144,13 @@ async function renderTeam(alt) {
           await renderTeam(alt);
           document.querySelector("#browser-save-feedback").textContent =
             `Saved ${entries.length} browser imports as ${ids.size} distinct server reports, including their attachments. Browser history was preserved.`;
+          showToast(
+            `Saved ${ids.size} reports and their attachments to the server.`,
+            "success",
+          );
         },
         (error) => {
+          showToast(`Saving imports stopped: ${error.message}`, "error");
           if (document.querySelector("#browser-save-feedback"))
             document.querySelector("#browser-save-feedback").textContent =
               `Save stopped: ${error.message} Earlier reports may already be saved. Retrying merges duplicates; browser originals are preserved.`;
@@ -168,6 +180,7 @@ async function renderTeam(alt) {
               openDashboard: true,
               metadataOverride: saved.run.metadata,
               skipServerSave: true,
+              serverId: saved.run.id,
             });
             if (currentFile !== file) {
               button.disabled = false;
@@ -262,6 +275,7 @@ async function uploadBrowserReport(entry, projectOverride = null) {
     });
     await allowPaint();
   }
+  if (entry) reportServerLinks.set(entry.id, saved.run.id);
   return saved.run;
 }
 async function restoreSharedEvidence(saved, localId) {
@@ -289,7 +303,8 @@ async function restoreSharedEvidence(saved, localId) {
 async function syncImportedReport(entry) {
   try {
     const status = await teamRequest("/api/team/status");
-    if (status.storage !== "postgres") return { saved: false };
+    if (status.storage !== "postgres" && !status.slackConfigured)
+      return { saved: false };
     teamState = status;
     if (status.enabled && !status.authenticated)
       return {
@@ -303,12 +318,32 @@ async function syncImportedReport(entry) {
         notice:
           "Saved in this browser. Your account has read-only database access.",
       };
-    await uploadBrowserReport(entry);
-    return { saved: true };
+    const run = await uploadBrowserReport(entry);
+    return { saved: true, run };
   } catch (error) {
     return {
       saved: false,
       notice: `Saved in this browser. The database copy could not be saved: ${error.message}`,
     };
+  }
+}
+
+async function notifyImportedRun(serverId, eventId) {
+  try {
+    const result = await teamRequest(
+      `/api/runs/${serverId}/slack-notification`,
+      {
+        method: "POST",
+        body: JSON.stringify({ eventId }),
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    if (result.status === "sent")
+      showToast("Report imported and Slack notified.", "success");
+  } catch (error) {
+    showToast(
+      `Report imported, but Slack was not confirmed: ${error.message}`,
+      "warning",
+    );
   }
 }

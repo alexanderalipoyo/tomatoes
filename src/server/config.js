@@ -2,8 +2,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 function loadLocalEnvironment() {
-  const file = path.join(PROJECT_ROOT, ".env.local");
-  if (fs.existsSync(file)) process.loadEnvFile(file);
+  for (const name of [".env.local", ".env"]) {
+    const file = path.join(PROJECT_ROOT, name);
+    if (fs.existsSync(file)) process.loadEnvFile(file);
+  }
 }
 function databaseConfig() {
   return {

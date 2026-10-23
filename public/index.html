@@ -15,7 +15,15 @@
     <link rel="stylesheet" href="/css/responsive.css" />
     <link rel="stylesheet" href="/css/investigations.css" />
     <link rel="stylesheet" href="/css/team.css" />
+    <link rel="stylesheet" href="/css/custom-widgets.css" />
+    <script src="/js/notifications.js" defer></script>
     <script src="/js/report-data.js" defer></script>
+    <script src="/js/report-links.js" defer></script>
+    <script src="/js/report-navigation.js" defer></script>
+    <script src="/js/dashboard-groups.js" defer></script>
+    <script src="/js/user-preferences.js" defer></script>
+    <script src="/js/preferences.js" defer></script>
+    <script src="/js/custom-widgets.js" defer></script>
     <script src="/js/import-history.js" defer></script>
     <script src="/js/report-import.js" defer></script>
     <script src="/js/investigation-model.js" defer></script>
@@ -250,6 +258,24 @@
             <div id="data-warnings" role="status"></div>
           </section>
           <section
+            id="custom-dashboard"
+            class="custom-dashboard-section"
+            aria-labelledby="custom-dashboard-title"
+            hidden
+          >
+            <div class="widget-heading">
+              <div>
+                <span class="eyebrow">YOUR SPEC GROUPS</span>
+                <h2 id="custom-dashboard-title">
+                  Customized dashboard widgets
+                </h2>
+                <p id="custom-dashboard-source"></p>
+              </div>
+              <a class="button" href="#settings">Manage groups</a>
+            </div>
+            <div id="custom-dashboard-content"></div>
+          </section>
+          <section
             id="failure-groups"
             aria-label="Grouped failures"
             hidden
@@ -471,6 +497,22 @@
         ><span>Please wait until rendering finishes</span>
       </div>
     </dialog>
-    <div id="toast" role="status"></div>
+    <div
+      id="toast"
+      popover="manual"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <span id="toast-icon" aria-hidden="true"></span>
+      <span id="toast-message"></span>
+      <button
+        id="dismiss-toast"
+        type="button"
+        aria-label="Dismiss notification"
+      >
+        ×
+      </button>
+    </div>
   </body>
 </html>

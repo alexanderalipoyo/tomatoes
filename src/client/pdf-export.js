@@ -147,7 +147,7 @@ if (typeof document !== "undefined") {
         async () => {
           optionReport = await readInvestigationReport(historyId);
         },
-        (error) => historyNotice(error.message),
+        (error) => historyNotice(error.message, "error"),
       );
       if (!optionReport) return;
     }
@@ -221,9 +221,9 @@ if (typeof document !== "undefined") {
           button.disabled = true;
           try {
             await doc.save(outputName, { returnPromise: true });
-            historyNotice("PDF download started.");
+            historyNotice("PDF download started.", "success");
           } catch (error) {
-            historyNotice(`PDF download failed: ${error.message}`);
+            historyNotice(`PDF download failed: ${error.message}`, "error");
           } finally {
             if (button.isConnected) button.disabled = false;
           }
@@ -236,7 +236,7 @@ if (typeof document !== "undefined") {
         await renderPDFPreview(doc);
         document.querySelector("#detail").showModal();
       },
-      (error) => historyNotice(`PDF export failed: ${error.message}`),
+      (error) => historyNotice(`PDF export failed: ${error.message}`, "error"),
     );
   }
   globalThis.exportReportPDF = exportReportPDF;

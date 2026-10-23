@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { PROJECT_ROOT } = require("./config");
 const ReportData = require("../shared/report-data");
+const UserPreferences = require("../shared/user-preferences");
 const { createFileStore } = require("./storage/index");
 const { readJSON, writeJSON } = require("./storage/json-store");
 const Features = require("../shared/report-features");
@@ -40,6 +41,7 @@ function createTeamService({
   ciToken = "",
   ciProject = "tomatoes",
   now = () => Date.now(),
+  slackNotifier = null,
   store = createFileStore(dataDir),
 } = {}) {
   const sessions = new Map(),
@@ -200,6 +202,7 @@ function createTeamService({
             : null,
           csrf: user?.csrf || null,
           ciConfigured: Boolean(ciToken || tokens.length),
+          slackConfigured: Boolean(slackNotifier?.enabled),
           storage: store.kind === "postgres" ? "postgres" : "local-server",
         });
         return true;
@@ -285,6 +288,51 @@ function createTeamService({
         return true;
       }
       const user = await principal(req);
+      if (url.pathname === "/api/preferences") {
+        if (user.kind === "token")
+          throw apiError(403, "CI tokens cannot access user preferences.");
+        const owner =
+          user.kind === "session" ? "user:" + user.username : "local";
+        const profile =
+          user.kind === "session" ? user.username : "Local profile";
+        if (req.method === "GET") {
+          const preferences = await store.getPreferences(owner);
+          send(res, 200, {
+            preferences: preferences
+              ? UserPreferences.withDefaults(preferences)
+              : null,
+            profile,
+            profileId: owner,
+            storage: store.kind,
+          });
+          return true;
+        }
+        if (req.method === "PUT") {
+          // Viewers can manage their own preferences without project write access.
+          canWrite(req, { ...user, role: "editor" });
+          let patch;
+          try {
+            patch = UserPreferences.validatePatch(
+              await bodyJSON(req, 1024 * 1024),
+            );
+          } catch (error) {
+            throw apiError(error.status || 400, error.message);
+          }
+          const saved = await store.savePreferences(
+            owner,
+            patch,
+            req.headers["if-none-match"] === "*",
+          );
+          send(res, 200, {
+            preferences: UserPreferences.withDefaults(saved),
+            profile,
+            profileId: owner,
+            storage: store.kind,
+          });
+          return true;
+        }
+        throw apiError(405, "Use GET or PUT for preferences.");
+      }
       if (req.method === "GET" && url.pathname === "/api/runs") {
         const project = url.searchParams.get("project");
         if (project && !canAccess(user, project))
@@ -382,6 +430,49 @@ function createTeamService({
         };
         await store.saveRun(record, raw, originalText);
         send(res, 201, { run: record });
+        return true;
+      }
+      const slackMatch = url.pathname.match(
+        /^\/api\/runs\/([a-f0-9]{64})\/slack-notification$/,
+      );
+      if (req.method === "POST" && slackMatch) {
+        if (user.kind === "token")
+          throw apiError(
+            403,
+            "Slack import notifications require browser access.",
+          );
+        canWrite(req, user);
+        const body = await bodyJSON(req, 4096);
+        if (
+          !body ||
+          typeof body.eventId !== "string" ||
+          !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(
+            body.eventId,
+          )
+        )
+          throw apiError(400, "Use a valid import event identifier.");
+        const saved = await store.getRun(slackMatch[1], user.projects);
+        if (!saved)
+          throw apiError(404, "Report not found in your accessible projects.");
+        if (!slackNotifier?.enabled) {
+          send(res, 200, { status: "disabled" });
+          return true;
+        }
+        const normalized = ReportData.parseReportText(
+          saved.originalText || JSON.stringify(saved.report),
+        );
+        try {
+          const result = await slackNotifier.notify({
+            eventId: body.eventId,
+            record: saved.record,
+            report: normalized,
+            origin: publicOrigin || "http://" + req.headers.host,
+            owner: user.username || "local",
+          });
+          send(res, 200, result);
+        } catch (error) {
+          throw apiError(error.status || 502, error.message);
+        }
         return true;
       }
       const evidenceMatch = url.pathname.match(

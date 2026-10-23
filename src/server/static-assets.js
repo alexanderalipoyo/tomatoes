@@ -8,8 +8,12 @@ add("/", "public/index.html");
 add("/index.html", "public/index.html");
 for (const name of [
   "app",
+  "notifications",
+  "report-navigation",
   "import-history",
   "report-import",
+  "preferences",
+  "custom-widgets",
   "insights",
   "investigations",
   "team",
@@ -23,6 +27,9 @@ for (const name of [
 }
 for (const name of [
   "report-data",
+  "report-links",
+  "dashboard-groups",
+  "user-preferences",
   "investigation-model",
   "report-features",
   "report-pdf",
@@ -33,6 +40,7 @@ for (const name of [
 }
 for (const name of [
   "styles",
+  "custom-widgets",
   "insights",
   "responsive",
   "investigations",

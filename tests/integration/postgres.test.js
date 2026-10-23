@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    1,
+    2,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -377,4 +377,96 @@ test("real PostgreSQL file migration is repeatable, preserves sources, and rolls
     (await api.store.getUsers()).some((user) => user.username === "invalid"),
     false,
   );
+});
+
+test("PostgreSQL preferences isolate accounts, allow viewers' own settings, and enforce CSRF", async (t) => {
+  const api = await fixture(t, { teamMode: true });
+  for (const username of ["alice", "bob"])
+    await api.store.addUser({
+      username,
+      role: "viewer",
+      projects: ["web"],
+      ...hashPassword("test-preference-password"),
+    });
+  await api.store.addToken({
+    hash: hashToken("preference-ci-token"),
+    project: "web",
+    createdAt: new Date().toISOString(),
+  });
+  assert.equal((await api.request("/api/preferences")).status, 401);
+  assert.equal(
+    (
+      await api.request("/api/preferences", {
+        headers: { Authorization: "Bearer preference-ci-token" },
+      })
+    ).status,
+    403,
+  );
+  async function login(username) {
+    const result = await api.request("/api/login", {
+      method: "POST",
+      headers: { Origin: api.origin },
+      body: { username, password: "test-preference-password" },
+    });
+    return {
+      Cookie: result.headers.get("set-cookie").split(";")[0],
+      "X-CSRF-Token": result.body.csrf,
+      Origin: api.origin,
+    };
+  }
+  const alice = await login("alice"),
+    bob = await login("bob");
+  const dashboardGroups = [
+    { id: "web", name: "Web", paths: ["cypress/web"], metrics: ["outcomes"] },
+  ];
+  const saved = await api.request("/api/preferences", {
+    method: "PUT",
+    headers: alice,
+    body: { dashboardGroups, display: { timeZone: "UTC", rows: 30 } },
+  });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.profileId, "user:alice");
+  assert.equal(
+    (await api.request("/api/preferences", { headers: bob })).body.preferences,
+    null,
+  );
+  assert.equal(
+    (
+      await api.request("/api/preferences", {
+        method: "PUT",
+        headers: { ...alice, "X-CSRF-Token": "wrong" },
+        body: { dashboardGroups: [] },
+      })
+    ).status,
+    403,
+  );
+  await Promise.all([
+    api.store.savePreferences("user:alice", {
+      display: { timeZone: "Asia/Singapore", rows: 50 },
+    }),
+    api.store.savePreferences("user:alice", { dashboardGroups: [] }),
+  ]);
+  await api.store.savePreferences(
+    "user:alice",
+    { display: { timeZone: "UTC", rows: 100 } },
+    true,
+  );
+  const own = await api.store.getPreferences("user:alice");
+  assert.equal(own.display.rows, 50);
+  assert.deepEqual(own.dashboardGroups, []);
+  const connection = new Pool(databaseConfig());
+  const reopened = createPostgresStore({
+    pool: connection,
+    schema: api.schema,
+  });
+  try {
+    assert.equal(
+      (await reopened.getPreferences("user:alice")).display.rows,
+      50,
+    );
+  } finally {
+    await reopened.close();
+  }
+  await api.store.migrate();
+  assert.equal((await api.store.getPreferences("user:alice")).display.rows, 50);
 });

@@ -65,7 +65,7 @@ A blocking loading overlay shows progress through reading, parsing, validation, 
 | **Analytics**       | Explore failure message patterns, affected directories, duration distributions, performance percentiles, and saved-run trends.                            |
 | **Flaky tests**     | Review explicit retry recovery and compare matching tests across up to 10 saved reports to investigate pass/fail changes.                                 |
 | **Team & CI**       | Publish reports to the local server, open saved reports by project, and configure optional account access or CI uploads.                                  |
-| **Report settings** | Save display preferences and run metadata, export JSON or a Markdown summary, revalidate a report, and review data quality.                               |
+| **Report settings** | Save display preferences and custom spec-group widgets, export reports, revalidate a report, and review data quality.                                     |
 
 On tablets and phones, navigation moves into a labelled drawer. Phone results use cards, widgets stack, and test details open in a scrollable bottom sheet.
 
@@ -100,9 +100,35 @@ Each saved import supports **Edit name & notes**. Display names and notes stay s
 
 Successfully rendered reports are saved in **IndexedDB** in the current browser. The last viewed report is restored after a page reload. Identical file contents within the same project share one history entry; importing the same file again moves that entry to the top. Opening a saved report or clicking **Reload** does not create another import.
 
+Each saved import has a stable URL such as `http://localhost:3000/?import=<report-id>#runs`. **Open dashboard** opens that report; **Copy link** copies its URL. Refreshing, opening the link in another tab, and browser Back/Forward preserve the selected report. Moving to Test results or Analytics keeps the same import in the URL.
+
+When a server copy is available, **Copy link** also includes its server ID. A browser without the local import can restore the matching server report, saved details and attachments, subject to normal sign-in and project access. Browser-only links require the import to remain in that browser's storage. Missing, inaccessible and trashed reports show an explicit error rather than substituting the latest run. `localhost` links point to the server on the device where they are opened.
+
 History belongs to this browser and origin, including the localhost port. Clearing site data removes saved reports. Imports made before history was introduced need to be imported again. If storage is unavailable or full, valid reports remain usable for the current session and Tomatoes explains that they could not be saved.
 
 To change the bundled report, replace `examples/reports/results.json`, then select **Open bundled report** in Import history.
+
+## Slack notifications
+
+Successful imports can notify Slack with the saved report's actual outcome totals, duration, spec links, and available metadata. Missing retry data is marked unavailable rather than reported as zero flaky tests. The webhook stays in private `.env` configuration, and delivery failures preserve the imported report. See [Slack setup and message details](docs/SLACK.md).
+
+## User preferences
+
+**Report settings** saves the time zone, results per page, and custom dashboard groups in the server store. With PostgreSQL enabled, these are stored in `tomatoes.user_preferences` as validated JSONB. Saving a widget or display preference updates only that section, preserving the other settings. The UI confirms saves with dismissible toast notifications only after the server succeeds and offers **Reload preferences** to reconnect or fetch changes. Saves, updates, imports, report publishing and evidence uploads show visible success or error notifications. Toasts pause while hovered or focused and wait until blocking progress dialogs close.
+
+With optional sign-in enabled, each account has its own preferences. Viewers can edit their own preferences without gaining permission to publish reports. CI upload tokens cannot read or change user preferences. Signing in loads that account's settings; signing out clears the active profile from the page.
+
+In local mode, everyone using this server shares one **Local profile**. On its first use, existing browser display settings and dashboard groups are copied into that profile if it has no saved preferences. Existing database values take precedence on later visits. Account profiles start separately and do not automatically inherit local browser settings. Preferences survive browser data clearing and server restarts; clearing browser data still removes browser report history. File-storage mode keeps preferences in the private server data directory instead of PostgreSQL.
+
+Run `npm run db:migrate` after updating an existing installation to apply migration `002-user-preferences.sql`. The migration adds the preference table and preserves existing reports and accounts.
+
+## Customized dashboard widgets
+
+Open **Report settings → Customized dashboard widgets** to create a named group from spec folders or individual files. Choose paths from the active report or enter one path per line. Folder paths include nested specs; matching is case-sensitive and does not use wildcards. Multiple paths within one group do not double-count specs.
+
+Choose test outcomes, pass rate, and cumulative test time. A live preview shows the matched specs and totals before saving. Saved groups appear in a separate **Customized dashboard widgets** section on **Latest run**. **View group results** lists matching specs and opens their test results. Groups can be edited or removed in settings.
+
+Group settings are stored in your server preference profile and reused for later imports. Widgets always recalculate from the selected report; paths with no matches show a no-data state. Groups may overlap each other, so their totals should not be added together. Pass rate includes all registered tests, and cumulative test time is the sum of recorded test durations. Group settings are not included in report JSON or browser-history backups; include the user preference table in database backups.
 
 ## Evidence and summaries
 
@@ -215,6 +241,7 @@ The schema contains:
 - `tomatoes.users`: application account names, roles, project scopes, and salted password hashes.
 - `tomatoes.ci_tokens`: project-scoped token hashes.
 - `tomatoes.evidence`: attachment metadata linked to reports. Screenshot and video bytes remain in the configured private local folder.
+- `tomatoes.user_preferences`: display settings and customized dashboard groups scoped to each application account or the shared local profile.
 - `tomatoes.schema_migrations`: applied schema versions.
 
 Open **Team & CI** to see **PostgreSQL connected**. Existing browser history can be copied using **Save browser imports**. New file imports are copied automatically when the database is available and the signed-in account can write to the project. If saving a server copy fails, the valid browser import remains usable and a notice explains the result. Opening an existing browser import or a server copy does not automatically republish it. Browser backup files continue to cover browser data; back up the PostgreSQL schema and private attachment folder together for server recovery.

@@ -2,12 +2,18 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createTeamService } = require("./team-service");
+const { createSlackNotifier } = require("./slack-notifier");
 const { loadLocalEnvironment, PROJECT_ROOT } = require("./config");
 const { createConfiguredStore } = require("./storage/index");
 loadLocalEnvironment();
 const store = createConfiguredStore();
 const team = createTeamService({
   store,
+  slackNotifier: createSlackNotifier({
+    webhookURL: process.env.TOMATOES_SLACK_WEBHOOK_URL,
+    enabled: process.env.TOMATOES_SLACK_ENABLED !== "false",
+    baseURL: process.env.TOMATOES_REPORT_BASE_URL || "",
+  }),
   dataDir:
     process.env.TOMATOES_DATA_DIR || path.join(PROJECT_ROOT, ".tomatoes-data"),
   teamMode: process.env.TOMATOES_TEAM_MODE === "1",

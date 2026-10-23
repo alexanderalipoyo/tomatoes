@@ -1,6 +1,6 @@
 const { Pool } = require("pg");
 const { databaseConfig } = require("../config");
-const { schemaName, migrateInitialSchema } = require("../database/schema");
+const { schemaName, migrateSchema } = require("../database/schema");
 function createPostgresStore({
   pool = new Pool(databaseConfig()),
   schema = "tomatoes",
@@ -60,7 +60,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=1`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=2`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {
@@ -80,8 +80,22 @@ function createPostgresStore({
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
           "tomatoes-schema:" + schema,
         ]);
-        await migrateInitialSchema(client, schema);
+        await migrateSchema(client, schema);
       });
+    },
+    async getPreferences(owner) {
+      const result = await pool.query(
+        `SELECT preferences FROM ${ns}.user_preferences WHERE owner=$1`,
+        [owner],
+      );
+      return result.rows[0]?.preferences || null;
+    },
+    async savePreferences(owner, patch, initializeOnly = false) {
+      const result = await pool.query(
+        `INSERT INTO ${ns}.user_preferences(owner,preferences) VALUES($1,$2::jsonb) ON CONFLICT(owner) DO UPDATE SET preferences=${ns}.user_preferences.preferences || EXCLUDED.preferences, updated_at=now() WHERE NOT $3::boolean RETURNING preferences`,
+        [owner, JSON.stringify(patch), initializeOnly],
+      );
+      return result.rows[0]?.preferences || (await this.getPreferences(owner));
     },
     async getUsers() {
       return (

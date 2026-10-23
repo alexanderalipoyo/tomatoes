@@ -158,15 +158,30 @@ function renderSettings(alt) {
   const savedEntry = historyEntries.find(
     (entry) => entry.id === activeHistoryId,
   );
-  alt.innerHTML = `<div class="settings-layout"><div><form class="settings-card preference-form" id="display-settings"><div class="widget-heading"><div><h2>Display preferences</h2><p>Saved for this browser across reports and reloads</p></div></div><label>Time zone<select id="setting-zone">${zones.map((zone) => `<option value="${esc(zone)}" ${zone === preferences.timeZone ? "selected" : ""}>${esc(zone)}</option>`).join("")}</select><small>Applies to run dates and import history.</small></label><label>Results per page<select id="setting-rows">${[15, 30, 50, 100].map((rows) => `<option value="${rows}" ${rows === pageSize ? "selected" : ""}>${rows} results</option>`).join("")}</select><small>Applies to spec and individual test lists.</small></label><div class="settings-buttons"><button class="button primary" type="submit">Save preferences</button><button class="button" type="button" id="reset-display">Use defaults</button></div><p id="settings-feedback" role="status"></p></form><article class="settings-card"><h2>Report actions</h2><p>Download the original report or run validation again.</p><div class="settings-buttons"><button class="button" id="export-report">Download JSON</button><button class="button" id="revalidate-report">Revalidate report</button><a class="button" href="#history">Import history →</a></div><p id="export-feedback" role="status"></p></article></div><div><article class="settings-card"><div class="widget-heading"><div><h2>Selected report</h2><p>${badge(report.status)} ${esc(sourceName)}</p></div></div><dl class="source-details"><div><dt>Format</dt><dd>Mochawesome JSON</dd></div><div><dt>Run started</dt><dd>${esc(date(report.start))}</dd></div><div><dt>Run finished</dt><dd>${esc(date(report.end))}</dd></div><div><dt>Report duration</dt><dd>${duration(report.duration)}</dd></div><div><dt>Coverage</dt><dd>${number(report.counts.total)} tests / ${report.specs.length} specs</dd></div><div><dt>History</dt><dd>${savedEntry ? "Saved in this browser" : "Current session only"}</dd></div></dl></article><article class="settings-card"><h2>Data quality</h2><p class="validation-summary">${report.warnings.length ? "Valid format · summary discrepancies detected" : "Valid format · test totals reconcile"}</p>${report.warnings.map((warning) => `<p class="notice data-warning">${esc(warning)}</p>`).join("")}<p class="widget-footnote">Browser and operating-system data are not provided by this report.</p><div class="storage-summary"><strong>${historyEntries.length}</strong><span>reports saved locally<br />Clearing this site's browser data removes history.</span></div></article></div></div>`;
+  alt.innerHTML = `<div class="settings-layout"><div><form class="settings-card preference-form" id="display-settings"><div class="widget-heading"><div><h2>Display preferences</h2><p>Saved in your server profile across reports and reloads</p></div></div><label>Time zone<select id="setting-zone">${zones.map((zone) => `<option value="${esc(zone)}" ${zone === preferences.timeZone ? "selected" : ""}>${esc(zone)}</option>`).join("")}</select><small>Applies to run dates and import history.</small></label><label>Results per page<select id="setting-rows">${[15, 30, 50, 100].map((rows) => `<option value="${rows}" ${rows === pageSize ? "selected" : ""}>${rows} results</option>`).join("")}</select><small>Applies to spec and individual test lists.</small></label><div class="settings-buttons"><button class="button primary" type="submit">Save preferences</button><button class="button" type="button" id="reset-display">Use defaults</button></div><p id="settings-feedback" role="status"></p></form><article class="settings-card"><h2>Report actions</h2><p>Download the original report or run validation again.</p><div class="settings-buttons"><button class="button" id="export-report">Download JSON</button><button class="button" id="revalidate-report">Revalidate report</button><a class="button" href="#history">Import history →</a></div><p id="export-feedback" role="status"></p></article></div><div><article class="settings-card"><div class="widget-heading"><div><h2>Selected report</h2><p>${badge(report.status)} ${esc(sourceName)}</p></div></div><dl class="source-details"><div><dt>Format</dt><dd>Mochawesome JSON</dd></div><div><dt>Run started</dt><dd>${esc(date(report.start))}</dd></div><div><dt>Run finished</dt><dd>${esc(date(report.end))}</dd></div><div><dt>Report duration</dt><dd>${duration(report.duration)}</dd></div><div><dt>Coverage</dt><dd>${number(report.counts.total)} tests / ${report.specs.length} specs</dd></div><div><dt>History</dt><dd>${savedEntry ? "Saved in this browser" : "Current session only"}</dd></div></dl></article><article class="settings-card"><h2>Data quality</h2><p class="validation-summary">${report.warnings.length ? "Valid format · summary discrepancies detected" : "Valid format · test totals reconcile"}</p>${report.warnings.map((warning) => `<p class="notice data-warning">${esc(warning)}</p>`).join("")}<p class="widget-footnote">Browser and operating-system data are not provided by this report.</p><div class="storage-summary"><strong>${historyEntries.length}</strong><span>reports saved locally<br />Clearing this site's browser data removes history.</span></div></article></div></div>`;
+  alt.insertAdjacentHTML("afterbegin", preferenceStatusMarkup());
+  $("#reload-user-preferences").onclick = async (event) => {
+    event.target.disabled = true;
+    const state = await reloadUserPreferences();
+    showToast(
+      state.ready ? "Preferences reloaded from the server." : state.error,
+      state.ready ? "success" : "error",
+    );
+    if (view === "settings") renderSettings(alt);
+  };
   appendReportSettings(alt);
-  function applySettings(next) {
+  renderCustomWidgetSettings(alt);
+  async function applySettings(next) {
+    const form = $("#display-settings");
+    form.inert = true;
     try {
-      localStorage.setItem("tomatoes-display-settings", JSON.stringify(next));
-    } catch {
-      $("#settings-feedback").textContent =
-        "Preferences could not be saved. Browser storage is unavailable.";
+      await userPreferences.save({ display: next });
+    } catch (error) {
+      if (form.isConnected) $("#settings-feedback").textContent = error.message;
+      showToast(`Preferences could not be saved: ${error.message}`, "error");
       return;
+    } finally {
+      form.inert = false;
     }
     preferences = next;
     stability = null;
@@ -175,8 +190,8 @@ function renderSettings(alt) {
     renderSummary();
     renderHistory();
     renderResults();
-    renderSettings(alt);
-    $("#settings-feedback").textContent = "Preferences saved.";
+    if (view === "settings" && form.isConnected) renderSettings(alt);
+    showToast("Preferences saved to your server profile.", "success");
   }
   $("#display-settings").onsubmit = (event) => {
     event.preventDefault();
@@ -186,6 +201,10 @@ function renderSettings(alt) {
     });
   };
   $("#reset-display").onclick = () => applySettings({ ...preferenceDefaults });
+  if (!userPreferences.getState().ready)
+    $("#display-settings")
+      .querySelectorAll("input,select,button")
+      .forEach((input) => (input.disabled = true));
   $("#revalidate-report").onclick = () => $("#refresh").click();
   $("#export-report").onclick = async () => {
     const button = $("#export-report");
@@ -210,9 +229,10 @@ function renderSettings(alt) {
         .replace(/(?:\.json)?$/i, ".json");
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      $("#export-feedback").textContent = "Original JSON download started.";
+      showToast("Original JSON download started.", "success");
     } catch (error) {
       $("#export-feedback").textContent = `Download failed: ${error.message}`;
+      showToast(`Download failed: ${error.message}`, "error");
     } finally {
       button.disabled = false;
     }

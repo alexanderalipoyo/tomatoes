@@ -16,6 +16,23 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
     kind: "files",
     ready: async () => {},
     close: async () => {},
+    async getPreferences(owner) {
+      const rows = await readJSON(file("preferences"), []);
+      return rows.find((row) => row.owner === owner)?.preferences || null;
+    },
+    async savePreferences(owner, patch, initializeOnly = false) {
+      return serial(async () => {
+        const rows = await readJSON(file("preferences"), []);
+        const previous = rows.find((row) => row.owner === owner);
+        if (initializeOnly && previous) return previous.preferences;
+        const preferences = { ...(previous?.preferences || {}), ...patch };
+        await writeJSON(file("preferences"), [
+          ...rows.filter((row) => row.owner !== owner),
+          { owner, preferences },
+        ]);
+        return preferences;
+      });
+    },
     getUsers: () => readJSON(file("users"), []),
     getTokens: () => readJSON(file("tokens"), []),
     async addUser(user) {

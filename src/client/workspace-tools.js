@@ -105,9 +105,10 @@ if (typeof document !== "undefined") {
         );
         historyNotice(
           "Backup download started. Keep this file to restore your reports and attachments.",
+          "success",
         );
       },
-      (error) => historyNotice(`Backup failed: ${error.message}`),
+      (error) => historyNotice(`Backup failed: ${error.message}`, "error"),
     );
   }
   async function restoreHistory(file) {
@@ -139,9 +140,10 @@ if (typeof document !== "undefined") {
         await refreshHistory();
         historyNotice(
           `Restored ${result.added} reports; ${result.skipped} existing reports kept. Missing attachments were merged. Your selected report is unchanged.`,
+          "success",
         );
       },
-      (error) => historyNotice(`Restore failed: ${error.message}`),
+      (error) => historyNotice(`Restore failed: ${error.message}`, "error"),
     );
   }
   function editHistoryEntry(id) {
@@ -163,10 +165,14 @@ if (typeof document !== "undefined") {
         invalidateSavedAnalysis(id);
         await refreshHistory();
         document.querySelector("#detail").close();
-        historyNotice("Report name and notes saved.");
+        historyNotice("Report name and notes saved.", "success");
       } catch (error) {
         document.querySelector("#history-edit-status").textContent =
           error.message;
+        showToast(
+          `Report details could not be saved: ${error.message}`,
+          "error",
+        );
       }
     };
     document.querySelector("#detail").showModal();
@@ -185,6 +191,7 @@ if (typeof document !== "undefined") {
         }
         historyNotice(
           "Report moved to trash. It remains recoverable, including its attachments.",
+          "success",
         );
         const banner = document.querySelector("#history-notice"),
           undo = document.createElement("button");
@@ -193,7 +200,7 @@ if (typeof document !== "undefined") {
         undo.onclick = () => restoreTrashedEntry(id);
         banner.append(" ", undo);
       },
-      (error) => historyNotice(error.message),
+      (error) => historyNotice(error.message, "error"),
     );
   }
   async function restoreTrashedEntry(id) {
@@ -206,7 +213,7 @@ if (typeof document !== "undefined") {
       if (id === trashedActiveId) trashedActiveId = null;
       invalidateSavedAnalysis(id);
       await refreshHistory();
-      historyNotice("Report restored from trash.");
+      historyNotice("Report restored from trash.", "success");
     } catch (error) {
       historyNotice(error.message);
     }

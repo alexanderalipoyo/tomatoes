@@ -9,7 +9,18 @@ function schemaName(value) {
     throw new Error("Invalid database schema name.");
   return '"' + value + '"';
 }
-async function migrateInitialSchema(client, schema) {
-  await client.query(initialSQL.replaceAll("__SCHEMA__", schemaName(schema)));
+async function migrateSchema(client, schema) {
+  const ns = schemaName(schema);
+  await client.query(initialSQL.replaceAll("__SCHEMA__", ns));
+  const applied = await client.query(
+    `SELECT version FROM ${ns}.schema_migrations WHERE version=2`,
+  );
+  if (!applied.rows.length) {
+    const sql = fs.readFileSync(
+      path.join(__dirname, "migrations", "002-user-preferences.sql"),
+      "utf8",
+    );
+    await client.query(sql.replaceAll("__SCHEMA__", ns));
+  }
 }
-module.exports = { schemaName, migrateInitialSchema };
+module.exports = { schemaName, migrateSchema };

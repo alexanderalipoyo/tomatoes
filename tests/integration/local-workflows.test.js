@@ -585,3 +585,229 @@ test("publisher validates and uploads a real file while preserving report metada
   );
   assert.equal((await api.request("/api/runs")).body.runs.length, 1);
 });
+
+test("local preferences persist, merge sections, and reject invalid or cross-origin updates", async (t) => {
+  const api = await serviceFixture(t);
+  const put = (body, headers = {}) =>
+    api.request("/api/preferences", {
+      method: "PUT",
+      headers: { Origin: api.origin, ...headers },
+      body: JSON.stringify(body),
+    });
+  assert.equal((await api.request("/api/preferences")).body.preferences, null);
+  assert.equal(
+    (await put({ display: { timeZone: "UTC", rows: 30 } })).status,
+    200,
+  );
+  const dashboardGroups = [
+    {
+      id: "admin",
+      name: "Admin",
+      paths: ["cypress/admin"],
+      metrics: ["passRate"],
+    },
+  ];
+  assert.equal((await put({ dashboardGroups })).status, 200);
+  const saved = (await api.request("/api/preferences")).body;
+  assert.equal(saved.profileId, "local");
+  assert.equal(saved.preferences.display.rows, 30);
+  assert.equal(saved.preferences.dashboardGroups.length, 1);
+  const reopened =
+    require("../../src/server/storage/file-store").createFileStore(api.dataDir);
+  assert.equal(
+    (await reopened.getPreferences("local")).display.timeZone,
+    "UTC",
+  );
+  assert.equal(
+    (
+      await put(
+        { display: { timeZone: "UTC", rows: 100 } },
+        { "If-None-Match": "*" },
+      )
+    ).body.preferences.display.rows,
+    30,
+  );
+  assert.equal((await put({ owner: "other" })).status, 400);
+  assert.equal(
+    (await put({ display: { timeZone: "UTC", rows: 500 } })).status,
+    400,
+  );
+  assert.equal(
+    (
+      await put(
+        { dashboardGroups: [] },
+        { Origin: "https://untrusted.example" },
+      )
+    ).status,
+    403,
+  );
+});
+
+test("Slack notifications use the saved report, require origin checks, and are not sent on upload or read", async (t) => {
+  const { createSlackNotifier } = require("../../src/server/slack-notifier");
+  const delivered = [];
+  const notifier = createSlackNotifier({
+    webhookURL: "https://hooks.slack.com/services/TTEST/BTEST/fakeToken",
+    fetchImpl: async (_, options) => {
+      delivered.push(JSON.parse(options.body));
+      return new Response("ok");
+    },
+  });
+  const api = await serviceFixture(t, { slackNotifier: notifier });
+  const uploaded = await api.request("/api/runs", {
+    method: "POST",
+    headers: { Origin: api.origin },
+    body: JSON.stringify({ report: fixture(), name: "import.json" }),
+  });
+  const id = uploaded.body.run.id;
+  await api.request("/api/runs/" + id);
+  assert.equal(delivered.length, 0);
+  const route = `/api/runs/${id}/slack-notification`;
+  const body = JSON.stringify({
+    eventId: "12345678-1234-4234-8234-123456789012",
+    counts: { failed: 999 },
+  });
+  assert.equal(
+    (
+      await api.request(route, {
+        method: "POST",
+        body,
+        headers: { Origin: "https://untrusted.example" },
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await api.request(route, {
+        method: "POST",
+        body: JSON.stringify({ eventId: "invalid" }),
+        headers: { Origin: api.origin },
+      })
+    ).status,
+    400,
+  );
+  const result = await api.request(route, {
+    method: "POST",
+    body,
+    headers: { Origin: api.origin },
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.status, "sent");
+  assert.match(delivered[0].text, /0 failed, 1 passed/);
+  assert.doesNotMatch(delivered[0].text, /999/);
+  await api.request(route, {
+    method: "POST",
+    body,
+    headers: { Origin: api.origin },
+  });
+  assert.equal(delivered.length, 1);
+  assert.equal(
+    (
+      await api.request(`/api/runs/${"0".repeat(64)}/slack-notification`, {
+        method: "POST",
+        body,
+        headers: { Origin: api.origin },
+      })
+    ).status,
+    404,
+  );
+});
+
+test("Slack delivery respects signed-in roles, project scope, CSRF, and rejects CI tokens", async (t) => {
+  let deliveries = 0;
+  const notifier = {
+    enabled: true,
+    notify: async () => {
+      deliveries++;
+      return { status: "sent" };
+    },
+  };
+  const api = await serviceFixture(t, {
+    teamMode: true,
+    ciToken: "slack-fixture-token",
+    ciProject: "web",
+    slackNotifier: notifier,
+  });
+  await writeJSON(path.join(api.dataDir, "users.json"), [
+    {
+      username: "editor",
+      role: "editor",
+      projects: ["web"],
+      ...hashPassword("fixture-test-password"),
+    },
+    {
+      username: "viewer",
+      role: "viewer",
+      projects: ["web"],
+      ...hashPassword("fixture-test-password"),
+    },
+    {
+      username: "outside",
+      role: "editor",
+      projects: ["other"],
+      ...hashPassword("fixture-test-password"),
+    },
+  ]);
+  const upload = await api.request("/api/runs", {
+    method: "POST",
+    headers: { Authorization: "Bearer slack-fixture-token" },
+    body: JSON.stringify({ report: fixture(), metadata: { project: "web" } }),
+  });
+  const route = `/api/runs/${upload.body.run.id}/slack-notification`;
+  const body = JSON.stringify({
+    eventId: "22345678-1234-4234-8234-123456789012",
+  });
+  assert.equal(
+    (
+      await api.request(route, {
+        method: "POST",
+        body,
+        headers: { Authorization: "Bearer slack-fixture-token" },
+      })
+    ).status,
+    403,
+  );
+  async function login(username) {
+    const value = await api.request("/api/login", {
+      method: "POST",
+      headers: { Origin: api.origin },
+      body: JSON.stringify({ username, password: "fixture-test-password" }),
+    });
+    return {
+      Origin: api.origin,
+      Cookie: value.headers.get("set-cookie").split(";")[0],
+      "X-CSRF-Token": value.body.csrf,
+    };
+  }
+  const viewer = await login("viewer"),
+    outside = await login("outside"),
+    editor = await login("editor");
+  assert.equal(
+    (await api.request(route, { method: "POST", body, headers: viewer }))
+      .status,
+    403,
+  );
+  assert.equal(
+    (await api.request(route, { method: "POST", body, headers: outside }))
+      .status,
+    404,
+  );
+  assert.equal(
+    (
+      await api.request(route, {
+        method: "POST",
+        body,
+        headers: { ...editor, "X-CSRF-Token": "wrong" },
+      })
+    ).status,
+    403,
+  );
+  assert.equal(deliveries, 0);
+  assert.equal(
+    (await api.request(route, { method: "POST", body, headers: editor }))
+      .status,
+    200,
+  );
+  assert.equal(deliveries, 1);
+});

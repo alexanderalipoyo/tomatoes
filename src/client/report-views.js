@@ -65,11 +65,16 @@ if (typeof document !== "undefined") {
           document.querySelector("#evidence-status").textContent = sync.saved
             ? "Evidence saved in this browser and the database."
             : sync.notice || "Evidence saved in this browser.";
+          showToast(
+            document.querySelector("#evidence-status").textContent,
+            sync.notice ? "warning" : "success",
+          );
         },
         (error) => {
           showTest(test.id);
           document.querySelector("#evidence-status").textContent =
             error.message;
+          showToast(`Evidence could not be saved: ${error.message}`, "error");
         },
       );
     };

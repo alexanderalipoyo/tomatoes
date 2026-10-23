@@ -30,9 +30,11 @@ tomatoes/
 
 ## Browser and shared code
 
-`src/client/app.js` coordinates the active report and navigation. The other client modules own history, analytics, investigations, team access, report detail views, workspace tools and PDF export. `report-worker.js` validates and processes imports off the main browser thread.
+`src/client/app.js` coordinates the active report and navigation. The other client modules own history, analytics, investigations, team access, report detail views, workspace tools, custom dashboard widgets and PDF export. `custom-widgets.js` manages the group settings editor; `preferences.js` loads and saves account-scoped server preferences; the shared `dashboard-groups.js` validates group definitions and calculates results from matching spec paths. `report-worker.js` validates and processes imports off the main browser thread.
 
 `src/shared/` contains modules that work in both the browser and Node.js. These hold report normalization, investigation models, attachment validation, Markdown export, PDF document generation, backup validation and history analysis. Keep browser DOM interactions in `src/client/` so shared logic can be tested without a page.
+
+`report-navigation.js` keeps the active import ID in the URL query string while hash navigation selects the view. The shared `report-links.js` validates link IDs and resolves browser copies before attempting a linked, authorized server copy. Direct links take precedence over the browser's last-active report. Missing or trashed imports show an error instead of falling back to another run.
 
 `public/index.html` loads shared modules before the client modules that use them, and loads `app.js` last. When adding a browser module, add its script in the appropriate order and explicitly register its `/js/` URL in `src/server/static-assets.js`. That mapping also exposes styles, the sample report and selected installed PDF libraries. Public URLs are independent of source file locations. Server files, configuration and private data are excluded from the mapping.
 
@@ -40,7 +42,11 @@ tomatoes/
 
 `src/server/index.js` starts the loopback HTTP server and delegates team/report API requests to `team-service.js`. `config.js` resolves paths from the repository root, so moving source files does not relocate `.env.local` or `.tomatoes-data`.
 
-`storage/index.js` chooses the configured store. `file-store.js` and `postgres-store.js` implement the same storage interface. `json-store.js` handles safe JSON file writes. PostgreSQL schema setup lives in `database/schema.js`, with the initial schema in `database/migrations/001-initial.sql`. The SQL uses a validated schema placeholder and records its applied version. Future schema changes need a new versioned SQL file and an explicit migration runner step; do not rewrite an already applied version to change existing databases.
+`slack-notifier.js` builds Slack messages from normalized saved reports and sends webhook requests on the server. The browser calls `POST /api/runs/:id/slack-notification` only after an import finishes. Environment configuration remains private, and normal project, role, origin and CSRF checks protect the endpoint. Tests inject mock delivery clients rather than contacting Slack.
+
+`storage/index.js` chooses the configured store. `file-store.js` and `postgres-store.js` implement the same storage interface. `json-store.js` handles safe JSON file writes. PostgreSQL schema setup lives in `database/schema.js`, with the initial schema in `database/migrations/001-initial.sql` and user preferences in `002-user-preferences.sql`. The SQL uses a validated schema placeholder and records its applied version. Future schema changes need a new versioned SQL file and an explicit migration runner step; do not rewrite an already applied version to change existing databases.
+
+Time zone, page size and dashboard group definitions use `/api/preferences` and the selected server store. The server derives the preference owner from the authenticated session, or uses one shared `local` profile without sign-in. Preference updates require same-origin requests and session CSRF tokens, and CI tokens are excluded. Existing browser preferences are imported only when the shared local profile is empty.
 
 Browser history stays in IndexedDB. Server copies use the selected server store. In PostgreSQL mode, report JSON, account records and attachment metadata live in the database; attachment bytes stay in `.tomatoes-data/attachments`. Keep database and attachment backups together. `.env.local` and `.tomatoes-data` remain private, ignored files at the repository root.
 

@@ -50,18 +50,56 @@ function date(value) {
 }
 const badge = (status) =>
   `<span class="status-badge ${esc(status)}">${esc(status[0].toUpperCase() + status.slice(1))}</span>`;
-const preferenceDefaults = { timeZone: "Asia/Singapore", rows: 15 };
+const preferenceDefaults = { ...UserPreferenceModel.DEFAULT_DISPLAY };
 let preferences = { ...preferenceDefaults };
-try {
-  const saved = JSON.parse(
-    localStorage.getItem("tomatoes-display-settings") || "{}",
-  );
-  if ([15, 30, 50, 100].includes(saved.rows)) preferences.rows = saved.rows;
-  if (typeof saved.timeZone === "string") {
-    new Intl.DateTimeFormat("en", { timeZone: saved.timeZone });
-    preferences.timeZone = saved.timeZone;
+const userPreferences = PreferenceClient.create({
+  request: async (route, options = {}) => {
+    const response = await fetch(route, {
+      ...options,
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...options.headers },
+      signal: AbortSignal.timeout(15000),
+    });
+    const payload = await response.json();
+    if (!response.ok)
+      throw new Error(
+        payload.error || "Preferences could not be saved to the server.",
+      );
+    return payload;
+  },
+  legacy: () => {
+    let displayText, groupText;
+    try {
+      displayText = localStorage.getItem("tomatoes-display-settings");
+      groupText = localStorage.getItem("tomatoes-dashboard-groups-v1");
+    } catch {
+      return {};
+    }
+    const display = JSON.parse(displayText || "null");
+    const groups = JSON.parse(groupText || "null");
+    return {
+      ...(display ? { display: { ...preferenceDefaults, ...display } } : {}),
+      ...(groups ? { dashboardGroups: groups } : {}),
+    };
+  },
+});
+async function reloadUserPreferences() {
+  const state = await userPreferences.initialize();
+  preferences = state.preferences.display;
+  pageSize = preferences.rows;
+  page = 1;
+  stability = null;
+  if (report) {
+    renderSummary();
+    renderHistory();
+    renderResults();
   }
-} catch {}
+  return state;
+}
+function preferenceStatusMarkup() {
+  const state = userPreferences.getState();
+  return `<article class="settings-card preference-sync-status"><h2>User preferences</h2><p role="status">${state.ready ? `Saved to ${state.storage === "postgres" ? "PostgreSQL" : "the local server"} for ${esc(state.profile)}. ${state.profileId === "local" ? "Local mode uses one shared profile on this server." : "These settings belong to your signed-in account."}` : esc(state.error)}</p><p>Dashboard groups, time zone, and results per page load from the server. Report files and browser import history are managed separately.</p><button class="button" id="reload-user-preferences">Reload preferences</button>${!state.ready ? '<a class="button" href="#team">Team &amp; CI</a>' : ""}</article>`;
+}
 let stability = null;
 let report;
 let sourceName = "index.json";
@@ -154,6 +192,7 @@ function renderSummary() {
     : sourceName;
 }
 function renderDashboard() {
+  renderCustomizedDashboard();
   const stats = ReportData.dashboardStats(report);
   const c = report.counts;
   const colors = {
@@ -327,6 +366,7 @@ function openTests(spec, status = "all") {
   grouping = "tests";
   $("#spec-filter").value = String(spec);
   $("#status").value = status;
+  syncReportSpecURL();
   page = 1;
   if (location.hash !== "#results") {
     location.hash = "results";
@@ -415,6 +455,7 @@ function navigate(force = false) {
     view,
   );
   $("#dashboard-widgets").hidden = view !== "runs";
+  $("#custom-dashboard").hidden = view !== "runs";
   $(".dashboard-actions").hidden = view !== "runs";
   $("#history-section").hidden = view !== "history";
   if (view === "history") renderHistory();
@@ -430,6 +471,7 @@ function navigate(force = false) {
   if (view === "failures") renderFailureGroups();
   if (view === "flaky") renderFlaky(alt);
   if (view === "settings") renderSettings(alt);
+  applyReportSpecLink();
   renderResults();
 }
 function isPreviousImport() {
@@ -439,7 +481,8 @@ function isPreviousImport() {
     historyEntries[0].id !== activeHistoryId,
   );
 }
-function historyNotice(message) {
+function historyNotice(message, type = "info") {
+  if (message) showToast(message, type);
   $("#history-notice").hidden = !message;
   $("#history-notice").textContent = message;
 }
@@ -455,7 +498,7 @@ function renderHistory() {
     historyEntries
       .map(
         (entry, index) =>
-          `<article class="history-card ${entry.id === activeHistoryId ? "is-current" : ""}"><div class="history-card-title"><div>${badge(entry.status)}${index === 0 ? '<span class="history-tag">Latest import</span>' : ""}${entry.id === activeHistoryId ? '<span class="history-tag current-tag">Viewing</span>' : ""}<h3>${esc(entry.label || entry.name)}</h3>${entry.label ? `<p>Source: ${esc(entry.name)}</p>` : ""}${entry.notes ? `<p class="history-note">${esc(entry.notes)}</p>` : ""}<p>${entry.source === "bundled" ? "Bundled report saved" : "Imported"} ${esc(date(new Date(entry.lastImportedAt).toISOString()))}</p><p>Run started ${esc(date(entry.start))}</p></div><div class="history-actions"><button class="button" data-manage-history="${esc(entry.id)}">Edit name &amp; notes</button><button class="button" data-trash-history="${esc(entry.id)}">Move to trash</button><button class="button" data-export-pdf="${esc(entry.id)}" aria-label="Export PDF for ${esc(entry.name)}">Export PDF</button><button class="button ${entry.id === activeHistoryId ? "" : "primary"}" data-open-history="${esc(entry.id)}">Open dashboard</button></div></div><dl class="history-stats"><div><dt>Tests</dt><dd>${number(entry.counts.total)}</dd></div><div><dt>Passed</dt><dd>${number(entry.counts.passed)}</dd></div><div><dt>Failed</dt><dd class="fail-text">${number(entry.counts.failed)}</dd></div><div><dt>Pending / skipped</dt><dd>${number(entry.counts.pending)} / ${number(entry.counts.skipped)}</dd></div><div><dt>Pass rate</dt><dd>${entry.passRate.toFixed(1)}%</dd></div><div><dt>Duration</dt><dd>${duration(entry.duration)}</dd></div></dl></article>`,
+          `<article class="history-card ${entry.id === activeHistoryId ? "is-current" : ""}"><div class="history-card-title"><div>${badge(entry.status)}${index === 0 ? '<span class="history-tag">Latest import</span>' : ""}${entry.id === activeHistoryId ? '<span class="history-tag current-tag">Viewing</span>' : ""}<h3>${esc(entry.label || entry.name)}</h3>${entry.label ? `<p>Source: ${esc(entry.name)}</p>` : ""}${entry.notes ? `<p class="history-note">${esc(entry.notes)}</p>` : ""}<p>${entry.source === "bundled" ? "Bundled report saved" : "Imported"} ${esc(date(new Date(entry.lastImportedAt).toISOString()))}</p><p>Run started ${esc(date(entry.start))}</p></div><div class="history-actions"><button class="button" data-manage-history="${esc(entry.id)}">Edit name &amp; notes</button><button class="button" data-trash-history="${esc(entry.id)}">Move to trash</button><button class="button" data-export-pdf="${esc(entry.id)}" aria-label="Export PDF for ${esc(entry.name)}">Export PDF</button><button class="button" data-copy-report-link="${esc(entry.id)}" aria-label="Copy link for ${esc(entry.label || entry.name)}">Copy link</button><a class="button ${entry.id === activeHistoryId ? "" : "primary"}" href="${esc(reportHref(entry.id))}" data-open-history="${esc(entry.id)}">Open dashboard</a></div></div><dl class="history-stats"><div><dt>Tests</dt><dd>${number(entry.counts.total)}</dd></div><div><dt>Passed</dt><dd>${number(entry.counts.passed)}</dd></div><div><dt>Failed</dt><dd class="fail-text">${number(entry.counts.failed)}</dd></div><div><dt>Pending / skipped</dt><dd>${number(entry.counts.pending)} / ${number(entry.counts.skipped)}</dd></div><div><dt>Pass rate</dt><dd>${entry.passRate.toFixed(1)}%</dd></div><div><dt>Duration</dt><dd>${duration(entry.duration)}</dd></div></dl></article>`,
       )
       .join("") ||
     '<div class="history-empty"><h3>No saved imports yet</h3><p>Import a valid Mochawesome JSON report to start your history.</p></div>';
@@ -467,13 +510,13 @@ function renderHistory() {
     });
   $("#history-list")
     .querySelectorAll("[data-open-history]")
+    .forEach((link) => link.addEventListener("click", openHistoryReportLink));
+  $("#history-list")
+    .querySelectorAll("[data-copy-report-link]")
     .forEach(
       (button) =>
         (button.onclick = () =>
-          loadReport(null, {
-            historyId: button.dataset.openHistory,
-            openDashboard: true,
-          })),
+          copyHistoryReportLink(button.dataset.copyReportLink, button)),
     );
 }
 function paintProgress(percent, label) {
@@ -544,6 +587,11 @@ async function loadReport(file = currentFile, options = {}) {
   };
   const focused = document.activeElement;
   let failed = false;
+  let slackRunId = null;
+  const importEventId =
+    options.recordImport && !options.skipServerSave
+      ? crypto.randomUUID()
+      : null;
   loading = true;
   $("#refresh").disabled = true;
   $("#import-report").disabled = true;
@@ -556,7 +604,24 @@ async function loadReport(file = currentFile, options = {}) {
   try {
     await allowPaint();
     let saved = null;
+    let serverCopy = null;
     let historyId = options.historyId;
+    if (options.fromURL) {
+      const resolved = await ReportLinks.resolve(
+        { importId: historyId, serverId: options.serverId },
+        {
+          getLocal: (id) => ImportHistory.get(id),
+          getServer: (id) =>
+            teamRequest("/api/runs/" + id, {
+              signal: AbortSignal.timeout(30000),
+            }),
+          verifyServer: serverMatchesImport,
+        },
+      );
+      saved = resolved.local || null;
+      serverCopy = resolved.server || null;
+      historyId = saved?.entry.id || null;
+    }
     if (options.restore) {
       try {
         historyId = await ImportHistory.lastActive();
@@ -569,7 +634,11 @@ async function loadReport(file = currentFile, options = {}) {
     if (historyId) {
       paintProgress(3, "Opening saved report");
       try {
-        saved = await ImportHistory.get(historyId);
+        saved = saved || (await ImportHistory.get(historyId));
+        if (saved.entry.deletedAt)
+          throw new Error(
+            "This report is in trash. Restore it from Import history.",
+          );
         file = new File([saved.text], saved.entry.name, {
           type: "application/json",
         });
@@ -579,6 +648,16 @@ async function loadReport(file = currentFile, options = {}) {
           "The previously viewed import could not be restored. Loading the bundled report.",
         );
       }
+    }
+    if (serverCopy) {
+      const name = serverCopy.run.name;
+      file = new File(
+        [serverCopy.originalText || JSON.stringify(serverCopy.report)],
+        name.endsWith(".json") ? name : name + ".json",
+        { type: "application/json" },
+      );
+      options.metadataOverride = serverCopy.run.metadata;
+      options.skipServerSave = true;
     }
     try {
       await refreshHistory();
@@ -643,13 +722,14 @@ async function loadReport(file = currentFile, options = {}) {
     paintProgress(94, "Rendering test results");
     await allowPaint();
     $("#report-content").hidden = false;
-    if (options.openDashboard) location.hash = "runs";
+
     navigate(true);
     paintProgress(
       97,
       saved ? "Restoring saved import" : "Saving import history",
     );
     await allowPaint();
+    const previousHistoryIds = new Set(historyEntries.map((entry) => entry.id));
     try {
       if (saved) await ImportHistory.markActive(saved.entry.id);
       else {
@@ -677,15 +757,53 @@ async function loadReport(file = currentFile, options = {}) {
         historyEntries.find((entry) => entry.id === activeHistoryId),
       );
       if (result.notice) historyNotice(result.notice);
+      if (result.saved && result.run) slackRunId = result.run.id;
     }
+    if (serverCopy && activeHistoryId) {
+      try {
+        if (!previousHistoryIds.has(activeHistoryId)) {
+          await ImportHistory.updateDetails(activeHistoryId, {
+            label: serverCopy.run.label || "",
+            notes: serverCopy.run.notes || "",
+          });
+          sourceName = serverCopy.run.label || sourceName;
+        }
+        await restoreSharedEvidence(serverCopy, activeHistoryId);
+        await refreshHistory();
+        renderSummary();
+      } catch (error) {
+        historyNotice(
+          `Report opened, but some server details could not be restored: ${error.message}`,
+          "warning",
+        );
+      }
+    }
+    if (options.recordImport && !options.fromURL && !pendingReportNavigation) {
+      const nextURL = new URL(location.href);
+      nextURL.searchParams.delete("spec");
+      history.replaceState(null, "", nextURL);
+      appliedReportSpecLink = null;
+    }
+    updateReportURL({
+      replace: Boolean(
+        options.restore ||
+        options.fromURL ||
+        (!options.recordImport && !options.openDashboard),
+      ),
+      dashboard: options.openDashboard,
+      serverId: options.serverId,
+    });
     $("#run-summary .eyebrow").textContent = isPreviousImport()
       ? "PREVIOUS IMPORT"
       : "LATEST IMPORTED RUN";
     navigate(true);
     paintProgress(100, "Report ready");
     await allowPaint();
+    if (options.recordImport)
+      showToast("Report imported successfully.", "success");
   } catch (error) {
     failed = true;
+    showToast(`Report import failed: ${error.message}`, "error");
     if (report !== previous.report) {
       ({ report, currentFile, activeHistoryId, sourceName, page, grouping } =
         previous);
@@ -715,10 +833,18 @@ async function loadReport(file = currentFile, options = {}) {
     } else if (focused?.isConnected && focused !== document.body)
       focused.focus();
     else $("#import-report").focus();
+    if (pendingReportNavigation) {
+      pendingReportNavigation = false;
+      queueMicrotask(navigateReportLocation);
+    }
   }
+  if (!failed && slackRunId && importEventId)
+    void notifyImportedRun(slackRunId, importEventId);
+  return !failed;
 }
 ["search", "spec-filter", "status"].forEach((id) =>
   $("#" + id).addEventListener(id === "search" ? "input" : "change", () => {
+    if (id === "spec-filter") syncReportSpecURL();
     page = 1;
     renderResults();
   }),
@@ -727,6 +853,7 @@ $("#clear").onclick = () => {
   $("#search").value = "";
   $("#spec-filter").value = "all";
   $("#status").value = "all";
+  syncReportSpecURL();
   page = 1;
   renderResults();
 };
@@ -748,10 +875,15 @@ $("#tests-view").onclick = () => {
   page = 1;
   renderResults();
 };
-$("#refresh").onclick = () =>
-  activeHistoryId
+$("#refresh").onclick = () => {
+  if (failedReportLinkKey !== null) {
+    failedReportLinkKey = null;
+    return navigateReportLocation();
+  }
+  return activeHistoryId
     ? loadReport(null, { historyId: activeHistoryId })
     : loadReport();
+};
 $("#load-bundled").onclick = () => loadReport(null, { openDashboard: true });
 ReportImport.setup({
   document,
@@ -782,7 +914,8 @@ document.addEventListener("keydown", (event) => {
     $("#search").focus();
   }
 });
-window.addEventListener("hashchange", navigate);
+window.addEventListener("hashchange", navigateReportLocation);
+window.addEventListener("popstate", navigateReportLocation);
 $("#import-progress").addEventListener("cancel", (event) =>
   event.preventDefault(),
 );
@@ -824,6 +957,14 @@ matchMedia("(max-width: 1024px)").addEventListener("change", (event) => {
   if (!event.matches) $("#mobile-navigation").close();
 });
 window.addEventListener("hashchange", () => $("#mobile-navigation").close());
-renderHistory();
-navigate();
-loadReport(null, { restore: true });
+reloadUserPreferences().finally(() => {
+  renderHistory();
+  navigate();
+  try {
+    const route = ReportLinks.read(location.href);
+    if (route.importId || route.serverId) void navigateReportLocation();
+    else void loadReport(null, { restore: true });
+  } catch (error) {
+    showReportLinkError(error);
+  }
+});
