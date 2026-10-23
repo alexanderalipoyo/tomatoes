@@ -11,11 +11,23 @@
     <meta name="application-name" content="Tomatoes" />
     <link rel="icon" type="image/svg+xml" href="assets/tomatoes-logo.svg" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="insights.css" />
+    <link rel="stylesheet" href="responsive.css" />
+    <link rel="stylesheet" href="investigations.css" />
+    <link rel="stylesheet" href="team.css" />
     <script src="report-data.js" defer></script>
     <script src="import-history.js" defer></script>
+    <script src="investigation-model.js" defer></script>
+    <script src="investigations.js" defer></script>
+    <script src="workspace-tools.js" defer></script>
+    <script src="insights.js" defer></script>
+    <script src="report-features.js" defer></script>
+    <script src="report-pdf.js" defer></script>
+    <script src="team.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <aside class="sidebar">
       <a class="brand" href="#runs" aria-label="Tomatoes home"
         ><img
@@ -61,11 +73,17 @@
           ></a
         >
         <div class="side-label analytics-label">INSIGHTS</div>
+        <a href="#compare" data-view="compare"
+          ><span data-icon="branch"></span>Compare runs</a
+        >
         <a href="#analytics" data-view="analytics"
           ><span data-icon="chart"></span>Analytics</a
         >
         <a href="#flaky" data-view="flaky"
           ><span data-icon="flake"></span>Flaky tests</a
+        >
+        <a href="#team" data-view="team"
+          ><span data-icon="folder"></span>Team &amp; CI</a
         >
         <a href="#settings" data-view="settings"
           ><span data-icon="settings"></span>Report settings</a
@@ -111,7 +129,7 @@
         </div>
         <span class="source-label" id="source-label">Loading report…</span>
       </header>
-      <main>
+      <main id="main-content" tabindex="-1">
         <div class="page-heading">
           <div>
             <div class="eyebrow">TOMATOES TEST RESULTS</div>
@@ -227,6 +245,11 @@
             </div>
             <div id="data-warnings" role="status"></div>
           </section>
+          <section
+            id="failure-groups"
+            aria-label="Grouped failures"
+            hidden
+          ></section>
           <section id="results-section">
             <div class="section-heading runs-heading">
               <h2 id="list-title">Spec results</h2>
@@ -339,11 +362,17 @@
           ><span data-icon="clock"></span>Import history</a
         >
         <div class="side-label">INSIGHTS</div>
+        <a href="#compare" data-view="compare"
+          ><span data-icon="branch"></span>Compare runs</a
+        >
         <a href="#analytics" data-view="analytics"
           ><span data-icon="chart"></span>Analytics</a
         >
         <a href="#flaky" data-view="flaky"
           ><span data-icon="flake"></span>Flaky tests</a
+        >
+        <a href="#team" data-view="team"
+          ><span data-icon="folder"></span>Team &amp; CI</a
         >
         <a href="#settings" data-view="settings"
           ><span data-icon="settings"></span>Report settings</a

@@ -10,12 +10,20 @@
         return Promise.reject(new Error("Browser storage is unavailable."));
       if (!connection)
         connection = new Promise((resolve, reject) => {
-          const request = indexedDB.open(name, 1);
+          const request = indexedDB.open(name, 2);
           request.onupgradeneeded = () => {
             const db = request.result;
-            db.createObjectStore("entries", { keyPath: "id" });
-            db.createObjectStore("reports", { keyPath: "id" });
-            db.createObjectStore("preferences");
+            if (!db.objectStoreNames.contains("entries"))
+              db.createObjectStore("entries", { keyPath: "id" });
+            if (!db.objectStoreNames.contains("reports"))
+              db.createObjectStore("reports", { keyPath: "id" });
+            if (!db.objectStoreNames.contains("preferences"))
+              db.createObjectStore("preferences");
+            if (!db.objectStoreNames.contains("evidence"))
+              db.createObjectStore("evidence", { keyPath: "id" }).createIndex(
+                "runId",
+                "runId",
+              );
           };
           request.onsuccess = () => {
             request.result.onversionchange = () => request.result.close();
@@ -51,15 +59,17 @@
         tx.onerror = () => {};
       });
     }
-    async function list() {
+    async function list(includeDeleted = false) {
       const db = await open();
       const tx = db.transaction("entries", "readonly");
       const request = tx.objectStore("entries").getAll();
       return complete(tx, () =>
-        request.result.sort(
-          (a, b) =>
-            b.lastImportedAt - a.lastImportedAt || a.id.localeCompare(b.id),
-        ),
+        request.result
+          .filter((entry) => includeDeleted || !entry.deletedAt)
+          .sort(
+            (a, b) =>
+              b.lastImportedAt - a.lastImportedAt || a.id.localeCompare(b.id),
+          ),
       );
     }
     async function get(id) {
@@ -99,7 +109,10 @@
     }) {
       const digest = await crypto.subtle.digest(
         "SHA-256",
-        new TextEncoder().encode(text),
+        new TextEncoder().encode(
+          (report.metadata?.project ? report.metadata.project + "\0" : "") +
+            text,
+        ),
       );
       const id = Array.from(new Uint8Array(digest), (byte) =>
         byte.toString(16).padStart(2, "0"),
@@ -128,6 +141,10 @@
           end: report.end,
           duration: report.duration,
           status: report.status,
+          metadata: previous?.metadata || report.metadata || {},
+          label: previous?.label || "",
+          notes: previous?.notes || "",
+          deletedAt: null,
           counts: { ...report.counts },
           specs: report.specs.length,
           passRate: report.passRate,
@@ -138,11 +155,133 @@
       };
       return complete(tx, () => entry);
     }
+
+    async function updateMetadata(id, metadata) {
+      const db = await open();
+      const tx = db.transaction("entries", "readwrite");
+      const store = tx.objectStore("entries");
+      const request = store.get(id);
+      let updated;
+      request.onsuccess = () => {
+        if (!request.result) {
+          tx.abort();
+          return;
+        }
+        updated = { ...request.result, metadata };
+        store.put(updated);
+      };
+      return complete(tx, () => updated);
+    }
+    async function updateDetails(id, changes) {
+      const db = await open();
+      const tx = db.transaction("entries", "readwrite");
+      const store = tx.objectStore("entries"),
+        request = store.get(id);
+      let updated;
+      request.onsuccess = () => {
+        if (!request.result) {
+          tx.abort();
+          return;
+        }
+        updated = { ...request.result, ...changes, id };
+        store.put(updated);
+      };
+      return complete(tx, () => updated);
+    }
+    async function snapshot() {
+      const db = await open();
+      const tx = db.transaction(["entries", "reports", "evidence"], "readonly");
+      const entries = tx.objectStore("entries").getAll();
+      const reports = tx.objectStore("reports").getAll();
+      const evidence = tx.objectStore("evidence").getAll();
+      return complete(tx, () => ({
+        entries: entries.result,
+        reports: reports.result,
+        evidence: evidence.result,
+      }));
+    }
+    async function restoreSnapshot(data) {
+      const db = await open();
+      const tx = db.transaction(
+        ["entries", "reports", "evidence"],
+        "readwrite",
+      );
+      const entries = tx.objectStore("entries"),
+        reports = tx.objectStore("reports"),
+        evidence = tx.objectStore("evidence");
+      let added = 0,
+        skipped = 0,
+        conflict = false;
+      const textById = new Map(
+        data.reports.map((item) => [item.id, item.text]),
+      );
+      for (const entry of data.entries) {
+        const existing = entries.get(entry.id);
+        existing.onsuccess = () => {
+          if (!existing.result) {
+            entries.put(entry);
+            reports.put({ id: entry.id, text: textById.get(entry.id) });
+            added++;
+          } else {
+            skipped++;
+            const source = reports.get(entry.id);
+            source.onsuccess = () => {
+              if (source.result?.text !== textById.get(entry.id)) {
+                conflict = true;
+                tx.abort();
+              }
+            };
+          }
+        };
+      }
+      for (const record of data.evidence) {
+        const existing = evidence.get(record.id);
+        existing.onsuccess = () => {
+          if (!existing.result) evidence.put(record);
+        };
+      }
+      try {
+        return await complete(tx, () => ({ added, skipped }));
+      } catch (error) {
+        if (conflict)
+          throw new Error(
+            "Backup conflicts with an existing report. No data was restored.",
+          );
+        throw error;
+      }
+    }
+    async function saveEvidence(record) {
+      const db = await open();
+      const tx = db.transaction("evidence", "readwrite");
+      tx.objectStore("evidence").put(record);
+      return complete(tx, () => record);
+    }
+    async function listEvidence(runId, testKey) {
+      const db = await open();
+      const tx = db.transaction("evidence", "readonly");
+      const request = tx.objectStore("evidence").index("runId").getAll(runId);
+      return complete(tx, () =>
+        request.result.filter((item) => item.testKey === testKey),
+      );
+    }
     async function close() {
       if (connection) (await connection).close();
       connection = null;
     }
-    return { list, get, save, lastActive, markActive, close };
+    return {
+      list,
+      get,
+      save,
+      lastActive,
+      markActive,
+      updateMetadata,
+      updateDetails,
+      snapshot,
+      restoreSnapshot,
+      saveEvidence,
+      listEvidence,
+      close,
+    };
   }
   if (typeof module !== "undefined" && module.exports)
     module.exports = { createHistory };
