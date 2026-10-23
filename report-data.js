@@ -1,4 +1,96 @@
 (function (root) {
+  const METADATA_FIELDS = [
+    "project",
+    "environment",
+    "branch",
+    "commit",
+    "buildUrl",
+  ];
+  function normalizeMetadata(value = {}) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("Run metadata must be an object.");
+    const result = {};
+    for (const key of METADATA_FIELDS) {
+      if (value[key] == null || value[key] === "") {
+        result[key] = "";
+        continue;
+      }
+      if (
+        typeof value[key] !== "string" ||
+        value[key].length > (key === "buildUrl" ? 2048 : 160)
+      )
+        throw new Error(`Metadata ${key} must be a short string.`);
+      result[key] = value[key].trim();
+    }
+    if (
+      result.project &&
+      !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(result.project)
+    )
+      throw new Error(
+        "Project must use letters, numbers, dots, underscores, or hyphens (up to 80 characters).",
+      );
+    if (result.buildUrl) {
+      let url;
+      try {
+        url = new URL(result.buildUrl);
+      } catch {
+        throw new Error("Build URL must be an absolute HTTP or HTTPS URL.");
+      }
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password
+      )
+        throw new Error(
+          "Build URL must be an HTTP or HTTPS URL without embedded credentials.",
+        );
+    }
+    return result;
+  }
+  function normalizeAttempts(test) {
+    if (!("attempts" in test)) return [];
+    if (!Array.isArray(test.attempts) || test.attempts.length > 100)
+      throw new Error(
+        "Test attempts must be an array with at most 100 records.",
+      );
+    return test.attempts.map((attempt, index) => {
+      if (
+        !attempt ||
+        !["passed", "failed", "pending", "skipped"].includes(attempt.state)
+      )
+        throw new Error(`Attempt ${index + 1} must have a recognized state.`);
+      const duration = attempt.duration ?? attempt.wallClockDuration ?? null;
+      if (duration !== null && (!Number.isFinite(duration) || duration < 0))
+        throw new Error(`Attempt ${index + 1} has an invalid duration.`);
+      return {
+        state: attempt.state,
+        duration,
+        error:
+          typeof attempt.error === "string"
+            ? attempt.error
+            : typeof attempt.error?.message === "string"
+              ? attempt.error.message
+              : "",
+      };
+    });
+  }
+  function retryStats(report) {
+    const withEvidence = report.tests.filter((test) => test.attempts?.length);
+    const retried = withEvidence.filter((test) => test.attempts.length > 1);
+    const confirmed = retried.filter(
+      (test) =>
+        test.status === "passed" &&
+        test.attempts.at(-1).state === "passed" &&
+        test.attempts
+          .slice(0, -1)
+          .some((attempt) => attempt.state === "failed"),
+    );
+    return {
+      withEvidence: withEvidence.length,
+      retried: retried.length,
+      confirmed,
+    };
+  }
   function normalizeReport(report) {
     if (!report || !report.stats || !Array.isArray(report.results)) {
       throw new Error("Expected a Mochawesome report with stats and results.");
@@ -26,6 +118,7 @@
                     ? "passed"
                     : "unknown";
           const item = {
+            attempts: normalizeAttempts(test),
             id: tests.length,
             specId: index,
             file,
@@ -101,6 +194,9 @@
         : null;
     return {
       specs,
+      metadata: normalizeMetadata(
+        report.tomatoes || report.metadata || report.meta?.tomatoes || {},
+      ),
       tests,
       counts,
       warnings,
@@ -255,6 +351,7 @@
             "Report exceeds the limit of 100,000 suite and test records.",
           );
         if (!isObject(test)) fail(testPath, "a test object");
+        normalizeAttempts(test);
         if (typeof test.title !== "string")
           fail(`${testPath}.title`, "a string");
         for (const key of ["fullTitle", "code", "uuid"])
@@ -473,6 +570,9 @@
     };
   }
   const api = {
+    normalizeMetadata,
+    normalizeAttempts,
+    retryStats,
     insightStats,
     stabilityStats,
     normalizeReport,

@@ -1,2 +1,5 @@
 node_modules/
 .video-tools/
+.tomatoes-data/
+
+tmp/pdfs/

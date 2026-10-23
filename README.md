@@ -6,7 +6,7 @@ Tomatoes turns JSON reports from Cypress test runs into a dashboard for reviewin
 
 Tomatoes is an independent application with its own branding. It is not the Cypress Cloud product. Cypress is the tool that executes the tests; Tomatoes reads the resulting **Mochawesome-compatible JSON report** and presents the results.
 
-The current application runs locally and stores imported reports in your browser. It does not require a Cypress Cloud account, recording key, or API connection.
+The application runs locally. Imports and evidence are saved in your browser; **Team & CI** adds an optional server-backed report store on this machine. It does not require a Cypress Cloud account, recording key, or API connection.
 
 ## See Tomatoes in action
 
@@ -55,15 +55,17 @@ A blocking loading overlay shows progress through reading, parsing, validation, 
 
 ## Explore your results
 
-| View                | What you can do                                                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Latest run**      | Review outcome totals, pass rate, failure hotspots, spec health, slow tests, execution coverage, and timing.                   |
-| **Test results**    | Switch between specs and individual tests; search titles, paths, and errors; filter by spec and outcome.                       |
-| **Failed tests**    | Inspect recorded failure messages, stack traces, test code, and context.                                                       |
-| **Import history**  | Reopen a saved report and its complete dashboard and test details.                                                             |
-| **Analytics**       | Explore failure message patterns, affected directories, duration distributions, performance percentiles, and saved-run trends. |
-| **Flaky tests**     | Compare matching tests across up to 10 saved reports to investigate pass/fail changes.                                         |
-| **Report settings** | Save time-zone and page-size preferences, download the original JSON, revalidate a report, and review data quality.            |
+| View                | What you can do                                                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Latest run**      | Review outcome totals, pass rate, failure hotspots, spec health, slow tests, execution coverage, and timing.                                              |
+| **Test results**    | Switch between specs and individual tests; search titles, paths, and errors; filter by spec and outcome.                                                  |
+| **Compare runs**    | Select baseline and target reports to review regressions, fixes, added/missing tests, other outcome changes, and slower tests; export a Markdown summary. |
+| **Failed tests**    | Review groups of matching failure messages and inspect their affected tests, original errors, stack traces, code, and context.                            |
+| **Import history**  | Reopen a saved report and its complete dashboard and test details.                                                                                        |
+| **Analytics**       | Explore failure message patterns, affected directories, duration distributions, performance percentiles, and saved-run trends.                            |
+| **Flaky tests**     | Review explicit retry recovery and compare matching tests across up to 10 saved reports to investigate pass/fail changes.                                 |
+| **Team & CI**       | Publish reports to the local server, open saved reports by project, and configure optional account access or CI uploads.                                  |
+| **Report settings** | Save display preferences and run metadata, export JSON or a Markdown summary, revalidate a report, and review data quality.                               |
 
 On tablets and phones, navigation moves into a labelled drawer. Phone results use cards, widgets stack, and test details open in a scrollable bottom sheet.
 
@@ -74,15 +76,95 @@ On tablets and phones, navigation moves into a labelled drawer. Phone results us
 - **Spec time** is the sum of its recorded test durations. **Run time** uses `stats.duration`; these measurements can differ.
 - Summary discrepancies are displayed when reported statistics disagree with individual test records.
 - Cross-run pass/fail changes are investigation signals. Code, test data, and environment changes can affect outcomes; retry evidence is needed to confirm flakiness. Pending/skipped outcomes and ambiguous duplicate test identities are excluded from comparisons.
-- Branch, commit, author, browser, operating system, and retry evidence are shown only when supported by the application and available in the report. The supplied reports do not provide these details.
+- Project, environment, branch, commit, and build URL can be supplied in report metadata or edited in Report settings. Retry evidence appears only when explicit attempt records are present. The supplied reports do not contain attempt records; missing evidence is never inferred from duration or final outcome.
+
+## Investigate changes
+
+Choose **Compare runs**, select a baseline and target, then click **Compare reports**. A regression means passed → failed, and a fix means failed → passed. Added and missing tests are separate categories; a failed test becoming pending or skipped is an outcome change. Duration comparisons apply to tests executed in both runs. Ambiguous duplicate test identities are excluded.
+
+In **Failed tests**, expand a failure group to see its representative error and all affected tests. Grouping normalizes variable UUIDs, timestamps, and timeout values while retaining assertion values and selectors. Matching messages are evidence to investigate a shared cause.
+
+Open any test and choose **View test history** to follow its outcomes and recorded durations across up to 20 saved reports. Missing tests and duplicate matches are shown separately. **Inspect run** opens the exact saved report and test.
 
 ## History and local storage
 
-Successfully rendered reports are saved in **IndexedDB** in the current browser. The last viewed report is restored after a page reload. Identical file contents share one history entry; importing the same file again moves that entry to the top. Opening a saved report or clicking **Reload** does not create another import.
+Successfully rendered reports are saved in **IndexedDB** in the current browser. The last viewed report is restored after a page reload. Identical file contents within the same project share one history entry; importing the same file again moves that entry to the top. Opening a saved report or clicking **Reload** does not create another import.
 
 History belongs to this browser and origin, including the localhost port. Clearing site data removes saved reports. Imports made before history was introduced need to be imported again. If storage is unavailable or full, valid reports remain usable for the current session and Tomatoes explains that they could not be saved.
 
 To change the bundled report, replace `results.json`, then select **Open bundled report** in Import history.
+
+## Run identity, evidence, and summaries
+
+In **Report settings**, save the project, environment, branch, commit, and build URL for the selected import. These details are stored separately from the original JSON, which remains available unchanged. Run summaries and explicit comparisons include the available identity fields.
+
+Open a test to attach a screenshot or recording. Tomatoes validates the file type, signature, and size before saving it in this browser's IndexedDB. Supported formats are PNG, JPEG, WebP, MP4, and WebM, up to **25 MB per file**. Previews load on demand. Evidence attachments stay in this browser and are not included in JSON downloads or server publishing.
+
+**Export PDF** on a saved import, or **Download PDF report** in Report settings, downloads a branded PDF directly. It includes outcome totals, run metadata, the top 20 specs, the top 10 failure patterns, and up to 200 failed tests with error excerpts of up to 2,000 characters each. Included counts and any shortened excerpts are labelled. PDF dates follow your display time zone. Downloads use the saved import time in `YYYY-MM-DD_HH-mm-ss-report.pdf` format (for example, `2026-10-23_16-10-14-report.pdf`), matching the import time shown in history. Re-exporting uses that same import time. The PDF separates the overview, aligned spec table, failure patterns, and failure details into clear sections. Generation stays in the browser, shows a blocking progress overlay, and does not upload your report. Screenshot and video attachments remain separate.
+
+**Download run summary** exports a Markdown report with totals, run identity, and the leading failure groups. Compare runs has a separate comparison summary.
+
+### Optional JSON extensions
+
+Standard Mochawesome reports remain supported. Your report generator can add a top-level `tomatoes` object:
+
+```json
+{
+  "tomatoes": {
+    "project": "tomatoes",
+    "environment": "staging",
+    "branch": "main",
+    "commit": "abc123",
+    "buildUrl": "https://example.com/build/123"
+  }
+}
+```
+
+This object supplements the required `stats` and `results` fields; it is not a complete report. Project identifiers use letters, numbers, dots, underscores, and hyphens, with a maximum of 80 characters. Build URLs must use HTTP or HTTPS without embedded credentials.
+
+To provide retry evidence, add an `attempts` array to an individual test, for example `[{"state":"failed","duration":120},{"state":"passed","duration":90}]`. Each attempt requires a state (`passed`, `failed`, `pending`, or `skipped`); duration is optional and nonnegative. Up to 100 attempts are accepted per test. A retry recovery requires a passed final test outcome, a passed last attempt, and an earlier failed attempt. Ordinary exports without this extension show retry evidence as unavailable. Cross-run changes remain a separate investigation signal.
+
+## Local team store and CI
+
+Start normally with `npm start`, then open **Team & CI**. **Publish report** saves the selected run in `.tomatoes-data`; **Open browser copy** imports a server report into this browser. Server files survive browser storage clearing. Browser copies remain available after sign-out. The server binds to `127.0.0.1`, so this setup stays on this machine.
+
+### Optional accounts
+
+Stop the running server before starting it with a different mode. From a PowerShell terminal:
+
+```powershell
+node tools/team-admin.js add-user alex --projects tomatoes --role editor
+# Enter a password of at least 12 characters at the hidden prompt.
+$env:TOMATOES_TEAM_MODE = "1"
+npm start
+```
+
+Open **Team & CI** to sign in. Viewers can read allowed projects; editors and admins can also publish to allowed projects. Assign multiple projects with `--projects tomatoes,another-project`; `--projects "*"` grants all projects. Admins default to all projects if the option is omitted. Account provisioning is performed through the local command, rather than a web administration page. Passwords use salted scrypt hashes, sessions expire after eight hours, and restarting the server signs everyone out.
+
+### CI ingestion on this machine
+
+Create a project-scoped upload token:
+
+```powershell
+node tools/team-admin.js create-ci-token tomatoes
+```
+
+Save the returned token privately; only its hash is stored on disk. Provide it to your local CI runner as `TOMATOES_CI_TOKEN`, then run:
+
+```powershell
+$env:TOMATOES_SERVER_URL = "http://127.0.0.1:3000"
+node tools/publish-report.js --file report.json --project tomatoes --environment staging --branch main --commit abc123
+```
+
+The publisher validates the report before upload. Add `--dry-run` to validate without a token or upload. `--build-url` records a link to the build. Uploads are scoped to the token's project and appear in **Team & CI**. Repeating the same report in the same project updates its existing server entry.
+
+A runner on another machine cannot reach this loopback-only server. External hosting, network access, and deployment are not configured by this local setup.
+
+### Storage and source layout
+
+`.tomatoes-data` contains server reports, the run index, account hashes, and token hashes, and is excluded from Git. Keep this directory private and back it up if needed. Set `TOMATOES_DATA_DIR` consistently for the server and administration tools to use another directory. To disable optional sign-in for your own local setup, remove `TOMATOES_TEAM_MODE` and restart the server.
+
+The browser UI is separated into report loading (`app.js`), insights (`insights.js`), investigations (`investigations.js`), evidence and metadata (`report-features.js`), and local team access (`team.js`). Styles are split into base, insights, investigations, responsive, and team files. Keyboard focus indicators, a skip link, and reduced-motion support complement the tablet and phone layouts.
 
 ## Development
 

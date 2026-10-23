@@ -10,12 +10,20 @@
         return Promise.reject(new Error("Browser storage is unavailable."));
       if (!connection)
         connection = new Promise((resolve, reject) => {
-          const request = indexedDB.open(name, 1);
+          const request = indexedDB.open(name, 2);
           request.onupgradeneeded = () => {
             const db = request.result;
-            db.createObjectStore("entries", { keyPath: "id" });
-            db.createObjectStore("reports", { keyPath: "id" });
-            db.createObjectStore("preferences");
+            if (!db.objectStoreNames.contains("entries"))
+              db.createObjectStore("entries", { keyPath: "id" });
+            if (!db.objectStoreNames.contains("reports"))
+              db.createObjectStore("reports", { keyPath: "id" });
+            if (!db.objectStoreNames.contains("preferences"))
+              db.createObjectStore("preferences");
+            if (!db.objectStoreNames.contains("evidence"))
+              db.createObjectStore("evidence", { keyPath: "id" }).createIndex(
+                "runId",
+                "runId",
+              );
           };
           request.onsuccess = () => {
             request.result.onversionchange = () => request.result.close();
@@ -99,7 +107,10 @@
     }) {
       const digest = await crypto.subtle.digest(
         "SHA-256",
-        new TextEncoder().encode(text),
+        new TextEncoder().encode(
+          (report.metadata?.project ? report.metadata.project + "\0" : "") +
+            text,
+        ),
       );
       const id = Array.from(new Uint8Array(digest), (byte) =>
         byte.toString(16).padStart(2, "0"),
@@ -128,6 +139,7 @@
           end: report.end,
           duration: report.duration,
           status: report.status,
+          metadata: previous?.metadata || report.metadata || {},
           counts: { ...report.counts },
           specs: report.specs.length,
           passRate: report.passRate,
@@ -138,11 +150,52 @@
       };
       return complete(tx, () => entry);
     }
+
+    async function updateMetadata(id, metadata) {
+      const db = await open();
+      const tx = db.transaction("entries", "readwrite");
+      const store = tx.objectStore("entries");
+      const request = store.get(id);
+      let updated;
+      request.onsuccess = () => {
+        if (!request.result) {
+          tx.abort();
+          return;
+        }
+        updated = { ...request.result, metadata };
+        store.put(updated);
+      };
+      return complete(tx, () => updated);
+    }
+    async function saveEvidence(record) {
+      const db = await open();
+      const tx = db.transaction("evidence", "readwrite");
+      tx.objectStore("evidence").put(record);
+      return complete(tx, () => record);
+    }
+    async function listEvidence(runId, testKey) {
+      const db = await open();
+      const tx = db.transaction("evidence", "readonly");
+      const request = tx.objectStore("evidence").index("runId").getAll(runId);
+      return complete(tx, () =>
+        request.result.filter((item) => item.testKey === testKey),
+      );
+    }
     async function close() {
       if (connection) (await connection).close();
       connection = null;
     }
-    return { list, get, save, lastActive, markActive, close };
+    return {
+      list,
+      get,
+      save,
+      lastActive,
+      markActive,
+      updateMetadata,
+      saveEvidence,
+      listEvidence,
+      close,
+    };
   }
   if (typeof module !== "undefined" && module.exports)
     module.exports = { createHistory };
