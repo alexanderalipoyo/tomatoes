@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "check": "node --check app.js && node --check server.js && node --check report-data.js",
+    "check": "node --check app.js && node --check server.js && node --check report-data.js && node --check report-worker.js && node --check import-history.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node --test report-data.test.js"
   },
   "devDependencies": {
+    "fake-indexeddb": "6.2.6",
     "prettier": "3.9.10"
   }
 }

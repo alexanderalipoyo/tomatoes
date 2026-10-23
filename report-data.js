@@ -15,15 +15,16 @@
           : ancestors;
         for (const test of suite.tests || []) {
           if (test.isHook) continue;
-          const status = test.skipped
-            ? "skipped"
-            : test.fail || test.state === "failed"
-              ? "failed"
-              : test.pending || test.state === "pending"
-                ? "pending"
-                : test.pass || test.state === "passed"
-                  ? "passed"
-                  : "unknown";
+          const status =
+            test.skipped || test.state === "skipped"
+              ? "skipped"
+              : test.fail || test.state === "failed"
+                ? "failed"
+                : test.pending || test.state === "pending"
+                  ? "pending"
+                  : test.pass || test.state === "passed"
+                    ? "passed"
+                    : "unknown";
           const item = {
             id: tests.length,
             specId: index,
@@ -177,7 +178,161 @@
         .slice(0, 5),
     };
   }
-  const api = { normalizeReport, dashboardStats };
+  const MAX_REPORT_BYTES = 50 * 1024 * 1024;
+  function validateReport(report, progress = () => {}) {
+    const isObject = (value) =>
+      value !== null && typeof value === "object" && !Array.isArray(value);
+    const fail = (path, expected) => {
+      throw new Error(`${path}: expected ${expected}.`);
+    };
+    if (!isObject(report)) fail("Report", "a JSON object");
+    if (!isObject(report.stats))
+      fail("stats", "a Mochawesome statistics object");
+    if (!Array.isArray(report.results))
+      fail("results", "an array of spec results");
+    for (const key of ["tests", "passes", "failures", "pending"]) {
+      if (!Number.isInteger(report.stats[key]) || report.stats[key] < 0)
+        fail(`stats.${key}`, "a non-negative integer");
+    }
+    for (const key of ["suites", "skipped", "testsRegistered", "other"]) {
+      if (
+        key in report.stats &&
+        (!Number.isInteger(report.stats[key]) || report.stats[key] < 0)
+      )
+        fail(`stats.${key}`, "a non-negative integer");
+    }
+    if (
+      "duration" in report.stats &&
+      (!Number.isFinite(report.stats.duration) || report.stats.duration < 0)
+    )
+      fail("stats.duration", "a non-negative number in milliseconds");
+    for (const key of ["passPercent", "pendingPercent"]) {
+      if (
+        key in report.stats &&
+        (!Number.isFinite(report.stats[key]) ||
+          report.stats[key] < 0 ||
+          report.stats[key] > 100)
+      )
+        fail(`stats.${key}`, "a percentage from 0 to 100");
+    }
+    for (const key of ["start", "end"]) {
+      if (
+        key in report.stats &&
+        (typeof report.stats[key] !== "string" ||
+          !Number.isFinite(Date.parse(report.stats[key])))
+      )
+        fail(`stats.${key}`, "a valid date string");
+    }
+    if (
+      report.stats.start &&
+      report.stats.end &&
+      Date.parse(report.stats.end) < Date.parse(report.stats.start)
+    )
+      fail("stats.end", "a date at or after stats.start");
+    let records = 0;
+    function stringField(object, key, path) {
+      if (key in object && typeof object[key] !== "string")
+        fail(`${path}.${key}`, "a string");
+    }
+    function suite(value, path, depth) {
+      if (++records > 100000)
+        throw new Error(
+          "Report exceeds the limit of 100,000 suite and test records.",
+        );
+      if (depth > 100)
+        throw new Error(
+          "Report exceeds the maximum suite nesting depth of 100.",
+        );
+      if (!isObject(value)) fail(path, "a suite object");
+      for (const key of ["title", "file", "fullFile", "uuid"])
+        stringField(value, key, path);
+      for (const key of ["tests", "suites"])
+        if (!Array.isArray(value[key])) fail(`${path}.${key}`, "an array");
+      value.tests.forEach((test, index) => {
+        const testPath = `${path}.tests[${index}]`;
+        if (++records > 100000)
+          throw new Error(
+            "Report exceeds the limit of 100,000 suite and test records.",
+          );
+        if (!isObject(test)) fail(testPath, "a test object");
+        if (typeof test.title !== "string")
+          fail(`${testPath}.title`, "a string");
+        for (const key of ["fullTitle", "code", "uuid"])
+          stringField(test, key, testPath);
+        for (const key of ["pass", "fail", "pending", "skipped", "isHook"])
+          if (key in test && typeof test[key] !== "boolean")
+            fail(`${testPath}.${key}`, "a boolean");
+        if (
+          "state" in test &&
+          test.state !== null &&
+          !["passed", "failed", "pending", "skipped"].includes(test.state)
+        )
+          fail(`${testPath}.state`, "passed, failed, pending, or skipped");
+        if (
+          !test.isHook &&
+          !["passed", "failed", "pending", "skipped"].includes(test.state) &&
+          !["pass", "fail", "pending", "skipped"].some(
+            (key) => test[key] === true,
+          )
+        )
+          fail(
+            `${testPath}.state`,
+            "a recognized outcome or a true outcome flag",
+          );
+        if (
+          "duration" in test &&
+          (!Number.isFinite(test.duration) || test.duration < 0)
+        )
+          fail(`${testPath}.duration`, "a non-negative number in milliseconds");
+        if ("err" in test) {
+          if (!isObject(test.err)) fail(`${testPath}.err`, "an error object");
+          for (const key of ["message", "estack", "stack"])
+            stringField(test.err, key, `${testPath}.err`);
+        }
+      });
+      value.suites.forEach((child, index) =>
+        suite(child, `${path}.suites[${index}]`, depth + 1),
+      );
+    }
+    report.results.forEach((spec, index) => {
+      suite(spec, `results[${index}]`, 0);
+      if (!spec.file && !spec.fullFile)
+        fail(`results[${index}].file`, "a non-empty spec file path");
+      progress(index + 1, report.results.length);
+    });
+    return report;
+  }
+  function parseReportText(text, progress = () => {}) {
+    if (typeof text !== "string" || !text.trim())
+      throw new Error("The file is empty. Select a Mochawesome JSON report.");
+    let raw;
+    try {
+      raw = JSON.parse(text.replace(/^\uFEFF/, ""));
+    } catch (error) {
+      throw new Error(`Invalid JSON syntax. ${error.message.slice(0, 220)}`);
+    }
+    progress(30, "Checking Mochawesome report format");
+    validateReport(raw, (done, total) =>
+      progress(
+        30 + Math.floor((done / total) * 25),
+        `Validating specs: ${done} of ${total}`,
+      ),
+    );
+    progress(60, "Aggregating test results");
+    const normalized = normalizeReport(raw);
+    progress(
+      70,
+      `Validated ${normalized.tests.length.toLocaleString("en-US")} tests across ${normalized.specs.length} specs`,
+    );
+    return normalized;
+  }
+  const api = {
+    normalizeReport,
+    dashboardStats,
+    validateReport,
+    parseReportText,
+    MAX_REPORT_BYTES,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ReportData = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

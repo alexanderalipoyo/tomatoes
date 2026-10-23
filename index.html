@@ -7,6 +7,7 @@
     <title>Tomatoes | Test results</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="report-data.js" defer></script>
+    <script src="import-history.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -35,6 +36,13 @@
             class="nav-count"
             id="failure-count"
             >—</span
+          ></a
+        >
+        <a href="#history" data-view="history"
+          ><span data-icon="clock"></span>Import history<span
+            class="nav-count"
+            id="history-count"
+            >0</span
           ></a
         >
         <div class="side-label analytics-label">INSIGHTS</div>
@@ -83,9 +91,15 @@
             />
           </div>
         </div>
-        <div id="load-state" class="notice" role="status">
+        <div id="load-state" class="notice" role="alert">
           Loading latest run…
         </div>
+        <div
+          id="history-notice"
+          class="notice data-warning"
+          role="status"
+          hidden
+        ></div>
         <div id="report-content" hidden>
           <section id="overview" aria-label="Run summary">
             <div class="run-summary" id="run-summary"></div>
@@ -221,6 +235,29 @@
           </section>
           <section id="alternate" hidden></section>
         </div>
+        <section id="history-section" aria-label="Import history" hidden>
+          <div class="history-heading">
+            <div>
+              <h2>Saved reports</h2>
+              <p>
+                Open any previous import to revisit its dashboard and test
+                details.
+              </p>
+            </div>
+            <div class="history-heading-actions">
+              <span id="history-total"></span
+              ><button class="button" id="load-bundled">
+                Open bundled report
+              </button>
+            </div>
+          </div>
+          <div id="history-list"></div>
+          <p class="notice history-storage-note">
+            Saved locally in this browser. Clearing site data removes saved
+            imports. Reports imported before history was added need to be
+            imported again.
+          </p>
+        </section>
         <footer>
           <span>Local Mochawesome report</span
           ><span id="report-footer">Awaiting results</span>
@@ -232,6 +269,29 @@
       <button class="dialog-close icon-button" aria-label="Close dialog">
         ×
       </button>
+    </dialog>
+    <dialog
+      id="import-progress"
+      class="import-progress"
+      aria-labelledby="progress-title"
+      aria-describedby="progress-stage"
+      tabindex="-1"
+    >
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <h2 id="progress-title">Preparing your report</h2>
+      <p id="progress-stage" role="status" aria-live="polite">
+        Reading report file
+      </p>
+      <progress
+        id="render-progress"
+        max="100"
+        value="0"
+        aria-label="Report processing progress"
+      ></progress>
+      <div class="progress-caption">
+        <span id="progress-percent">0%</span
+        ><span>Please wait until rendering finishes</span>
+      </div>
     </dialog>
     <div id="toast" role="status"></div>
   </body>

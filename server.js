@@ -6,7 +6,9 @@ const files = {
   "/index.html": "index.html",
   "/styles.css": "styles.css",
   "/app.js": "app.js",
+  "/import-history.js": "import-history.js",
   "/report-data.js": "report-data.js",
+  "/report-worker.js": "report-worker.js",
   "/results.json": "results.json",
 };
 const types = {

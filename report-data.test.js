@@ -148,3 +148,235 @@ test("dashboard widgets handle empty and non-executed runs", () => {
   assert.equal(pending.medianDuration, null);
   assert.equal(pending.specGroups.pending, 1);
 });
+const { validateReport, parseReportText } = require("./report-data");
+const validImport = () => ({
+  stats: { tests: 1, passes: 1, failures: 0, pending: 0 },
+  results: [
+    {
+      file: "sample.cy.ts",
+      tests: [{ title: "works", state: "passed", duration: 10 }],
+      suites: [],
+    },
+  ],
+});
+test("import validation accepts the actual Mochawesome file and reports validation progress", () => {
+  const progress = [];
+  const imported = parseReportText(JSON.stringify(fixture), (percent, label) =>
+    progress.push([percent, label]),
+  );
+  assert.equal(imported.counts.total, 1261);
+  assert.ok(
+    progress.some(([, label]) => label === "Validating specs: 107 of 107"),
+  );
+  assert.ok(
+    progress.every(
+      ([percent], index) => index === 0 || percent >= progress[index - 1][0],
+    ),
+  );
+  assert.equal(
+    parseReportText("\uFEFF" + JSON.stringify(validImport())).counts.passed,
+    1,
+  );
+});
+test("import rejects malformed JSON, empty files, and unrelated JSON", () => {
+  assert.throws(() => parseReportText(""), /empty/);
+  assert.throws(() => parseReportText('{"stats":'), /Invalid JSON syntax/);
+  for (const text of ["null", "[]", "123", '{"name":"package"}'])
+    assert.throws(() => parseReportText(text), /expected/);
+});
+test("import validates nested arrays, types, durations, states, errors, and dates", () => {
+  const cases = [
+    [(r) => (r.stats.tests = "1"), /stats.tests/],
+    [(r) => (r.stats.failures = -1), /stats.failures/],
+    [(r) => (r.stats.start = "not-a-date"), /stats.start/],
+    [
+      (r) => {
+        r.stats.start = "2026-10-23T10:00:00Z";
+        r.stats.end = "2026-10-22T10:00:00Z";
+      },
+      /stats.end/,
+    ],
+    [(r) => (r.results[0].suites = {}), /results\[0\].suites/],
+    [(r) => (r.results[0].tests = null), /results\[0\].tests/],
+    [(r) => delete r.results[0].file, /file/],
+    [(r) => (r.results[0].tests[0].title = 12), /title/],
+    [(r) => (r.results[0].tests[0].state = "success"), /state/],
+    [(r) => (r.results[0].tests[0].fail = "false"), /fail/],
+    [(r) => (r.results[0].tests[0].duration = -10), /duration/],
+    [(r) => (r.results[0].tests[0].err = "error"), /err/],
+    [(r) => (r.results[0].tests[0].err = { message: [] }), /message/],
+    [(r) => (r.results[0].suites = [null]), /suites\[0\]/],
+  ];
+  for (const [mutate, pattern] of cases) {
+    const report = validImport();
+    mutate(report);
+    assert.throws(() => validateReport(report), pattern);
+  }
+});
+test("format validation accepts empty reports and the overlapping hook failure flags", () => {
+  assert.doesNotThrow(() =>
+    validateReport({
+      stats: { tests: 0, passes: 0, failures: 0, pending: 0 },
+      results: [],
+    }),
+  );
+  const report = validImport();
+  report.results[0].tests[0] = {
+    title: "hook failure",
+    state: "failed",
+    fail: true,
+    pending: true,
+  };
+  assert.equal(parseReportText(JSON.stringify(report)).counts.failed, 1);
+});
+test("excessive nesting is rejected before aggregation", () => {
+  const report = validImport();
+  let suite = report.results[0];
+  for (let index = 0; index < 102; index++) {
+    const child = { tests: [], suites: [] };
+    suite.suites.push(child);
+    suite = child;
+  }
+  assert.throws(() => validateReport(report), /nesting depth/);
+});
+test("imports with a skipped state are counted as skipped even without a boolean flag", () => {
+  const report = validImport();
+  report.results[0].tests[0].state = "skipped";
+  const result = parseReportText(JSON.stringify(report));
+  assert.equal(result.counts.skipped, 1);
+  assert.equal(result.counts.unknown, 0);
+});
+test("background worker reports progress and completion or validation failure", () => {
+  const vm = require("node:vm");
+  const fs = require("node:fs");
+  const messages = [];
+  const self = {
+    ReportData: require("./report-data"),
+    postMessage: (message) => messages.push(message),
+  };
+  vm.runInNewContext(fs.readFileSync("./report-worker.js", "utf8"), {
+    importScripts() {},
+    self,
+  });
+  self.onmessage({ data: JSON.stringify(validImport()) });
+  assert.equal(messages[0].type, "progress");
+  assert.equal(messages.at(-1).type, "complete");
+  assert.equal(messages.at(-1).report.counts.passed, 1);
+  messages.length = 0;
+  self.onmessage({ data: '{"stats":' });
+  assert.equal(messages.at(-1).type, "error");
+  assert.match(messages.at(-1).message, /Invalid JSON syntax/);
+});
+const { IDBFactory } = require("fake-indexeddb");
+const { createHistory } = require("./import-history");
+const { webcrypto } = require("node:crypto");
+test("import history persists full report contents, lists metadata, and restores the last selection", async () => {
+  const indexedDB = new IDBFactory();
+  const options = { indexedDB, crypto: webcrypto, name: "persistence-test" };
+  let history = createHistory(options);
+  const firstText = JSON.stringify(validImport());
+  const first = await history.save({
+    text: firstText,
+    name: "first.json",
+    report: parseReportText(firstText),
+  });
+  const secondRaw = validImport();
+  secondRaw.results[0].tests[0].state = "failed";
+  secondRaw.stats.passes = 0;
+  secondRaw.stats.failures = 1;
+  const secondText = JSON.stringify(secondRaw);
+  const second = await history.save({
+    text: secondText,
+    name: "second.json",
+    report: parseReportText(secondText),
+  });
+  assert.notEqual(first.id, second.id);
+  assert.equal((await history.list()).length, 2);
+  assert.equal(await history.lastActive(), second.id);
+  await history.markActive(first.id);
+  await history.close();
+  history = createHistory(options);
+  assert.equal(await history.lastActive(), first.id);
+  const restored = await history.get(first.id);
+  assert.equal(restored.entry.name, "first.json");
+  assert.equal(restored.text, firstText);
+  assert.equal(parseReportText(restored.text).counts.passed, 1);
+  assert.equal((await history.get(second.id)).entry.counts.failed, 1);
+  assert.equal(
+    (await history.list()).some((entry) => "text" in entry),
+    false,
+  );
+  await history.close();
+});
+test("identical files deduplicate while different contents with the same filename stay separate", async () => {
+  const history = createHistory({
+    indexedDB: new IDBFactory(),
+    crypto: webcrypto,
+  });
+  const text = JSON.stringify(validImport());
+  const report = parseReportText(text);
+  const first = await history.save({
+    text,
+    name: "index.json",
+    report,
+    source: "bundled",
+    touch: false,
+  });
+  const again = await history.save({ text, name: "index.json", report });
+  assert.equal(first.id, again.id);
+  assert.equal((await history.list()).length, 1);
+  assert.equal(again.importedAt, first.importedAt);
+  assert.equal(again.source, "imported");
+  const reopened = await history.save({
+    text,
+    name: "different-name.json",
+    report,
+    touch: false,
+  });
+  assert.equal(reopened.name, "index.json");
+  assert.equal(reopened.lastImportedAt, again.lastImportedAt);
+  const raw = validImport();
+  raw.results[0].tests[0].duration = 100;
+  const updatedText = JSON.stringify(raw);
+  await history.save({
+    text: updatedText,
+    name: "index.json",
+    report: parseReportText(updatedText),
+  });
+  assert.equal((await history.list()).length, 2);
+  await history.close();
+});
+test("invalid imports leave history and the active selection unchanged", async () => {
+  const history = createHistory({
+    indexedDB: new IDBFactory(),
+    crypto: webcrypto,
+  });
+  const text = JSON.stringify(validImport());
+  const entry = await history.save({
+    text,
+    name: "valid.json",
+    report: parseReportText(text),
+  });
+  await assert.rejects(
+    async () =>
+      history.save({
+        text: "{}",
+        name: "invalid.json",
+        report: parseReportText("{}"),
+      }),
+    /expected/,
+  );
+  assert.equal((await history.list()).length, 1);
+  assert.equal(await history.lastActive(), entry.id);
+  await assert.rejects(history.get("missing"), /no longer available/);
+  await history.close();
+});
+test("unavailable browser storage fails clearly rather than claiming an import is saved", async () => {
+  const history = createHistory({ indexedDB: null, crypto: webcrypto });
+  await assert.rejects(history.list(), /unavailable/);
+  const text = JSON.stringify(validImport());
+  await assert.rejects(
+    history.save({ text, name: "report.json", report: parseReportText(text) }),
+    /unavailable/,
+  );
+});

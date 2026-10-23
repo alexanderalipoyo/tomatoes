@@ -51,6 +51,8 @@ const badge = (status) =>
 let report;
 let sourceName = "index.json";
 let currentFile = null;
+let activeHistoryId = null;
+let historyEntries = [];
 let page = 1;
 let grouping = "specs";
 let view = "runs";
@@ -60,7 +62,7 @@ const outcomes = ["passed", "failed", "pending", "skipped"];
 function renderSummary() {
   const c = report.counts;
   $("#run-summary").innerHTML =
-    `<div><span class="eyebrow">LATEST IMPORTED RUN</span><h2>${badge(report.status)} ${esc(sourceName)}</h2><p>Started ${esc(date(report.start))}<br />Finished ${esc(date(report.end))}</p></div><div class="run-summary-stats"><strong>${duration(report.duration)}</strong><span>Reported run duration</span><span>${report.specs.length} specs · ${report.failedSpecs} with failures</span></div>`;
+    `<div><span class="eyebrow">${isPreviousImport() ? "PREVIOUS IMPORT" : "LATEST IMPORTED RUN"}</span><h2>${badge(report.status)} ${esc(sourceName)}</h2><p>Started ${esc(date(report.start))}<br />Finished ${esc(date(report.end))}</p></div><div class="run-summary-stats"><strong>${duration(report.duration)}</strong><span>Reported run duration</span><span>${report.specs.length} specs · ${report.failedSpecs} with failures</span></div>`;
   const metrics = [
     [
       "Registered tests",
@@ -320,12 +322,19 @@ function showTest(id) {
     `<div class="dialog-heading">${badge(test.status)}<h2 id="detail-title">${esc(test.title)}</h2><p>${esc(test.fullTitle)}</p></div><div class="detail-grid"><div><small>Spec</small>${esc(test.file)}</div><div><small>Duration</small>${duration(test.duration)}</div><div><small>Suite</small>${esc(test.suite || "Root suite")}</div><div><small>Status</small>${esc(test.status)}</div></div>${test.error ? `<h2>Failure message</h2><pre class="failure-message">${esc(test.error)}</pre>` : '<p class="notice">No failure message recorded for this test.</p>'}${test.stack ? `<details><summary>Stack trace</summary><pre>${esc(test.stack)}</pre></details>` : ""}${test.code ? `<details><summary>Test code</summary><pre>${esc(test.code)}</pre></details>` : ""}${test.context ? `<details><summary>Reported context</summary><pre>${esc(test.context)}</pre></details>` : ""}`;
   $("#detail").showModal();
 }
-function navigate() {
+function navigate(force = false) {
+  if (loading && force !== true) return;
   view = location.hash.slice(1) || "runs";
   if (
-    !["runs", "results", "failures", "analytics", "flaky", "settings"].includes(
-      view,
-    )
+    ![
+      "runs",
+      "results",
+      "failures",
+      "analytics",
+      "flaky",
+      "settings",
+      "history",
+    ].includes(view)
   )
     view = "runs";
   document
@@ -338,6 +347,7 @@ function navigate() {
       "Latest run",
       "A snapshot of test health, failures, and execution from your latest run.",
     ],
+    history: ["Import history", "Revisit reports saved in this browser."],
     results: [
       "Test results",
       "Explore every spec and test in your latest imported report.",
@@ -359,13 +369,21 @@ function navigate() {
       "Source details and available report metadata.",
     ],
   };
-  $("#page-title").textContent = labels[view][0];
-  $("#page-description").textContent = labels[view][1];
+  $("#page-title").textContent =
+    view === "runs" && isPreviousImport() ? "Previous import" : labels[view][0];
+  $("#page-description").textContent =
+    view === "runs" && isPreviousImport()
+      ? "Dashboard and test results for the selected saved report."
+      : labels[view][1];
   $("#overview").hidden = !["runs", "analytics"].includes(view);
   $("#results-section").hidden = !["results", "failures"].includes(view);
-  $("#alternate").hidden = ["runs", "results", "failures"].includes(view);
+  $("#alternate").hidden = ["runs", "results", "failures", "history"].includes(
+    view,
+  );
   $("#dashboard-widgets").hidden = view !== "runs";
   $(".dashboard-actions").hidden = view !== "runs";
+  $("#history-section").hidden = view !== "history";
+  if (view === "history") renderHistory();
   if (!report) return;
   const alt = $("#alternate");
   if (view === "analytics") {
@@ -395,48 +413,269 @@ function navigate() {
     alt.innerHTML =
       '<article class="insight-card"><h2>Flakiness unavailable</h2><p>This report records final test outcomes without retry attempts or run history. A passing test cannot be identified as flaky from this data alone.</p><p class="notice">Pending and skipped tests are shown separately in the latest run.</p><a class="button" href="#results">View results</a></article>';
   if (view === "settings")
-    alt.innerHTML = `<article class="settings-card"><h2>Report source</h2><div class="detail-grid"><div><small>File</small>${esc(sourceName)}</div><div><small>Format</small>Mochawesome JSON</div><div><small>Start</small>${esc(date(report.start))}</div><div><small>End</small>${esc(date(report.end))}</div><div><small>Branch / commit / author</small>Unavailable in this report</div><div><small>Browser / operating system</small>Unavailable in this report</div></div><p>Import another JSON report using the Import report button. Imported files stay in this browser session; reloading the page restores the bundled latest run.</p><p class="notice">Replace results.json in the project to update the bundled report. Spec durations are summed test times, while run duration uses the report's stats.duration. Dates are displayed in Asia/Singapore.</p></article>`;
+    alt.innerHTML = `<article class="settings-card"><h2>Report source</h2><div class="detail-grid"><div><small>File</small>${esc(sourceName)}</div><div><small>Format</small>Mochawesome JSON</div><div><small>Start</small>${esc(date(report.start))}</div><div><small>End</small>${esc(date(report.end))}</div><div><small>Branch / commit / author</small>Unavailable in this report</div><div><small>Browser / operating system</small>Unavailable in this report</div></div><p>Import another JSON report using the Import report button. Validated imports are saved in this browser. Use Import history to reopen a saved report. Reloading the page restores the last report you viewed.</p><p class="notice">Replace results.json in the project and choose Open bundled report in Import history to load a new bundled run. Spec durations are summed test times, while run duration uses the report's stats.duration. Dates are displayed in Asia/Singapore.</p></article>`;
   renderResults();
 }
-async function loadReport(file = currentFile) {
+function isPreviousImport() {
+  return Boolean(
+    activeHistoryId &&
+    historyEntries.length &&
+    historyEntries[0].id !== activeHistoryId,
+  );
+}
+function historyNotice(message) {
+  $("#history-notice").hidden = !message;
+  $("#history-notice").textContent = message;
+}
+async function refreshHistory() {
+  historyEntries = await ImportHistory.list();
+  renderHistory();
+}
+function renderHistory() {
+  $("#history-count").textContent = historyEntries.length;
+  $("#history-total").textContent =
+    `${historyEntries.length} saved ${historyEntries.length === 1 ? "report" : "reports"}`;
+  $("#history-list").innerHTML =
+    historyEntries
+      .map(
+        (entry, index) =>
+          `<article class="history-card ${entry.id === activeHistoryId ? "is-current" : ""}"><div class="history-card-title"><div>${badge(entry.status)}${index === 0 ? '<span class="history-tag">Latest import</span>' : ""}${entry.id === activeHistoryId ? '<span class="history-tag current-tag">Viewing</span>' : ""}<h3>${esc(entry.name)}</h3><p>${entry.source === "bundled" ? "Bundled report saved" : "Imported"} ${esc(date(new Date(entry.lastImportedAt).toISOString()))}</p><p>Run started ${esc(date(entry.start))}</p></div><button class="button ${entry.id === activeHistoryId ? "" : "primary"}" data-open-history="${esc(entry.id)}">Open dashboard</button></div><dl class="history-stats"><div><dt>Tests</dt><dd>${number(entry.counts.total)}</dd></div><div><dt>Passed</dt><dd>${number(entry.counts.passed)}</dd></div><div><dt>Failed</dt><dd class="fail-text">${number(entry.counts.failed)}</dd></div><div><dt>Pending / skipped</dt><dd>${number(entry.counts.pending)} / ${number(entry.counts.skipped)}</dd></div><div><dt>Pass rate</dt><dd>${entry.passRate.toFixed(1)}%</dd></div><div><dt>Duration</dt><dd>${duration(entry.duration)}</dd></div></dl></article>`,
+      )
+      .join("") ||
+    '<div class="history-empty"><h3>No saved imports yet</h3><p>Import a valid Mochawesome JSON report to start your history.</p></div>';
+  $("#history-list")
+    .querySelectorAll("[data-open-history]")
+    .forEach(
+      (button) =>
+        (button.onclick = () =>
+          loadReport(null, {
+            historyId: button.dataset.openHistory,
+            openDashboard: true,
+          })),
+    );
+}
+function paintProgress(percent, label) {
+  $("#render-progress").value = percent;
+  $("#progress-percent").textContent = `${percent}%`;
+  $("#progress-stage").textContent = label;
+}
+function allowPaint() {
+  return new Promise((resolve) => {
+    if (document.hidden) setTimeout(resolve, 0);
+    else requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
+function processReport(text) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker("report-worker.js");
+    const timeout = setTimeout(
+      () => finish(new Error("Processing timed out. Try a smaller report.")),
+      120000,
+    );
+    function finish(error, result) {
+      clearTimeout(timeout);
+      worker.terminate();
+      if (error) reject(error);
+      else resolve(result);
+    }
+    worker.onmessage = ({ data }) => {
+      if (data.type === "progress") paintProgress(data.percent, data.label);
+      else if (data.type === "complete") finish(null, data.report);
+      else if (data.type === "error") finish(new Error(data.message));
+    };
+    worker.onerror = (event) => {
+      event.preventDefault();
+      finish(
+        new Error(
+          "Could not process the report. Reload the page and try again.",
+        ),
+      );
+    };
+    worker.onmessageerror = () =>
+      finish(
+        new Error(
+          "Could not read the processed report. Try another JSON file.",
+        ),
+      );
+    worker.postMessage(text);
+  });
+}
+function populateSpecFilter() {
+  $("#spec-filter").innerHTML =
+    '<option value="all">All specs</option>' +
+    report.specs
+      .map((spec) => `<option value="${spec.id}">${esc(spec.file)}</option>`)
+      .join("");
+}
+async function loadReport(file = currentFile, options = {}) {
   if (loading) return;
+  const previous = {
+    report,
+    currentFile,
+    activeHistoryId,
+    sourceName,
+    page,
+    grouping,
+    search: $("#search").value,
+    status: $("#status").value,
+    spec: $("#spec-filter").value,
+  };
+  const focused = document.activeElement;
+  let failed = false;
   loading = true;
   $("#refresh").disabled = true;
   $("#import-report").disabled = true;
-  $("#load-state").hidden = false;
-  $("#load-state").textContent = "Loading report…";
+  $("#load-state").hidden = true;
+  $("#report-content").setAttribute("aria-busy", "true");
+  document.body.classList.add("is-rendering");
+  paintProgress(0, "Preparing to read report");
+  $("#import-progress").showModal();
+  $("#import-progress").focus();
   try {
-    let raw;
-    if (file) raw = JSON.parse(await file.text());
+    await allowPaint();
+    let saved = null;
+    let historyId = options.historyId;
+    if (options.restore) {
+      try {
+        historyId = await ImportHistory.lastActive();
+      } catch {
+        historyNotice(
+          "History is unavailable in this browser. The report can still be used for this session.",
+        );
+      }
+    }
+    if (historyId) {
+      paintProgress(3, "Opening saved report");
+      try {
+        saved = await ImportHistory.get(historyId);
+        file = new File([saved.text], saved.entry.name, {
+          type: "application/json",
+        });
+      } catch (error) {
+        if (!options.restore) throw error;
+        historyNotice(
+          "The previously viewed import could not be restored. Loading the bundled report.",
+        );
+      }
+    }
+    try {
+      await refreshHistory();
+    } catch {
+      historyNotice(
+        "History is unavailable in this browser. The report can still be used for this session.",
+      );
+    }
+    paintProgress(5, "Checking file");
+    if (file && !/\.json$/i.test(file.name))
+      throw new Error(
+        "Unsupported file type. Select a .json Mochawesome report.",
+      );
+    if (file && file.size > ReportData.MAX_REPORT_BYTES)
+      throw new Error(
+        "The report is too large. The maximum file size is 50 MB.",
+      );
+    if (file && !file.size)
+      throw new Error("The file is empty. Select a Mochawesome JSON report.");
+    paintProgress(
+      10,
+      file ? `Reading ${file.name}` : "Reading bundled latest run",
+    );
+    await allowPaint();
+    let text;
+    if (file) text = await file.text();
     else {
-      const response = await fetch("results.json", { cache: "no-store" });
+      const response = await fetch("results.json", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(60000),
+      });
       if (!response.ok)
         throw new Error(`Could not load results.json (${response.status}).`);
-      raw = await response.json();
+      text = await response.text();
     }
-    const next = ReportData.normalizeReport(raw);
+    if (new TextEncoder().encode(text).byteLength > ReportData.MAX_REPORT_BYTES)
+      throw new Error(
+        "The report is too large. The maximum file size is 50 MB.",
+      );
+    const next = await processReport(text);
+    paintProgress(75, "Preparing report filters");
+    await allowPaint();
     report = next;
     currentFile = file;
+    activeHistoryId = saved?.entry.id || null;
     sourceName = file ? file.name : "index.json";
     page = 1;
     $("#search").value = "";
     $("#status").value = "all";
-    $("#spec-filter").innerHTML =
-      '<option value="all">All specs</option>' +
-      report.specs
-        .map((spec) => `<option value="${spec.id}">${esc(spec.file)}</option>`)
-        .join("");
-    $("#report-content").hidden = false;
-    $("#load-state").hidden = true;
+    populateSpecFilter();
+    paintProgress(82, "Rendering dashboard widgets");
+    await allowPaint();
     renderSummary();
-    navigate();
+    paintProgress(94, "Rendering test results");
+    await allowPaint();
+    $("#report-content").hidden = false;
+    if (options.openDashboard) location.hash = "runs";
+    navigate(true);
+    paintProgress(
+      97,
+      saved ? "Restoring saved import" : "Saving import history",
+    );
+    await allowPaint();
+    try {
+      if (saved) await ImportHistory.markActive(saved.entry.id);
+      else {
+        const entry = await ImportHistory.save({
+          text,
+          name: sourceName,
+          report,
+          source: file ? "imported" : "bundled",
+          touch: Boolean(options.recordImport),
+        });
+        activeHistoryId = entry.id;
+      }
+      await refreshHistory();
+      historyNotice("");
+    } catch (error) {
+      historyNotice(
+        "This report is loaded, but history could not be saved. Browser storage may be unavailable or full.",
+      );
+    }
+    $("#run-summary .eyebrow").textContent = isPreviousImport()
+      ? "PREVIOUS IMPORT"
+      : "LATEST IMPORTED RUN";
+    navigate(true);
+    paintProgress(100, "Report ready");
+    await allowPaint();
   } catch (error) {
+    failed = true;
+    if (report !== previous.report) {
+      ({ report, currentFile, activeHistoryId, sourceName, page, grouping } =
+        previous);
+      $("#report-content").hidden = !report;
+      if (report) {
+        populateSpecFilter();
+        $("#search").value = previous.search;
+        $("#status").value = previous.status;
+        $("#spec-filter").value = previous.spec;
+        renderSummary();
+        navigate(true);
+      }
+    }
+    $("#load-state").hidden = false;
     $("#load-state").textContent =
-      `Unable to load report: ${error.message}${report ? " The previous report is still displayed." : " Use Import report to select a Mochawesome JSON file."}`;
+      `Unable to load report: ${error.message}${report ? " The previous report is still displayed." : " Select a valid Mochawesome JSON report to continue."}`;
   } finally {
     loading = false;
     $("#refresh").disabled = false;
     $("#import-report").disabled = false;
+    $("#report-content").setAttribute("aria-busy", "false");
+    document.body.classList.remove("is-rendering");
+    $("#import-progress").close();
+    if (failed) {
+      $("#load-state").tabIndex = -1;
+      $("#load-state").focus();
+    } else if (focused?.isConnected && focused !== document.body)
+      focused.focus();
+    else $("#import-report").focus();
   }
 }
 ["search", "spec-filter", "status"].forEach((id) =>
@@ -470,11 +709,15 @@ $("#tests-view").onclick = () => {
   page = 1;
   renderResults();
 };
-$("#refresh").onclick = () => loadReport();
+$("#refresh").onclick = () =>
+  activeHistoryId
+    ? loadReport(null, { historyId: activeHistoryId })
+    : loadReport();
+$("#load-bundled").onclick = () => loadReport(null, { openDashboard: true });
 $("#import-report").onclick = () => $("#report-file").click();
 $("#report-file").onchange = async () => {
   const file = $("#report-file").files[0];
-  if (file) await loadReport(file);
+  if (file) await loadReport(file, { recordImport: true });
   $("#report-file").value = "";
 };
 $(".dialog-close").onclick = () => $("#detail").close();
@@ -490,6 +733,7 @@ $("#detail").onclick = (event) => {
     $("#detail").close();
 };
 document.addEventListener("keydown", (event) => {
+  if (loading) return;
   if (
     event.key === "/" &&
     !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName) &&
@@ -501,8 +745,18 @@ document.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("hashchange", navigate);
+$("#import-progress").addEventListener("cancel", (event) =>
+  event.preventDefault(),
+);
 document
   .querySelectorAll("[data-icon]")
   .forEach((element) => (element.innerHTML = icon(element.dataset.icon)));
+document.querySelector('nav a[data-view="runs"]').onclick = (event) => {
+  if (isPreviousImport() && !loading) {
+    event.preventDefault();
+    loadReport(null, { historyId: historyEntries[0].id, openDashboard: true });
+  }
+};
+renderHistory();
 navigate();
-loadReport();
+loadReport(null, { restore: true });
