@@ -1,1 +1,15 @@
-{"name":"cypress-dashboard-template","version":"1.0.0","private":true,"scripts":{"start":"node server.js","check":"node --check app.js && node --check server.js"}}
+{
+  "name": "cypress-dashboard-template",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check app.js && node --check server.js && node --check report-data.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test report-data.test.js"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
+  }
+}
