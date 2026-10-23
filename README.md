@@ -114,6 +114,8 @@ Successful imports can notify Slack with the saved report's actual outcome total
 
 ## User preferences
 
+Open **Workspace > Settings > Color Mode** to choose Light, Dark, or System, then select **Save appearance**. System follows changes to your computer's theme. Color mode is saved as a separate preference in the server store and applies across Tomatoes after reloads.
+
 **Report settings** saves the time zone, results per page, and custom dashboard groups in the server store. With PostgreSQL enabled, these are stored in `tomatoes.user_preferences` as validated JSONB. Saving a widget or display preference updates only that section, preserving the other settings. The UI confirms saves with dismissible toast notifications only after the server succeeds and offers **Reload preferences** to reconnect or fetch changes. Saves, updates, imports, report publishing and evidence uploads show visible success or error notifications. Toasts pause while hovered or focused and wait until blocking progress dialogs close.
 
 With optional sign-in enabled, each account has its own preferences. Viewers can edit their own preferences without gaining permission to publish reports. CI upload tokens cannot read or change user preferences. Signing in loads that account's settings; signing out clears the active profile from the page.

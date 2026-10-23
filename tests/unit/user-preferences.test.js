@@ -130,3 +130,42 @@ test("sign-out clears the active preference profile and disables saving", async 
   assert.deepEqual(state.preferences.dashboardGroups, []);
   await assert.rejects(f.client.save({ dashboardGroups: [] }), /Reload/);
 });
+
+test("appearance defaults to system for existing profiles and validates modes", () => {
+  assert.deepEqual(
+    Model.withDefaults({ display: { timeZone: "UTC", rows: 30 } }).appearance,
+    { colorMode: "system" },
+  );
+  for (const colorMode of ["light", "dark", "system"])
+    assert.deepEqual(Model.validatePatch({ appearance: { colorMode } }), {
+      appearance: { colorMode },
+    });
+  for (const appearance of [
+    null,
+    [],
+    {},
+    { colorMode: "automatic" },
+    { colorMode: "dark", extra: true },
+  ])
+    assert.throws(() => Model.validatePatch({ appearance }));
+});
+test("appearance persists independently of report preferences and across reloads", async () => {
+  const f = fixture();
+  await f.client.initialize();
+  await f.client.save({ appearance: { colorMode: "dark" } });
+  await f.client.save({ dashboardGroups: [group] });
+  await f.client.save({ display: { timeZone: "UTC", rows: 50 } });
+  const restored = await f.client.initialize();
+  assert.equal(restored.preferences.appearance.colorMode, "dark");
+  assert.equal(restored.preferences.display.rows, 50);
+  assert.equal(restored.preferences.dashboardGroups[0].name, "Admin");
+  f.setStatus({
+    enabled: true,
+    authenticated: true,
+    user: { username: "other" },
+  });
+  assert.equal(
+    (await f.client.initialize()).preferences.appearance.colorMode,
+    "system",
+  );
+});

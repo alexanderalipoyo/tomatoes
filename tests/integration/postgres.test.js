@@ -422,7 +422,11 @@ test("PostgreSQL preferences isolate accounts, allow viewers' own settings, and 
   const saved = await api.request("/api/preferences", {
     method: "PUT",
     headers: alice,
-    body: { dashboardGroups, display: { timeZone: "UTC", rows: 30 } },
+    body: {
+      dashboardGroups,
+      display: { timeZone: "UTC", rows: 30 },
+      appearance: { colorMode: "dark" },
+    },
   });
   assert.equal(saved.status, 200);
   assert.equal(saved.body.profileId, "user:alice");
@@ -452,6 +456,7 @@ test("PostgreSQL preferences isolate accounts, allow viewers' own settings, and 
     true,
   );
   const own = await api.store.getPreferences("user:alice");
+  assert.equal(own.appearance.colorMode, "dark");
   assert.equal(own.display.rows, 50);
   assert.deepEqual(own.dashboardGroups, []);
   const connection = new Pool(databaseConfig());

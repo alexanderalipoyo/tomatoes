@@ -607,9 +607,11 @@ test("local preferences persist, merge sections, and reject invalid or cross-ori
       metrics: ["passRate"],
     },
   ];
+  assert.equal((await put({ appearance: { colorMode: "dark" } })).status, 200);
   assert.equal((await put({ dashboardGroups })).status, 200);
   const saved = (await api.request("/api/preferences")).body;
   assert.equal(saved.profileId, "local");
+  assert.equal(saved.preferences.appearance.colorMode, "dark");
   assert.equal(saved.preferences.display.rows, 30);
   assert.equal(saved.preferences.dashboardGroups.length, 1);
   const reopened =

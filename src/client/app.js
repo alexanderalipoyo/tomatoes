@@ -86,6 +86,7 @@ const userPreferences = PreferenceClient.create({
 async function reloadUserPreferences() {
   const state = await userPreferences.initialize();
   preferences = state.preferences.display;
+  Appearance.apply(state.preferences.appearance.colorMode);
   pageSize = preferences.rows;
   page = 1;
   stability = null;
@@ -98,7 +99,7 @@ async function reloadUserPreferences() {
 }
 function preferenceStatusMarkup() {
   const state = userPreferences.getState();
-  return `<article class="settings-card preference-sync-status"><h2>User preferences</h2><p role="status">${state.ready ? `Saved to ${state.storage === "postgres" ? "PostgreSQL" : "the local server"} for ${esc(state.profile)}. ${state.profileId === "local" ? "Local mode uses one shared profile on this server." : "These settings belong to your signed-in account."}` : esc(state.error)}</p><p>Dashboard groups, time zone, and results per page load from the server. Report files and browser import history are managed separately.</p><button class="button" id="reload-user-preferences">Reload preferences</button>${!state.ready ? '<a class="button" href="#team">Team &amp; CI</a>' : ""}</article>`;
+  return `<article class="settings-card preference-sync-status"><h2>User preferences</h2><p role="status">${state.ready ? `Saved to ${state.storage === "postgres" ? "PostgreSQL" : "the local server"} for ${esc(state.profile)}. ${state.profileId === "local" ? "Local mode uses one shared profile on this server." : "These settings belong to your signed-in account."}` : esc(state.error)}</p><p>Color mode, dashboard groups, time zone, and results per page load from the server. Report files and browser import history are managed separately.</p><button class="button" id="reload-user-preferences">Reload preferences</button>${!state.ready ? '<a class="button" href="#team">Team &amp; CI</a>' : ""}</article>`;
 }
 let stability = null;
 let report;
@@ -398,6 +399,7 @@ function navigate(force = false) {
       "compare",
       "flaky",
       "settings",
+      "workspace-settings",
       "history",
       "team",
     ].includes(view)
@@ -438,6 +440,10 @@ function navigate(force = false) {
       "Flaky tests",
       "Investigate outcome changes across your saved reports.",
     ],
+    "workspace-settings": [
+      "Settings",
+      "Make Tomatoes feel at home in your workspace.",
+    ],
     settings: [
       "Report settings",
       "Manage display preferences, inspect your source, and export reports.",
@@ -462,6 +468,11 @@ function navigate(force = false) {
   $("#failure-groups").hidden = view !== "failures";
   if (view === "team") {
     renderTeam($("#alternate"));
+    return;
+  }
+  if (view === "workspace-settings") {
+    $("#report-content").hidden = false;
+    renderWorkspaceSettings($("#alternate"));
     return;
   }
   if (!report) return;
@@ -968,3 +979,66 @@ reloadUserPreferences().finally(() => {
     showReportLinkError(error);
   }
 });
+
+function renderWorkspaceSettings(alt) {
+  const state = userPreferences.getState();
+  const selected = state.preferences.appearance.colorMode;
+  alt.innerHTML = `<div class="workspace-settings">
+    <article class="settings-card appearance-card">
+      <span class="eyebrow">APPEARANCE</span>
+      <h2>Color Mode</h2>
+      <p id="color-mode-description">Choose whether the appearance is light, dark, or follows your computer's settings.</p>
+      <form id="appearance-form" aria-describedby="color-mode-description">
+        <fieldset class="color-mode-options" ${state.ready ? "" : "disabled"}>
+          <legend class="visually-hidden">Color Mode</legend>
+          ${[
+            ["light", "Light", "A bright, clear workspace."],
+            ["dark", "Dark", "A softer view for low light."],
+            ["system", "System", "Follow your computer's settings."],
+          ]
+            .map(
+              ([mode, label, description]) => `<label class="color-mode-option">
+            <span class="mode-preview mode-preview-${mode}" aria-hidden="true"><i></i><b></b><em></em></span>
+            <span class="mode-option-heading"><input type="radio" name="colorMode" value="${mode}" ${selected === mode ? "checked" : ""} /><strong>${label}</strong></span>
+            <small>${description}</small>
+          </label>`,
+            )
+            .join("")}
+        </fieldset>
+        <div class="settings-buttons"><button class="button primary" type="submit" ${state.ready ? "" : "disabled"}>Save appearance</button></div>
+        <p class="appearance-save-note">${state.ready ? "Your color mode is saved to your user preferences and applied throughout Tomatoes." : esc(state.error)}</p>
+      </form>
+    </article>
+    ${preferenceStatusMarkup()}
+  </div>`;
+  $("#reload-user-preferences").onclick = async () => {
+    const button = $("#reload-user-preferences");
+    button.disabled = true;
+    const loaded = await reloadUserPreferences();
+    if (view === "workspace-settings") renderWorkspaceSettings(alt);
+    showToast(
+      loaded.ready ? "Preferences reloaded." : loaded.error,
+      loaded.ready ? "success" : "error",
+    );
+  };
+  const form = $("#appearance-form");
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const colorMode = new FormData(form).get("colorMode");
+    form.inert = true;
+    form.setAttribute("aria-busy", "true");
+    const button = form.querySelector('button[type="submit"]');
+    button.textContent = "Saving...";
+    try {
+      const saved = await userPreferences.save({ appearance: { colorMode } });
+      Appearance.apply(saved.preferences.appearance.colorMode);
+      showToast("Appearance saved to your user preferences.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      form.inert = false;
+      form.removeAttribute("aria-busy");
+      button.textContent = "Save appearance";
+    }
+  };
+}

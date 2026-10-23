@@ -29,9 +29,9 @@
   margin-top: 9px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: white;
+  background: var(--theme-surface, white);
   padding: 11px;
-  color: #344852;
+  color: var(--theme-text, #344852);
   font-size: 12px;
 }
 .comparison-selectors small {
@@ -75,13 +75,13 @@
 .comparison-tabs span {
   padding: 2px 5px;
   border-radius: 4px;
-  background: #edf2f0;
+  background: var(--theme-surface-raised, #edf2f0);
   font-size: 10px;
 }
 .comparison-tabs .selected-comparison {
   border-color: #73b895;
-  background: #e7f3ed;
-  color: #17704f;
+  background: var(--theme-accent-surface, #e7f3ed);
+  color: var(--theme-accent-text, #17704f);
 }
 .comparison-search {
   margin: 15px 0;
@@ -90,7 +90,7 @@
   display: block;
   font-size: 11px;
   margin-bottom: 8px;
-  color: #74828e;
+  color: var(--theme-muted, #74828e);
 }
 .comparison-search input {
   width: 100%;
@@ -99,7 +99,7 @@
   border-radius: 6px;
   padding: 12px;
   font: inherit;
-  background: #fff;
+  background: var(--theme-surface, #fff);
 }
 .comparison-table th:first-child {
   width: 40%;
@@ -133,7 +133,7 @@
   padding: 22px;
   border: 1px solid var(--border);
   border-radius: 9px;
-  background: #fff;
+  background: var(--theme-surface, #fff);
 }
 #failure-groups .section-heading {
   margin-bottom: 12px;
@@ -152,7 +152,7 @@
   border: 1px solid var(--border);
   border-radius: 7px;
   margin: 10px 0;
-  background: #fafcfc;
+  background: var(--theme-surface, #fafcfc);
 }
 .failure-group summary {
   display: flex;
@@ -193,15 +193,15 @@
   height: 38px;
   padding: 0 6px;
   border-radius: 7px;
-  background: #f7e5e8;
-  color: #b34c5e;
+  background: var(--theme-danger-surface, #f7e5e8);
+  color: var(--theme-danger-text, #b34c5e);
   font-size: 16px;
   flex-shrink: 0;
 }
 .failure-group-evidence {
   padding: 0 18px 18px;
   border-top: 1px solid var(--border);
-  background: white;
+  background: var(--theme-surface, white);
 }
 .failure-group-evidence h3 {
   font-size: 12px;
@@ -217,7 +217,7 @@
 }
 .failure-group summary::after {
   content: "+";
-  color: #7c8d96;
+  color: var(--theme-muted, #7c8d96);
   font-size: 22px;
   font-weight: 400;
 }
@@ -239,7 +239,7 @@
   padding: 15px;
   border: 1px solid var(--border);
   border-radius: 7px;
-  background: #f8fbfa;
+  background: var(--theme-surface-raised, #f8fbfa);
 }
 .test-history-metrics strong {
   display: block;
@@ -287,7 +287,7 @@
   height: 5px;
   margin-top: 8px;
   border-radius: 4px;
-  background: #e7eeeb;
+  background: var(--theme-surface-raised, #e7eeeb);
   overflow: hidden;
 }
 .timeline-duration i {

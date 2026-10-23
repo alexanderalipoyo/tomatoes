@@ -1,0 +1,214 @@
+/* Shared dark surfaces and text. Existing light colors remain in component fallbacks. */
+:root[data-theme="dark"] {
+  --theme-surface: #1b2732;
+  --theme-surface-raised: #22323e;
+  --theme-text: #e2eaf0;
+  --theme-muted: #abbac6;
+  --theme-accent-text: #80dcb8;
+  --theme-danger-text: #f3a4b4;
+  --theme-warning-text: #ebc679;
+  --theme-info-text: #9cbdf6;
+  --theme-purple-text: #c4b4ed;
+  --theme-accent-surface: #203c34;
+  --theme-danger-surface: #442c36;
+  --theme-warning-surface: #40392a;
+  --theme-info-surface: #263850;
+  --theme-purple-surface: #352e47;
+  --theme-border: #354652;
+  --border: #354652;
+  --muted: #abbac6;
+  --green: #74d5ad;
+  color: #e2eaf0;
+  background: #121c25;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] :is(input, select, textarea) {
+  color: #e2eaf0;
+  background-color: #17232d;
+  border-color: #40535f;
+}
+:root[data-theme="dark"] input::placeholder {
+  color: #a0b0bd;
+}
+:root[data-theme="dark"] dialog {
+  color: #e2eaf0;
+  background: #1b2732;
+  border-color: #354652;
+}
+:root[data-theme="dark"] pre {
+  color: #f0b1bc;
+  background: #15202a;
+}
+:root[data-theme="dark"] .button.primary {
+  color: #fff;
+  background: #147653;
+  border-color: #278e69;
+}
+:root[data-theme="dark"] .button.primary:hover {
+  background: #1a8963;
+}
+:root[data-theme="dark"]
+  :is(.notice, .insight-source, .stability-banner, .custom-widget-empty) {
+  color: #bdd3ca;
+}
+:root[data-theme="dark"] .mode-preview {
+  color-scheme: light;
+}
+.workspace-label {
+  margin-top: 26px;
+}
+.workspace-settings {
+  max-width: 1000px;
+}
+.appearance-card {
+  margin-bottom: 22px;
+}
+.appearance-card h2 {
+  font-size: 23px;
+  margin: 12px 0;
+}
+.appearance-card > p {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.color-mode-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 0;
+  margin: 28px 0 0;
+  border: 0;
+}
+.appearance-card .color-mode-option {
+  margin: 0;
+  display: block;
+  min-width: 0;
+  padding: 12px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.color-mode-option:has(input:checked) {
+  border-color: var(--green);
+}
+.color-mode-option:has(input:focus-visible) {
+  outline: 2px solid var(--green);
+  outline-offset: 4px;
+}
+.color-mode-options:disabled {
+  opacity: 0.65;
+}
+.mode-option-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 16px 0 8px;
+  font-size: 14px;
+}
+.appearance-card .mode-option-heading input {
+  padding: 0;
+  display: inline-block;
+  flex-shrink: 0;
+  accent-color: #14835e;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+}
+.color-mode-option small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.mode-preview {
+  display: block;
+  height: 110px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #d1dbe1;
+  border-radius: 7px;
+  background: #f3f6f8;
+}
+.mode-preview i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 23%;
+  background: #24333f;
+}
+.mode-preview b {
+  position: absolute;
+  left: 31%;
+  right: 8%;
+  top: 18%;
+  height: 12%;
+  background: #b8c9d2;
+  border-radius: 3px;
+}
+.mode-preview em {
+  position: absolute;
+  left: 31%;
+  right: 8%;
+  top: 43%;
+  bottom: 17%;
+  background: #fff;
+  border: 1px solid #d8e2e6;
+  border-radius: 4px;
+}
+.mode-preview-dark {
+  background: #121c25;
+  border-color: #40535f;
+}
+.mode-preview-dark b {
+  background: #58717e;
+}
+.mode-preview-dark em {
+  background: #263946;
+  border-color: #40535f;
+}
+.mode-preview-system {
+  background: linear-gradient(90deg, #f3f6f8 50%, #121c25 50%);
+}
+.mode-preview-system em {
+  background: linear-gradient(90deg, #fff 31%, #263946 31%);
+  border-color: #76909e;
+}
+.appearance-save-note {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin-top: 18px;
+}
+@media (max-width: 600px) {
+  .color-mode-options {
+    grid-template-columns: 1fr;
+  }
+  .appearance-card .color-mode-option {
+    display: grid;
+    grid-template-columns: 100px minmax(0, 1fr);
+    column-gap: 16px;
+    align-items: center;
+  }
+  .mode-preview {
+    grid-row: 1 / 3;
+    height: 80px;
+  }
+  .mode-option-heading {
+    margin: 5px 0;
+  }
+  .color-mode-option small {
+    grid-column: 2;
+  }
+  .appearance-card .settings-buttons .button {
+    width: 100%;
+  }
+}
+
+.sidebar {
+  overflow-y: auto;
+}
+.sidebar > * {
+  flex-shrink: 0;
+}

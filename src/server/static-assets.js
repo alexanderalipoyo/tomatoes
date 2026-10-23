@@ -9,6 +9,7 @@ add("/index.html", "public/index.html");
 for (const name of [
   "app",
   "notifications",
+  "appearance",
   "report-navigation",
   "import-history",
   "report-import",
@@ -40,6 +41,7 @@ for (const name of [
 }
 for (const name of [
   "styles",
+  "appearance",
   "custom-widgets",
   "insights",
   "responsive",

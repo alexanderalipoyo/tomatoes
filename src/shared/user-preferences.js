@@ -3,6 +3,7 @@
     typeof module !== "undefined" && module.exports
       ? require("./dashboard-groups")
       : root.DashboardGroups;
+  const DEFAULT_APPEARANCE = { colorMode: "system" };
   const DEFAULT_DISPLAY = { timeZone: "Asia/Singapore", rows: 15 };
   function validatePatch(value) {
     if (
@@ -11,10 +12,12 @@
       Array.isArray(value) ||
       !Object.keys(value).length ||
       Object.keys(value).some(
-        (key) => !["display", "dashboardGroups"].includes(key),
+        (key) => !["display", "dashboardGroups", "appearance"].includes(key),
       )
     )
-      throw new Error("Use display or dashboardGroups preference sections.");
+      throw new Error(
+        "Use display, dashboardGroups, or appearance preference sections.",
+      );
     const result = {};
     if (Object.hasOwn(value, "display")) {
       const display = value.display;
@@ -39,6 +42,18 @@
       }
       result.display = { timeZone: display.timeZone, rows: display.rows };
     }
+    if (Object.hasOwn(value, "appearance")) {
+      const appearance = value.appearance;
+      if (
+        !appearance ||
+        typeof appearance !== "object" ||
+        Array.isArray(appearance) ||
+        Object.keys(appearance).some((key) => key !== "colorMode") ||
+        !["light", "dark", "system"].includes(appearance.colorMode)
+      )
+        throw new Error("Choose Light, Dark, or System color mode.");
+      result.appearance = { colorMode: appearance.colorMode };
+    }
     if (Object.hasOwn(value, "dashboardGroups"))
       result.dashboardGroups = Groups.validateGroups(value.dashboardGroups);
     return result;
@@ -47,12 +62,18 @@
     return {
       display: { ...DEFAULT_DISPLAY },
       dashboardGroups: [],
+      appearance: { ...DEFAULT_APPEARANCE },
       ...validatePatch(
         Object.keys(value).length ? value : { display: DEFAULT_DISPLAY },
       ),
     };
   }
-  const api = { DEFAULT_DISPLAY, validatePatch, withDefaults };
+  const api = {
+    DEFAULT_APPEARANCE,
+    DEFAULT_DISPLAY,
+    validatePatch,
+    withDefaults,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.UserPreferenceModel = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

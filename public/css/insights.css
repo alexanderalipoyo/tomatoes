@@ -5,11 +5,11 @@
   flex-wrap: wrap;
   gap: 12px;
   padding: 14px 18px;
-  background: #eef5f2;
-  border: 1px solid #dceae3;
+  background: var(--theme-surface-raised, #eef5f2);
+  border: 1px solid var(--theme-border, #dceae3);
   border-radius: 8px;
   margin-bottom: 18px;
-  color: #648071;
+  color: var(--theme-muted, #648071);
   font-size: 11px;
 }
 .insight-source > span:first-child {
@@ -26,7 +26,7 @@
 .insight-metric {
   padding: 20px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--theme-surface, #fff);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -35,7 +35,7 @@
 }
 .insight-metric > span {
   font-size: 10px;
-  color: #74828e;
+  color: var(--theme-muted, #74828e);
 }
 .insight-metric > strong {
   font-size: 26px;
@@ -44,7 +44,7 @@
 }
 .insight-metric > small {
   font-size: 9px;
-  color: #89959e;
+  color: var(--theme-muted, #89959e);
   line-height: 1.7;
 }
 .analytics-grid > .insight-card {
@@ -71,7 +71,7 @@
 }
 .pattern-row b {
   font-size: 12px;
-  color: #b54a5b;
+  color: var(--theme-danger-text, #b54a5b);
 }
 .pattern-track {
   display: block;
@@ -79,7 +79,7 @@
   border-radius: 4px;
   overflow: hidden;
   margin-top: 9px;
-  background: #f7edef;
+  background: var(--theme-danger-surface, #f7edef);
 }
 .pattern-track > i {
   display: block;
@@ -88,7 +88,7 @@
   border-radius: 4px;
 }
 .pattern-row:hover strong {
-  color: #aa3447;
+  color: var(--theme-danger-text, #aa3447);
 }
 .duration-distribution {
   display: flex;
@@ -105,7 +105,7 @@
 .duration-distribution span {
   width: 65px;
   flex-shrink: 0;
-  color: #74828e;
+  color: var(--theme-muted, #74828e);
 }
 .duration-distribution strong {
   width: 40px;
@@ -116,7 +116,7 @@
   display: block;
   flex: 1;
   height: 12px;
-  background: #edf3f2;
+  background: var(--theme-surface-raised, #edf3f2);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -146,7 +146,7 @@
 }
 .trend-row small {
   display: block;
-  color: #84929d;
+  color: var(--theme-muted, #84929d);
   font-size: 9px;
   font-weight: 400;
   margin-top: 5px;
@@ -161,7 +161,7 @@
   flex: 1;
   height: 6px;
   border-radius: 4px;
-  background: #edf3f2;
+  background: var(--theme-surface-raised, #edf3f2);
   overflow: hidden;
 }
 .trend-track > i {
@@ -175,8 +175,8 @@
 }
 .stability-banner {
   padding: 24px;
-  background: #edf5f2;
-  border: 1px solid #dceae3;
+  background: var(--theme-accent-surface, #edf5f2);
+  border: 1px solid var(--theme-border, #dceae3);
   border-radius: 9px;
   display: flex;
   gap: 18px;
@@ -191,8 +191,8 @@
 }
 .stability-symbol {
   padding: 12px;
-  background: #d7eade;
-  color: #27815e;
+  background: var(--theme-accent-surface, #d7eade);
+  color: var(--theme-accent-text, #27815e);
   border-radius: 10px;
 }
 .stability-toolbar {
@@ -230,14 +230,14 @@
 .stability-test small {
   display: block;
   font-size: 9px;
-  color: #84929d;
+  color: var(--theme-muted, #84929d);
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
 .stability-test > span {
   font-size: 10px;
   white-space: nowrap;
-  color: #84929d;
+  color: var(--theme-muted, #84929d);
 }
 .stability-test .button {
   font-size: 10px;
@@ -258,12 +258,12 @@
   border-radius: 3px;
 }
 .observation.passed {
-  background: #d9eee4;
-  color: #17704f;
+  background: var(--theme-accent-surface, #d9eee4);
+  color: var(--theme-accent-text, #17704f);
 }
 .observation.failed {
-  background: #f7dce2;
-  color: #aa3447;
+  background: var(--theme-danger-surface, #f7dce2);
+  color: var(--theme-danger-text, #aa3447);
 }
 .settings-layout {
   display: grid;
@@ -276,22 +276,22 @@
 .preference-form label {
   margin: 22px 0;
   font-size: 11px;
-  color: #4c606c;
+  color: var(--theme-text, #4c606c);
 }
 .preference-form select {
   display: block;
   width: 100%;
-  border: 1px solid #dce3e7;
+  border: 1px solid var(--theme-border, #dce3e7);
   border-radius: 6px;
-  background: #fff;
+  background: var(--theme-surface, #fff);
   padding: 11px;
   margin-top: 9px;
-  color: #344852;
+  color: var(--theme-text, #344852);
 }
 .preference-form label > small {
   display: block;
   font-size: 10px;
-  color: #84929d;
+  color: var(--theme-muted, #84929d);
   margin-top: 8px;
   line-height: 1.6;
 }
@@ -320,7 +320,7 @@
 }
 .source-details dt {
   font-size: 10px;
-  color: #84929d;
+  color: var(--theme-muted, #84929d);
   flex-shrink: 0;
 }
 .source-details dd {
@@ -348,7 +348,7 @@
 }
 .storage-summary span {
   font-size: 10px;
-  color: #84929d;
+  color: var(--theme-muted, #84929d);
   line-height: 1.8;
 }
 @media (max-width: 1100px) {
