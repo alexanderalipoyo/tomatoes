@@ -10,9 +10,9 @@ The application runs locally. Imports and evidence are available in your browser
 
 ## See Tomatoes in action
 
-[![Watch the Tomatoes animated promo](media/tomatoes-promo-poster.png)](media/tomatoes-promo.mp4)
+[![Watch the Tomatoes animated promo](docs/media/tomatoes-promo-poster.png)](docs/media/tomatoes-promo.mp4)
 
-[Watch or download the 28-second animated promo](media/tomatoes-promo.mp4), featuring the dashboard, insights, and responsive layouts with an original soundtrack.
+[Watch or download the 28-second animated promo](docs/media/tomatoes-promo.mp4), featuring the dashboard, insights, and responsive layouts with an original soundtrack.
 
 **Created by Alex Ali.**
 
@@ -27,7 +27,7 @@ npm start
 
 Open [Tomatoes](http://localhost:3000/#runs).
 
-The project includes a sample run in `results.json`, originally supplied as `index.json`. You can explore it immediately or choose **Import report** to open your own JSON file.
+The project includes a sample run in `examples/reports/results.json`, originally supplied as `index.json`. You can explore it immediately or choose **Import report** to open your own JSON file.
 
 ## Bring in a Cypress report
 
@@ -102,7 +102,7 @@ Successfully rendered reports are saved in **IndexedDB** in the current browser.
 
 History belongs to this browser and origin, including the localhost port. Clearing site data removes saved reports. Imports made before history was introduced need to be imported again. If storage is unavailable or full, valid reports remain usable for the current session and Tomatoes explains that they could not be saved.
 
-To change the bundled report, replace `results.json`, then select **Open bundled report** in Import history.
+To change the bundled report, replace `examples/reports/results.json`, then select **Open bundled report** in Import history.
 
 ## Run identity, evidence, and summaries
 
@@ -143,7 +143,7 @@ Start normally with `npm start`, then open **Team & CI**. **Publish report** sav
 Stop the running server before starting it with a different mode. From a PowerShell terminal:
 
 ```powershell
-node tools/team-admin.js add-user alex --projects tomatoes --role editor
+node scripts/team-admin.js add-user alex --projects tomatoes --role editor
 # Enter a password of at least 12 characters at the hidden prompt.
 $env:TOMATOES_TEAM_MODE = "1"
 npm start
@@ -156,14 +156,14 @@ Open **Team & CI** to sign in. Viewers can read allowed projects; editors and ad
 Create a project-scoped upload token:
 
 ```powershell
-node tools/team-admin.js create-ci-token tomatoes
+node scripts/team-admin.js create-ci-token tomatoes
 ```
 
 Save the returned token privately; only its hash is stored on disk. Provide it to your local CI runner as `TOMATOES_CI_TOKEN`, then run:
 
 ```powershell
 $env:TOMATOES_SERVER_URL = "http://127.0.0.1:3000"
-node tools/publish-report.js --file report.json --project tomatoes --environment staging --branch main --commit abc123
+node scripts/publish-report.js --file report.json --project tomatoes --environment staging --branch main --commit abc123
 ```
 
 The publisher validates the report before upload. Add `--dry-run` to validate without a token or upload. `--build-url` records a link to the build. Uploads are scoped to the token's project and appear in **Team & CI**. Repeating the same report in the same project updates its existing server entry.
@@ -174,7 +174,9 @@ A runner on another machine cannot reach this loopback-only server. External hos
 
 In file mode, `.tomatoes-data` contains server reports, the run index, account hashes, and token hashes. In PostgreSQL mode these records live in the database, while attachment bytes stay under `.tomatoes-data/attachments`. The private local folder is excluded from Git. Keep this directory private and back it up if needed. Set `TOMATOES_DATA_DIR` consistently for the server and administration tools to use another directory. To disable optional sign-in for your own local setup, remove `TOMATOES_TEAM_MODE` and restart the server.
 
-The browser UI is separated into report loading (`app.js`), insights (`insights.js`), investigations (`investigations.js`), evidence and metadata (`report-features.js`), and local team access (`team.js`). Styles are split into base, insights, investigations, responsive, and team files. Keyboard focus indicators, a skip link, and reduced-motion support complement the tablet and phone layouts.
+Application code lives in `src/client/` (browser views), `src/shared/` (reusable report models), and `src/server/` (HTTP APIs, storage adapters and database migrations). `public/` contains the page, styles, logo and fonts. Tests live in `tests/`, maintenance commands in `scripts/`, sample reports in `examples/reports/`, and promotional assets in `docs/media/`.
+
+See [Project structure](docs/ARCHITECTURE.md) for the directory tree, module responsibilities, data flow and guidance for adding features. Keyboard focus indicators, a skip link, and reduced-motion support complement the tablet and phone layouts.
 
 ## Development
 
@@ -189,7 +191,7 @@ The HTTP server binds to `127.0.0.1:3000` and serves a fixed list of project ass
 
 ## Branding
 
-The Tomatoes logo combines a red tomato, green leaves, and a cream checkmark. The scalable asset, `assets/tomatoes-logo.svg`, appears in the sidebar, workspace icon, and browser favicon.
+The Tomatoes logo combines a red tomato, green leaves, and a cream checkmark. The scalable asset, `public/assets/tomatoes-logo.svg`, appears in the sidebar, workspace icon, and browser favicon.
 
 ## Local PostgreSQL setup
 

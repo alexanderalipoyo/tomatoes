@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#18232d" />
+    <title>Tomatoes | Test results</title>
+    <meta name="application-name" content="Tomatoes" />
+    <link rel="icon" type="image/svg+xml" href="/assets/tomatoes-logo.svg" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link rel="stylesheet" href="/css/insights.css" />
+    <link rel="stylesheet" href="/css/responsive.css" />
+    <link rel="stylesheet" href="/css/investigations.css" />
+    <link rel="stylesheet" href="/css/team.css" />
+    <script src="/js/report-data.js" defer></script>
+    <script src="/js/import-history.js" defer></script>
+    <script src="/js/investigation-model.js" defer></script>
+    <script src="/js/investigations.js" defer></script>
+    <script src="/js/workspace-model.js" defer></script>
+    <script src="/js/workspace-tools.js" defer></script>
+    <script src="/js/insights.js" defer></script>
+    <script src="/js/report-features.js" defer></script>
+    <script src="/js/report-views.js" defer></script>
+    <script src="/js/report-pdf.js" defer></script>
+    <script src="/js/pdf-export.js" defer></script>
+    <script src="/js/team.js" defer></script>
+    <script src="/js/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <aside class="sidebar">
+      <a class="brand" href="#runs" aria-label="Tomatoes home"
+        ><img
+          class="brand-mark"
+          src="/assets/tomatoes-logo.svg"
+          width="40"
+          height="40"
+          alt=""
+        /><strong>tomatoes<span>TEST REPORTING</span></strong></a
+      >
+      <div class="workspace">
+        <span class="org-avatar"
+          ><img
+            src="/assets/tomatoes-logo.svg"
+            width="24"
+            height="24"
+            alt="" /></span
+        ><span>Tomatoes workspace<small>Local test reports</small></span>
+      </div>
+      <div class="side-label">PROJECT</div>
+      <div class="project-picker">Test reporting</div>
+      <nav aria-label="Project navigation">
+        <a href="#runs" data-view="runs" class="active"
+          ><span data-icon="runs"></span>Latest run<span class="nav-count"
+            >1</span
+          ></a
+        >
+        <a href="#results" data-view="results"
+          ><span data-icon="folder"></span>Test results</a
+        >
+        <a href="#failures" data-view="failures"
+          ><span data-icon="failure"></span>Failed tests<span
+            class="nav-count"
+            id="failure-count"
+            >—</span
+          ></a
+        >
+        <a href="#history" data-view="history"
+          ><span data-icon="clock"></span>Import history<span
+            class="nav-count"
+            id="history-count"
+            >0</span
+          ></a
+        >
+        <div class="side-label analytics-label">INSIGHTS</div>
+        <a href="#compare" data-view="compare"
+          ><span data-icon="branch"></span>Compare runs</a
+        >
+        <a href="#analytics" data-view="analytics"
+          ><span data-icon="chart"></span>Analytics</a
+        >
+        <a href="#flaky" data-view="flaky"
+          ><span data-icon="flake"></span>Flaky tests</a
+        >
+        <a href="#team" data-view="team"
+          ><span data-icon="folder"></span>Team &amp; CI</a
+        >
+        <a href="#settings" data-view="settings"
+          ><span data-icon="settings"></span>Report settings</a
+        >
+      </nav>
+      <div class="sidebar-bottom">
+        <p class="report-sidebar-note">
+          One report, every result.<br />Import a Mochawesome JSON file to
+          explore another run.
+        </p>
+      </div>
+    </aside>
+    <div class="shell">
+      <header class="topbar">
+        <button
+          class="mobile-menu-button icon-button"
+          id="open-navigation"
+          aria-label="Open navigation"
+          aria-haspopup="dialog"
+          aria-controls="mobile-navigation"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <a class="mobile-wordmark" href="#runs" aria-label="Tomatoes home"
+          ><img
+            src="/assets/tomatoes-logo.svg"
+            width="28"
+            height="28"
+            alt=""
+          /><strong>tomatoes</strong></a
+        >
+        <div class="breadcrumbs">
+          <span data-icon="folder"></span><span>Projects</span><span>/</span
+          ><strong>tomatoes</strong><span class="private">Local</span>
+        </div>
+        <span class="source-label" id="source-label">Loading report…</span>
+      </header>
+      <main id="main-content" tabindex="-1">
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow">TOMATOES TEST RESULTS</div>
+            <h1 id="page-title">Latest run</h1>
+            <p id="page-description">Results from your imported run.</p>
+          </div>
+          <div class="heading-actions">
+            <button class="button" id="refresh">
+              <span data-icon="refresh"></span>Reload</button
+            ><button class="button primary" id="import-report">
+              <span data-icon="plus"></span>Import report</button
+            ><input
+              type="file"
+              accept=".json,application/json"
+              id="report-file"
+              hidden
+            />
+          </div>
+        </div>
+        <div id="load-state" class="notice" role="alert">
+          Loading latest run…
+        </div>
+        <div
+          id="history-notice"
+          class="notice data-warning"
+          role="status"
+          hidden
+        ></div>
+        <div id="report-content" hidden>
+          <section id="overview" aria-label="Run summary">
+            <div class="run-summary" id="run-summary"></div>
+            <div class="metrics" id="metrics"></div>
+            <div class="dashboard-grid" id="dashboard-widgets">
+              <article class="dashboard-widget outcomes-widget">
+                <div class="widget-heading">
+                  <div>
+                    <h2>Test outcomes</h2>
+                    <p>All registered tests</p>
+                  </div>
+                  <span id="spec-summary"></span>
+                </div>
+                <div class="outcome-layout">
+                  <div id="outcome-chart"></div>
+                  <div id="outcome-legend" class="outcome-legend"></div>
+                </div>
+                <p class="widget-footnote">
+                  Pass rate includes pending and skipped tests.
+                </p>
+              </article>
+              <article class="dashboard-widget">
+                <div class="widget-heading">
+                  <div>
+                    <h2>Failure hotspots</h2>
+                    <p>Specs ranked by failed tests</p>
+                  </div>
+                  <a class="widget-link" href="#failures"
+                    >All failures &rarr;</a
+                  >
+                </div>
+                <div id="failure-hotspots"></div>
+              </article>
+              <article class="dashboard-widget">
+                <div class="widget-heading">
+                  <div>
+                    <h2>Spec health</h2>
+                    <p>Select a spec to explore its tests</p>
+                  </div>
+                  <span class="widget-count" id="spec-health-count"></span>
+                </div>
+                <div class="spec-health-grid" id="spec-health"></div>
+                <div class="spec-health-legend" id="spec-health-legend"></div>
+                <p class="widget-footnote">
+                  Green specs have passing tests and no failures; some may also
+                  have pending or skipped tests.
+                </p>
+              </article>
+              <article class="dashboard-widget">
+                <div class="widget-heading">
+                  <div>
+                    <h2>Slowest tests</h2>
+                    <p>Longest individual test durations</p>
+                  </div>
+                  <span data-icon="clock"></span>
+                </div>
+                <div id="slow-tests"></div>
+              </article>
+              <article class="dashboard-widget execution-widget">
+                <div class="widget-heading">
+                  <div>
+                    <h2>Execution coverage</h2>
+                    <p>Passed and failed tests out of all registered tests</p>
+                  </div>
+                  <button class="widget-link" id="view-not-executed">
+                    Review pending &rarr;
+                  </button>
+                </div>
+                <div id="execution-coverage"></div>
+              </article>
+              <article class="dashboard-widget timing-widget">
+                <div class="widget-heading">
+                  <div>
+                    <h2>Run timing</h2>
+                    <p>Duration measurements from this report</p>
+                  </div>
+                  <span data-icon="clock"></span>
+                </div>
+                <div id="run-timing"></div>
+              </article>
+            </div>
+            <div class="dashboard-actions">
+              <span>Explore the complete run, spec by spec.</span
+              ><a class="button" href="#results">Browse all results &rarr;</a>
+            </div>
+            <div id="data-warnings" role="status"></div>
+          </section>
+          <section
+            id="failure-groups"
+            aria-label="Grouped failures"
+            hidden
+          ></section>
+          <section id="results-section">
+            <div class="section-heading runs-heading">
+              <h2 id="list-title">Spec results</h2>
+              <div class="view-switch" aria-label="Result grouping">
+                <button class="selected" id="specs-view" aria-pressed="true">
+                  Specs</button
+                ><button id="tests-view" aria-pressed="false">Tests</button>
+              </div>
+            </div>
+            <div class="filters">
+              <label class="search"
+                ><span data-icon="search"></span
+                ><input
+                  id="search"
+                  placeholder="Search specs, tests, or errors"
+                  aria-label="Search results"
+                /><kbd>/</kbd></label
+              ><select id="spec-filter" aria-label="Filter spec">
+                <option value="all">All specs</option></select
+              ><select id="status" aria-label="Filter status">
+                <option value="all">All statuses</option>
+                <option value="failed">Failed</option>
+                <option value="passed">Passed</option>
+                <option value="pending">Pending</option>
+                <option value="skipped">Skipped</option>
+                <option value="unknown">Unknown</option></select
+              ><button class="button clear" id="clear">Clear filters</button>
+            </div>
+            <div class="results-scroll">
+              <table class="results-table">
+                <thead id="results-head"></thead>
+                <tbody id="results-body"></tbody>
+              </table>
+            </div>
+            <div class="pagination">
+              <span id="showing" role="status"></span>
+              <div>
+                <button id="prev" class="button" aria-label="Previous page">
+                  &larr;</button
+                ><span id="page-label"></span
+                ><button id="next" class="button" aria-label="Next page">
+                  &rarr;
+                </button>
+              </div>
+            </div>
+          </section>
+          <section id="alternate" hidden></section>
+        </div>
+        <section id="history-section" aria-label="Import history" hidden>
+          <div class="history-heading">
+            <div>
+              <h2>Saved reports</h2>
+              <p>
+                Open any previous import to revisit its dashboard and test
+                details.
+              </p>
+            </div>
+            <div class="history-heading-actions">
+              <span id="history-total"></span
+              ><button class="button" id="load-bundled">
+                Open bundled report
+              </button>
+            </div>
+          </div>
+          <div id="history-list"></div>
+          <p class="notice history-storage-note">
+            Saved locally in this browser. Clearing site data removes saved
+            imports. Reports imported before history was added need to be
+            imported again.
+          </p>
+        </section>
+        <footer>
+          <span>Local Mochawesome report</span
+          ><span id="report-footer">Awaiting results</span>
+        </footer>
+      </main>
+    </div>
+    <dialog
+      id="mobile-navigation"
+      class="mobile-navigation"
+      aria-labelledby="navigation-title"
+    >
+      <div class="mobile-navigation-heading">
+        <a href="#runs" class="mobile-drawer-brand"
+          ><img
+            src="/assets/tomatoes-logo.svg"
+            width="38"
+            height="38"
+            alt=""
+          /><strong id="navigation-title">tomatoes</strong></a
+        ><button
+          class="icon-button"
+          id="close-navigation"
+          aria-label="Close navigation"
+        >
+          ×
+        </button>
+      </div>
+      <nav aria-label="Mobile project navigation">
+        <a href="#runs" data-view="runs"
+          ><span data-icon="runs"></span>Latest run</a
+        >
+        <a href="#results" data-view="results"
+          ><span data-icon="folder"></span>Test results</a
+        >
+        <a href="#failures" data-view="failures"
+          ><span data-icon="failure"></span>Failed tests</a
+        >
+        <a href="#history" data-view="history"
+          ><span data-icon="clock"></span>Import history</a
+        >
+        <div class="side-label">INSIGHTS</div>
+        <a href="#compare" data-view="compare"
+          ><span data-icon="branch"></span>Compare runs</a
+        >
+        <a href="#analytics" data-view="analytics"
+          ><span data-icon="chart"></span>Analytics</a
+        >
+        <a href="#flaky" data-view="flaky"
+          ><span data-icon="flake"></span>Flaky tests</a
+        >
+        <a href="#team" data-view="team"
+          ><span data-icon="folder"></span>Team &amp; CI</a
+        >
+        <a href="#settings" data-view="settings"
+          ><span data-icon="settings"></span>Report settings</a
+        >
+      </nav>
+      <p class="mobile-navigation-note">
+        Your test results, wherever you work.
+      </p>
+    </dialog>
+    <dialog id="detail" aria-labelledby="detail-title">
+      <button class="dialog-close icon-button" aria-label="Close dialog">
+        ×
+      </button>
+      <div id="detail-content"></div>
+    </dialog>
+    <dialog
+      id="import-progress"
+      class="import-progress"
+      aria-labelledby="progress-title"
+      aria-describedby="progress-stage"
+      tabindex="-1"
+    >
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <h2 id="progress-title">Preparing your report</h2>
+      <p id="progress-stage" role="status" aria-live="polite">
+        Reading report file
+      </p>
+      <progress
+        id="render-progress"
+        max="100"
+        value="0"
+        aria-label="Report processing progress"
+      ></progress>
+      <div class="progress-caption">
+        <span id="progress-percent">0%</span
+        ><span>Please wait until rendering finishes</span>
+      </div>
+    </dialog>
+    <div id="toast" role="status"></div>
+  </body>
+</html>

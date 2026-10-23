@@ -8,3 +8,6 @@ tmp/pdfs/
 .env
 .env.*
 !.env.example
+/package.json
+/.gitignore
+/.prettierignore
