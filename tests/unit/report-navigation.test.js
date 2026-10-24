@@ -30,7 +30,14 @@ function fixture(hash, search = "?import=invalid") {
   return { context, calls, elements };
 }
 test("workspace and history routes bypass report lookup even with malformed or previously failed report links", async () => {
-  for (const hash of ["#workspace-settings", "#team", "#history"]) {
+  for (const hash of [
+    "#projects",
+    "#integrations",
+    "#profile",
+    "#workspace-settings",
+    "#team",
+    "#history",
+  ]) {
     const f = fixture(hash);
     vm.runInNewContext("failedReportLinkKey = location.search", f.context);
     await f.context.navigateReportLocation();
@@ -54,4 +61,28 @@ test("returning to an unavailable report restores its error view rather than lea
   assert.deepEqual(f.calls, ["navigate"]);
   assert.equal(f.elements["#report-content"].hidden, true);
   assert.equal(f.elements["#load-state"].hidden, false);
+});
+
+test("report links resolve both legacy IDs and branch-aware IDs without matching a different branch", async () => {
+  const { webcrypto, createHash } = require("node:crypto");
+  const ReportData = require("../../src/shared/report-data");
+  const f = fixture("#runs");
+  Object.assign(f.context, { crypto: webcrypto, TextEncoder, ReportData });
+  const raw = { tomatoes: { project: "web" } };
+  const text = JSON.stringify(raw);
+  const saved = {
+    originalText: text,
+    report: raw,
+    run: { metadata: { project: "web", branch: "main" } },
+  };
+  const id = (branch) =>
+    createHash("sha256")
+      .update(ReportData.reportIdentityText(text, "web", branch))
+      .digest("hex");
+  assert.equal(await f.context.serverMatchesImport(saved, id("")), true);
+  assert.equal(await f.context.serverMatchesImport(saved, id("main")), true);
+  assert.equal(
+    await f.context.serverMatchesImport(saved, id("feature/a")),
+    false,
+  );
 });

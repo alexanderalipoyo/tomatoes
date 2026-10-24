@@ -24,46 +24,50 @@ async function originalReportText() {
   if (!response.ok) throw new Error("Report source unavailable.");
   return response.text();
 }
+function isTeamSettingsView(alt) {
+  return isSharingSettingsView() && alt.isConnected;
+}
 async function renderTeam(alt) {
+  if (!isTeamSettingsView(alt)) return;
   const version = ++teamRenderVersion;
   $("#report-content").hidden = false;
   alt.innerHTML =
     '<article class="insight-card"><p role="status">Connecting to the local team store…</p></article>';
   try {
     const status = await teamRequest("/api/team/status");
-    if (view !== "team" || version !== teamRenderVersion) return;
+    if (!isTeamSettingsView(alt) || version !== teamRenderVersion) return;
     teamState = status;
     if (status.enabled && !status.authenticated) {
       alt.innerHTML = `<form id="team-login" class="settings-card preference-form team-login"><h2>Sign in to the local team store</h2><p>Your account determines which projects you can access. Browser import history is stored separately on this device.</p><label>Username<input id="team-username" autocomplete="username" required maxlength="64"/></label><label>Password<input id="team-password" type="password" autocomplete="current-password" required maxlength="256"/></label><button class="button primary" type="submit">Sign in</button><p id="team-login-error" role="alert"></p></form><article class="settings-card"><h2>Local account setup</h2><p>In a terminal, create an account with a role and project scope:</p><pre>node scripts/team-admin.js add-user alex --projects tomatoes --role editor</pre><p class="widget-footnote">Account setup runs on this machine; the password is prompted without echo.</p></article>`;
       $("#team-login").onsubmit = async (event) => {
         event.preventDefault();
-        const submit = event.target.querySelector("button");
+        const form = event.target;
+        const submit = form.querySelector("button");
+        const username = form.querySelector("#team-username");
+        const password = form.querySelector("#team-password");
         submit.disabled = true;
         try {
           await teamRequest("/api/login", {
             method: "POST",
             body: JSON.stringify({
-              username: $("#team-username").value,
-              password: $("#team-password").value,
+              username: username.value,
+              password: password.value,
             }),
           });
-          $("#team-password").value = "";
+          password.value = "";
           await reloadUserPreferences();
           await renderTeam(alt);
           showToast("Signed in. Your preferences are loaded.", "success");
         } catch (error) {
-          $("#team-login-error").textContent = error.message;
+          form.querySelector("#team-login-error").textContent = error.message;
           showToast(error.message, "error");
           submit.disabled = false;
         }
       };
       return;
     }
-    const payload = await teamRequest(
-      "/api/runs" +
-        (teamProject ? "?project=" + encodeURIComponent(teamProject) : ""),
-    );
-    if (view !== "team" || version !== teamRenderVersion) return;
+    const payload = await teamRequest("/api/runs");
+    if (!isTeamSettingsView(alt) || version !== teamRenderVersion) return;
     const projects = [
       ...new Set([
         ...(status.user?.projects || []).filter((project) => project !== "*"),
@@ -71,8 +75,12 @@ async function renderTeam(alt) {
         report?.metadata?.project || "tomatoes",
       ]),
     ].sort();
+    if (teamProject && !projects.includes(teamProject)) teamProject = "";
+    const visibleRuns = teamProject
+      ? payload.runs.filter((run) => run.metadata.project === teamProject)
+      : payload.runs;
     const editable = !status.user || status.user.role !== "viewer";
-    alt.innerHTML = `<div class="insight-source"><span>${status.enabled ? `Signed in as ${esc(status.user.username)} · ${esc(status.user.role)}` : "Local mode · sign-in is optional"}</span><span>${status.storage === "postgres" ? "PostgreSQL connected · local database" : "File storage on this machine"} ${status.enabled ? '<button class="button" id="team-logout">Sign out</button>' : ""}</span></div><div class="team-layout"><article class="settings-card"><h2>Shared reports</h2><p>Filter by project and open a report as a browser copy.</p><label class="team-project-label">Project<select id="team-project"><option value="">All accessible projects</option>${projects.map((project) => `<option value="${esc(project)}" ${project === teamProject ? "selected" : ""}>${esc(project)}</option>`).join("")}</select></label><p class="widget-footnote">Opening a report saves a copy in this browser's import history, including after sign-out.</p><div id="team-runs">${payload.runs.map((run) => `<article class="shared-run"><div>${badge(run.status)}<strong>${esc(run.label || run.name)}</strong>${run.notes ? `<p>${esc(run.notes)}</p>` : ""}<p>${esc(run.metadata.project)}${run.metadata.environment ? " / " + esc(run.metadata.environment) : ""} · ${number(run.counts.total)} tests · ${run.counts.failed} failed</p><small>${esc(date(run.start))}</small>${run.metadata.branch ? `<small>Branch ${esc(run.metadata.branch)}${run.metadata.commit ? " · " + esc(run.metadata.commit) : ""}</small>` : ""}</div><button class="button" data-open-shared="${run.id}">Open browser copy</button></article>`).join("") || '<p class="widget-empty">No shared reports in this project yet.</p>'}</div></article><div><form class="settings-card preference-form" id="publish-current"><h2>Publish selected run</h2><p>Copy the currently viewed report into the local server store.</p><label>Project<input id="publish-project" value="${esc(report?.metadata?.project || projects[0] || "tomatoes")}" required maxlength="80"/></label><button class="button primary" ${!report || !editable ? "disabled" : ""}>Publish report</button><p id="team-feedback" role="status">${editable ? "" : "Your account has read-only access."}</p></form><article class="settings-card"><h2>CI report collection</h2><p>${status.ciConfigured ? "A project-scoped CI token is configured." : "Create a project-scoped token on this machine to enable CI uploads."}</p><pre>node scripts/team-admin.js create-ci-token tomatoes</pre><p>Store the returned token in your CI secret named TOMATOES_CI_TOKEN, then publish the report:</p><pre>node scripts/publish-report.js --file report.json --project tomatoes --environment staging --branch main</pre><p class="widget-footnote">The publisher reads TOMATOES_SERVER_URL and TOMATOES_CI_TOKEN from the environment. A remote CI runner must be able to reach this local server; a runner on this machine can use localhost.</p></article><article class="settings-card"><h2>Optional local sign-in</h2><p>Create users with viewer, editor, or admin roles, then start the server with TOMATOES_TEAM_MODE=1. Each user has an explicit project scope.</p><p class="widget-footnote">${status.storage === "postgres" ? "Reports, account hashes, CI token hashes, and attachment metadata are stored in PostgreSQL. Attachment files stay in the private local storage folder." : "Server reports are saved under .tomatoes-data and excluded from Git."} Existing browser imports can be copied using Save browser imports. New file imports are copied automatically when PostgreSQL access is available.</p></article></div></div>`;
+    alt.innerHTML = `<div class="insight-source"><span>${status.enabled ? `Signed in as ${esc(status.user.username)} · ${esc(status.user.role)}` : "Local mode · sign-in is optional"}</span><span>${status.storage === "postgres" ? "PostgreSQL connected · local database" : "File storage on this machine"} ${status.enabled ? '<button class="button" id="team-logout">Sign out</button>' : ""}</span></div><div class="team-layout"><article class="settings-card"><h2>Shared reports</h2><p>Filter by project and open a report as a browser copy.</p><label class="team-project-label">Project<select id="team-project"><option value="">All accessible projects</option>${projects.map((project) => `<option value="${esc(project)}" ${project === teamProject ? "selected" : ""}>${esc(project)}</option>`).join("")}</select></label><p class="widget-footnote">Opening a report saves a copy in this browser's import history, including after sign-out.</p><div id="team-runs">${visibleRuns.map((run) => `<article class="shared-run"><div>${badge(run.status)}<strong>${esc(run.label || run.name)}</strong>${run.notes ? `<p>${esc(run.notes)}</p>` : ""}<p>${esc(run.metadata.project)}${run.metadata.environment ? " / " + esc(run.metadata.environment) : ""} · ${number(run.counts.total)} tests · ${run.counts.failed} failed</p><small>${esc(date(run.start))}</small>${run.metadata.branch ? `<small>Branch ${esc(run.metadata.branch)}${run.metadata.commit ? " · " + esc(run.metadata.commit) : ""}</small>` : ""}</div><button class="button" data-open-shared="${run.id}">Open browser copy</button></article>`).join("") || '<p class="widget-empty">No shared reports in this project yet.</p>'}</div></article><div><form class="settings-card preference-form" id="publish-current"><h2>Publish selected run</h2><p>Copy the currently viewed report into the local server store.</p><label>Project<input id="publish-project" value="${esc(report?.metadata?.project || projects[0] || "tomatoes")}" required maxlength="80"/></label><button class="button primary" ${!report || !editable ? "disabled" : ""}>Publish report</button><p id="team-feedback" role="status">${!editable ? "Your account has read-only access." : !report ? "Open a run from Projects or Shared reports to enable publishing." : ""}</p></form><article class="settings-card"><h2>Optional local sign-in</h2><p>Create users with viewer, editor, or admin roles, then start the server with TOMATOES_TEAM_MODE=1. Each user has an explicit project scope.</p><p class="widget-footnote">${status.storage === "postgres" ? "Reports, account hashes, CI token hashes, and attachment metadata are stored in PostgreSQL. Attachment files stay in the private local storage folder." : "Server reports are saved under .tomatoes-data and excluded from Git."} Existing browser imports can be copied using Save browser imports. New file imports are copied automatically when PostgreSQL access is available.</p></article></div></div>`;
     $("#team-project").onchange = (event) => {
       teamProject = event.target.value;
       renderTeam(alt);
@@ -215,7 +223,7 @@ async function renderTeam(alt) {
         }),
     );
   } catch (error) {
-    if (view === "team" && version === teamRenderVersion)
+    if (isTeamSettingsView(alt) && version === teamRenderVersion)
       alt.innerHTML = `<article class="settings-card"><h2>Local team store unavailable</h2><p role="alert">${esc(error.message)}</p><button class="button" id="retry-team">Reconnect</button></article>`;
     if ($("#retry-team")) $("#retry-team").onclick = () => renderTeam(alt);
   }
@@ -310,7 +318,7 @@ async function syncImportedReport(entry) {
       return {
         saved: false,
         notice:
-          "Saved in this browser. Sign in under Team & CI to save a PostgreSQL copy.",
+          "Saved in this browser. Sign in under Settings > Sharing & access to save a PostgreSQL copy.",
       };
     if (status.user?.role === "viewer")
       return {

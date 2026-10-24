@@ -152,3 +152,14 @@ test("PDF options filter failure details while preserving full-run totals, and s
   const absent = await generate(report, { failureSpec: "different.cy.ts" });
   assert.match(absent.content, /0 of 2 failures match/);
 });
+
+test("PDF headers include saved workspace branding and an embedded logo", async () => {
+  const { doc, content } = await generate(fixture([]), {
+    branding: {
+      name: "Alpha Workspace",
+      logo: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAAAoCAYAAABpYH0BAAAAX0lEQVR4nO3QMQ0AIADAMJSgE02YBA88ZEmP/UvH3OvovfF7oB5AgADTAQQIMB1AgADTAQQIMB1AgADTAQQIMB1AgADTAQQIMB1AgADTAQQIMB1AgADTAQQIMB1AgH+7OOUVJRQH+MAAAAAASUVORK5CYII=",
+    },
+  });
+  assert.match(content, /Alpha Workspace/);
+  assert.ok(Object.keys(doc.internal.collections.addImage_images).length > 0);
+});

@@ -203,6 +203,9 @@ if (typeof document !== "undefined") {
         paintProgress(15, "Loading PDF tools");
         const [jsPDF, fontData] = await loadPDFResources();
         const doc = await ReportPDF.createDocument(selected, name, {
+          branding: workspaceBranding(
+            selected.metadata?.project || currentWorkspaceProject,
+          ),
           jsPDF,
           fontData,
           groups: Investigations.failureGroups(selected),

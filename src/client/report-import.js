@@ -1,5 +1,11 @@
 (function (root) {
-  function setup({ document, isBusy, importFile }) {
+  function setup({
+    document,
+    isBusy,
+    importFile,
+    prepareImport = null,
+    getImportOptions = () => ({}),
+  }) {
     const get = (id) => document.getElementById(id);
     const dialog = get("import-dialog");
     const zone = get("report-drop-zone");
@@ -7,7 +13,8 @@
     const error = get("import-selection-error");
     let dragDepth = 0;
     let importing = false;
-    const busy = () => importing || isBusy();
+    let preparing = false;
+    const busy = () => importing || preparing || isBusy();
     const isFileDrag = (event) =>
       Array.from(event.dataTransfer?.types || []).includes("Files");
     function resetDrag() {
@@ -28,21 +35,42 @@
         error.hidden = false;
         return;
       }
+      let options;
+      try {
+        options = getImportOptions();
+      } catch (issue) {
+        error.hidden = false;
+        error.textContent = issue.message;
+        return;
+      }
       clearError();
       importing = true;
       dialog.close();
       try {
-        await importFile(files[0]);
+        await importFile(files[0], options);
       } finally {
         importing = false;
         input.value = "";
       }
     }
-    get("import-report").addEventListener("click", () => {
+    get("import-report").addEventListener("click", async () => {
       if (busy() || dialog.open) return;
       clearError();
       resetDrag();
       dialog.showModal();
+      if (prepareImport) {
+        preparing = true;
+        get("browse-report").disabled = true;
+        try {
+          await prepareImport();
+        } catch (issue) {
+          error.hidden = false;
+          error.textContent = issue.message;
+        } finally {
+          preparing = false;
+          get("browse-report").disabled = false;
+        }
+      }
     });
     get("close-import").addEventListener("click", () => dialog.close());
     dialog.addEventListener("close", resetDrag);

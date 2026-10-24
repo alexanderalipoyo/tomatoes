@@ -1,4 +1,8 @@
 (function (root) {
+  const Data =
+    typeof module !== "undefined" && module.exports
+      ? require("../shared/report-data")
+      : root.ReportData;
   function createHistory({
     indexedDB = root.indexedDB,
     crypto = root.crypto,
@@ -110,8 +114,11 @@
       const digest = await crypto.subtle.digest(
         "SHA-256",
         new TextEncoder().encode(
-          (report.metadata?.project ? report.metadata.project + "\0" : "") +
+          Data.reportIdentityText(
             text,
+            report.metadata?.project || "",
+            report.metadata?.branch || "",
+          ),
         ),
       );
       const id = Array.from(new Uint8Array(digest), (byte) =>

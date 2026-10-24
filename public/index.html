@@ -28,6 +28,7 @@
     <script src="/js/custom-widgets.js" defer></script>
     <script src="/js/import-history.js" defer></script>
     <script src="/js/report-import.js" defer></script>
+    <script src="/js/import-branches.js" defer></script>
     <script src="/js/investigation-model.js" defer></script>
     <script src="/js/investigations.js" defer></script>
     <script src="/js/workspace-model.js" defer></script>
@@ -38,6 +39,11 @@
     <script src="/js/report-pdf.js" defer></script>
     <script src="/js/pdf-export.js" defer></script>
     <script src="/js/team.js" defer></script>
+    <script src="/js/workspace-menu.js" defer></script>
+    <script src="/js/project-catalog.js" defer></script>
+    <script src="/js/projects.js" defer></script>
+    <script src="/js/integrations.js" defer></script>
+    <script src="/js/profile.js" defer></script>
     <script src="/js/app.js" defer></script>
   </head>
   <body>
@@ -52,15 +58,26 @@
           alt=""
         /><strong>tomatoes<span>TEST REPORTING</span></strong></a
       >
-      <div class="workspace">
-        <span class="org-avatar"
+      <button
+        class="workspace"
+        type="button"
+        data-workspace-trigger
+        popovertarget="workspace-menu"
+        aria-haspopup="dialog"
+        aria-controls="workspace-menu"
+        aria-expanded="false"
+      >
+        <span class="org-avatar" data-workspace-logo
           ><img
             src="/assets/tomatoes-logo.svg"
             width="24"
             height="24"
             alt="" /></span
-        ><span>Tomatoes workspace<small>Local test reports</small></span>
-      </div>
+        ><span class="workspace-identity-text"
+          ><span data-workspace-name>Tomatoes workspace</span
+          ><small data-workspace-user>Alex Ali</small></span
+        >
+      </button>
       <div class="side-label">PROJECT</div>
       <div class="project-picker">Test reporting</div>
       <nav aria-label="Project navigation">
@@ -96,15 +113,22 @@
         <a href="#flaky" data-view="flaky"
           ><span data-icon="flake"></span>Flaky tests</a
         >
-        <div class="side-label workspace-label">WORKSPACE</div>
-        <a href="#team" data-view="team"
-          ><span data-icon="folder"></span>Team &amp; CI</a
+      </nav>
+      <nav data-workspace-navigation aria-label="Workspace navigation" hidden>
+        <a href="#projects" data-view="projects"
+          ><span data-icon="folder"></span>Projects</a
         >
-        <a href="#settings" data-view="settings"
-          ><span data-icon="settings"></span>Report settings</a
+        <a href="#profile" data-view="profile"
+          ><span data-icon="profile"></span>My profile</a
         >
         <a href="#workspace-settings" data-view="workspace-settings"
           ><span data-icon="settings"></span>Settings</a
+        >
+        <a href="#settings" data-view="settings"
+          ><span data-icon="chart"></span>Report settings</a
+        >
+        <a href="#integrations" data-view="integrations"
+          ><span data-icon="integration"></span>Integration</a
         >
       </nav>
       <div class="sidebar-bottom">
@@ -363,6 +387,89 @@
         </footer>
       </main>
     </div>
+    <section
+      id="workspace-menu"
+      popover="auto"
+      role="dialog"
+      aria-labelledby="workspace-menu-title"
+    >
+      <header class="workspace-menu-header">
+        <span
+          class="workspace-menu-avatar"
+          data-workspace-initials
+          aria-hidden="true"
+          >TW</span
+        >
+        <div class="workspace-menu-heading">
+          <strong id="workspace-menu-title" data-workspace-name
+            >Tomatoes workspace</strong
+          ><span data-workspace-user>Alex Ali</span>
+        </div>
+        <button
+          type="button"
+          class="workspace-menu-close"
+          popovertarget="workspace-menu"
+          popovertargetaction="hide"
+          aria-label="Close workspace menu"
+          autofocus
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </header>
+      <div class="workspace-menu-organizations">
+        <h2>YOUR ORGANIZATIONS</h2>
+        <button
+          type="button"
+          class="workspace-menu-organization"
+          id="workspace-menu-current"
+          aria-label="Current workspace"
+        >
+          <span
+            class="workspace-menu-avatar small"
+            data-workspace-initials
+            aria-hidden="true"
+            >TW</span
+          >
+          <strong data-workspace-name>Tomatoes workspace</strong>
+          <svg
+            class="workspace-menu-selected"
+            viewBox="0 0 20 20"
+            aria-label="Selected"
+          >
+            <circle cx="10" cy="10" r="7" />
+            <path d="m7 10 2 2 4-4" />
+          </svg>
+        </button>
+        <a class="workspace-menu-create" href="#team" data-workspace-menu-link
+          ><span class="workspace-menu-plus" aria-hidden="true">+</span>Create
+          new organization...</a
+        >
+      </div>
+      <div class="workspace-menu-account">
+        <h2>YOUR ACCOUNT</h2>
+        <div class="workspace-menu-signed-in">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="16" r="16" fill="#c8c8c8" />
+            <circle cx="16" cy="13" r="7" fill="white" />
+            <path d="M5 31a11 11 0 0 1 22 0" fill="white" /></svg
+          ><span id="workspace-menu-account-label"
+            >Signed in as <span data-workspace-user>Alex Ali</span></span
+          >
+        </div>
+        <button type="button" id="workspace-menu-profile">
+          Manage profile
+        </button>
+        <button type="button" id="workspace-menu-sign-out">Sign out</button>
+      </div>
+      <footer class="workspace-menu-footer">
+        <button type="button" data-workspace-policy="terms">Terms of Use</button
+        ><button type="button" data-workspace-policy="privacy">
+          Privacy Policy
+        </button>
+      </footer>
+    </section>
     <dialog
       id="mobile-navigation"
       class="mobile-navigation"
@@ -384,6 +491,19 @@
           ×
         </button>
       </div>
+      <button
+        class="mobile-workspace-identity"
+        type="button"
+        data-workspace-trigger
+        popovertarget="workspace-menu"
+        aria-haspopup="dialog"
+        aria-controls="workspace-menu"
+        aria-expanded="false"
+      >
+        <span data-workspace-logo></span
+        ><span data-workspace-name>Tomatoes workspace</span>
+        <small data-workspace-user>Alex Ali</small>
+      </button>
       <nav aria-label="Mobile project navigation">
         <a href="#runs" data-view="runs"
           ><span data-icon="runs"></span>Latest run</a
@@ -407,15 +527,22 @@
         <a href="#flaky" data-view="flaky"
           ><span data-icon="flake"></span>Flaky tests</a
         >
-        <div class="side-label workspace-label">WORKSPACE</div>
-        <a href="#team" data-view="team"
-          ><span data-icon="folder"></span>Team &amp; CI</a
+      </nav>
+      <nav data-workspace-navigation aria-label="Workspace navigation" hidden>
+        <a href="#projects" data-view="projects"
+          ><span data-icon="folder"></span>Projects</a
         >
-        <a href="#settings" data-view="settings"
-          ><span data-icon="settings"></span>Report settings</a
+        <a href="#profile" data-view="profile"
+          ><span data-icon="profile"></span>My profile</a
         >
         <a href="#workspace-settings" data-view="workspace-settings"
           ><span data-icon="settings"></span>Settings</a
+        >
+        <a href="#settings" data-view="settings"
+          ><span data-icon="chart"></span>Report settings</a
+        >
+        <a href="#integrations" data-view="integrations"
+          ><span data-icon="integration"></span>Integration</a
         >
       </nav>
       <p class="mobile-navigation-note">
@@ -445,6 +572,26 @@
         id="report-file"
         hidden
       />
+      <div class="import-branch-fields">
+        <label for="import-branch">Branch</label>
+        <select id="import-branch" aria-describedby="import-branch-hint">
+          <option value="__report__">Use branch from report</option>
+          <option value="__new__">Create a new branch...</option>
+        </select>
+        <div id="import-new-branch-field" hidden>
+          <label for="import-new-branch">New branch name</label
+          ><input
+            id="import-new-branch"
+            type="text"
+            maxlength="160"
+            placeholder="e.g. feature/login-tests"
+            autocomplete="off"
+          />
+        </div>
+        <p id="import-branch-hint" role="status">
+          Choose a previous branch or add a new one before selecting your file.
+        </p>
+      </div>
       <div class="report-drop-zone" id="report-drop-zone">
         <svg
           class="import-upload-icon"
@@ -478,6 +625,11 @@
         if the file is invalid.
       </p>
     </dialog>
+    <dialog
+      id="integration-setup"
+      class="integration-setup"
+      aria-labelledby="integration-setup-title"
+    ></dialog>
     <dialog id="detail" aria-labelledby="detail-title">
       <button class="dialog-close icon-button" aria-label="Close dialog">
         ×

@@ -169,3 +169,112 @@ test("appearance persists independently of report preferences and across reloads
     "system",
   );
 });
+
+test("profile preferences validate contact details and preserve other preference sections", async () => {
+  for (const profile of [
+    null,
+    [],
+    { firstName: "Alex", lastName: "Ali", email: "not-an-email" },
+    { firstName: "Alex", lastName: "Ali", email: "", role: "admin" },
+    { firstName: "Alex", lastName: "x".repeat(81), email: "" },
+    { firstName: "Alex\n", lastName: "Ali", email: "" },
+  ])
+    assert.throws(() => Model.validatePatch({ profile }));
+  const f = fixture({ signedIn: true });
+  await f.client.initialize();
+  await f.client.save({
+    profile: {
+      firstName: " Alex ",
+      lastName: " Ali ",
+      email: " alex@example.com ",
+    },
+  });
+  await f.client.save({ appearance: { colorMode: "dark" } });
+  const reloaded = await f.client.initialize();
+  assert.deepEqual(reloaded.preferences.profile, {
+    firstName: "Alex",
+    lastName: "Ali",
+    email: "alex@example.com",
+  });
+  assert.equal(reloaded.preferences.appearance.colorMode, "dark");
+  f.setStatus({
+    enabled: true,
+    authenticated: true,
+    user: { username: "other" },
+  });
+  assert.deepEqual(
+    (await f.client.initialize()).preferences.profile,
+    Model.DEFAULT_PROFILE,
+  );
+});
+
+test("last used branch defaults survive preference reloads without replacing display or other project defaults", async () => {
+  const f = fixture({ signedIn: true });
+  await f.client.initialize();
+  const importBranches = [
+    { project: "web", branch: "feature/a" },
+    { project: "api", branch: "main" },
+  ];
+  await f.client.save({ importBranches });
+  await f.client.save({ display: { timeZone: "UTC", rows: 30 } });
+  const restored = await f.client.initialize();
+  assert.deepEqual(restored.preferences.importBranches, importBranches);
+  assert.equal(restored.preferences.display.rows, 30);
+});
+
+test("profile change tracking ignores whitespace and clearing a reverted edit", () => {
+  const saved = {
+    firstName: "Alex",
+    lastName: "Ali",
+    email: "alex@example.com",
+  };
+  assert.equal(Model.profileChanged(saved, { ...saved }), false);
+  assert.equal(
+    Model.profileChanged(saved, { ...saved, firstName: " Alex " }),
+    false,
+  );
+  assert.equal(
+    Model.profileChanged(saved, { ...saved, firstName: "Other" }),
+    true,
+  );
+  assert.equal(Model.profileChanged(saved, { ...saved, email: "" }), true);
+});
+
+test("workspace branding persists by project without replacing other preferences", async () => {
+  const f = fixture({});
+  await f.client.initialize();
+  const workspaces = [
+    {
+      project: "alpha",
+      name: "Alpha Team",
+      website: "https://example.com",
+      logo: "",
+    },
+    { project: "beta", name: "Beta", website: "", logo: "" },
+  ];
+  await f.client.save({ workspaces });
+  const restored = await f.client.initialize();
+  assert.deepEqual(restored.preferences.workspaces, workspaces);
+  assert.equal(restored.preferences.appearance.colorMode, "system");
+  assert.deepEqual(Model.withDefaults({}).workspaces, []);
+});
+test("workspace branding rejects executable logos, unsafe links, duplicates, and oversized images", () => {
+  const brand = { project: "alpha", name: "Alpha", website: "", logo: "" };
+  for (const patch of [
+    { logo: "data:image/svg+xml;base64,PHN2Zz4=" },
+    { website: "javascript:alert(1)" },
+    { website: "https://user:password@example.com" },
+    { name: "" },
+    { logo: "x".repeat(100001) },
+  ]) {
+    assert.throws(() =>
+      Model.validatePatch({ workspaces: [{ ...brand, ...patch }] }),
+    );
+  }
+  assert.throws(() => Model.validatePatch({ workspaces: [brand, brand] }));
+  assert.deepEqual(
+    Model.validatePatch({ workspaces: [{ ...brand, name: " Alpha " }] })
+      .workspaces[0],
+    brand,
+  );
+});

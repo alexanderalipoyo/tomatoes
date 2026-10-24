@@ -10,10 +10,12 @@ function reportHref(id) {
     view: "runs",
   });
 }
-async function reportTextHash(text, project = "") {
+async function reportTextHash(text, project = "", branch = "") {
   const bytes = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode((project ? project + "\0" : "") + text),
+    new TextEncoder().encode(
+      ReportData.reportIdentityText(text, project, branch),
+    ),
   );
   return Array.from(new Uint8Array(bytes), (byte) =>
     byte.toString(16).padStart(2, "0"),
@@ -28,10 +30,14 @@ async function serverMatchesImport(saved, id) {
     ).project || "";
   const hashes = await Promise.all(
     [...new Set(["", saved.run.metadata?.project || "", originalProject])].map(
-      (project) => reportTextHash(text, project),
+      (project) =>
+        Promise.all([
+          reportTextHash(text, project),
+          reportTextHash(text, project, saved.run.metadata?.branch || ""),
+        ]),
     ),
   );
-  return hashes.includes(id);
+  return hashes.flat().includes(id);
 }
 function updateReportURL({
   replace = false,
@@ -65,9 +71,14 @@ function showReportLinkError(error) {
   showToast(error.message, "error");
 }
 function isReportIndependentView() {
-  return ["workspace-settings", "team", "history"].includes(
-    location.hash.slice(1),
-  );
+  return [
+    "projects",
+    "integrations",
+    "profile",
+    "workspace-settings",
+    "team",
+    "history",
+  ].includes(location.hash.slice(1));
 }
 async function navigateReportLocation() {
   if (loading) {
@@ -148,7 +159,23 @@ async function copyHistoryReportLink(id, button) {
           ]),
         ];
         for (const project of projects) {
-          const candidate = await reportTextHash(compact, project);
+          const candidates = await Promise.all([
+            reportTextHash(
+              compact,
+              project,
+              saved.entry.metadata?.branch || "",
+            ),
+            reportTextHash(compact, project),
+          ]);
+          const candidate = candidates.find((id) =>
+            listing.runs.some(
+              (run) =>
+                run.id === id &&
+                (run.metadata.branch || "") ===
+                  (saved.entry.metadata?.branch || ""),
+            ),
+          );
+          if (!candidate) continue;
           if (!listing.runs.some((run) => run.id === candidate)) continue;
           const server = await teamRequest("/api/runs/" + candidate, {
             signal: AbortSignal.timeout(15000),

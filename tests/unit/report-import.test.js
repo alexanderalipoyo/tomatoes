@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { setup } = require("../../src/client/report-import");
 
-function fixture(importFile = async () => {}) {
+function fixture(importFile = async () => {}, config = {}) {
   class Element extends EventTarget {
     constructor() {
       super();
@@ -47,11 +47,12 @@ function fixture(importFile = async () => {}) {
   let busy = false;
   const imports = [];
   setup({
+    ...config,
     document,
     isBusy: () => busy,
-    importFile: async (file) => {
+    importFile: async (file, options) => {
       imports.push(file);
-      await importFile(file);
+      await importFile(file, options);
     },
   });
   function fire(id, type, files = [], types = ["Files"]) {
@@ -162,4 +163,48 @@ test("missed file drops prevent navigation and text drags stay untouched", () =>
     false,
   );
   assert.equal(f.imports.length, 0);
+});
+
+test("branch selection reaches the importer for drops and validation keeps invalid choices in the dialog", async () => {
+  let selected;
+  const f = fixture(
+    async (file, options) => {
+      selected = options;
+    },
+    { getImportOptions: () => ({ branch: "feature/a" }) },
+  );
+  f.elements["import-report"].click();
+  f.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
+  assert.deepEqual(selected, { branch: "feature/a" });
+  const invalid = fixture(async () => {}, {
+    getImportOptions: () => {
+      throw Error("Enter a branch name");
+    },
+  });
+  invalid.elements["import-report"].click();
+  invalid.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
+  assert.equal(invalid.imports.length, 0);
+  assert.equal(invalid.elements["import-dialog"].open, true);
+  assert.match(
+    invalid.elements["import-selection-error"].textContent,
+    /branch name/,
+  );
+});
+test("loading previous branches blocks file imports until branch options are ready", async () => {
+  let ready;
+  const f = fixture(async () => {}, {
+    prepareImport: () =>
+      new Promise((resolve) => {
+        ready = resolve;
+      }),
+  });
+  f.elements["import-report"].click();
+  assert.equal(f.elements["browse-report"].disabled, true);
+  f.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
+  assert.equal(f.imports.length, 0);
+  ready();
+  await new Promise(setImmediate);
+  assert.equal(f.elements["browse-report"].disabled, false);
+  f.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
+  assert.equal(f.imports.length, 1);
 });

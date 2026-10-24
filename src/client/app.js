@@ -8,6 +8,12 @@ const esc = (value) =>
       ],
   );
 const icons = {
+  integration:
+    '<path d="m9 3 3 3-6 6-3-3m12 12-3-3 6-6 3 3M8 16l-4 4m12-12 4-4M8 12l4 4m0-8 4 4"/>',
+  profile:
+    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="3"/><path d="M6 19v-2a6 6 0 0 1 12 0v2"/>',
+  users:
+    '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 4v2"/>',
   branch:
     '<path d="M6 3v12a6 6 0 0 0 12 0V9M14 5l4 4 4-4"/><circle cx="6" cy="5" r="2"/>',
   runs: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m9 8 7 4-7 4Z"/>',
@@ -87,8 +93,11 @@ const userPreferences = PreferenceClient.create({
 async function reloadUserPreferences() {
   const state = await userPreferences.initialize();
   appearanceDraft = null;
+  userProfileDraft = null;
+  workspaceDraft = null;
   preferences = state.preferences.display;
   Appearance.apply(state.preferences.appearance.colorMode);
+  renderWorkspaceIdentity();
   pageSize = preferences.rows;
   page = 1;
   stability = null;
@@ -101,7 +110,7 @@ async function reloadUserPreferences() {
 }
 function preferenceStatusMarkup() {
   const state = userPreferences.getState();
-  return `<article class="settings-card preference-sync-status"><h2>User preferences</h2><p role="status">${state.ready ? `Saved to ${state.storage === "postgres" ? "PostgreSQL" : "the local server"} for ${esc(state.profile)}. ${state.profileId === "local" ? "Local mode uses one shared profile on this server." : "These settings belong to your signed-in account."}` : esc(state.error)}</p><p>Color mode, dashboard groups, time zone, and results per page load from the server. Report files and browser import history are managed separately.</p><button class="button" id="reload-user-preferences">Reload preferences</button>${!state.ready ? '<a class="button" href="#team">Team &amp; CI</a>' : ""}</article>`;
+  return `<article class="settings-card preference-sync-status"><h2>User preferences</h2><p role="status">${state.ready ? `Saved to ${state.storage === "postgres" ? "PostgreSQL" : "the local server"} for ${esc(state.profile)}. ${state.profileId === "local" ? "Local mode uses one shared profile on this server." : "These settings belong to your signed-in account."}` : esc(state.error)}</p><p>Profile details, color mode, dashboard groups, time zone, and results per page load from the server. Report files and browser import history are managed separately.</p><button class="button" id="reload-user-preferences">Reload preferences</button>${!state.ready ? '<a class="button" href="#team">Settings: Sharing &amp; access</a>' : ""}</article>`;
 }
 let stability = null;
 let report;
@@ -115,10 +124,60 @@ let view = "runs";
 let loading = false;
 let pageSize = preferences.rows;
 const outcomes = ["passed", "failed", "pending", "skipped"];
+function renderWorkspaceIdentity() {
+  const importId = new URL(location.href).searchParams.get("import");
+  const entry =
+    historyEntries.find((item) => item.id === (importId || activeHistoryId)) ||
+    (!importId && !new URL(location.href).searchParams.has("server")
+      ? historyEntries[0]
+      : null);
+  const selectedProject =
+    entry?.metadata?.project ||
+    (!importId || importId === activeHistoryId
+      ? report?.metadata?.project
+      : "");
+  const user = userPreferences.getState().user;
+  currentWorkspaceProject = selectedProject || "tomatoes";
+  const branding = workspaceBranding(currentWorkspaceProject);
+  const workspaceName =
+    branding.name || selectedProject || "Tomatoes workspace";
+  // Temporary display name until account profiles provide full names.
+  const profile = userPreferences.getState().preferences.profile;
+  const fullName =
+    [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
+    user?.fullName ||
+    user?.displayName ||
+    "Alex Ali";
+  document.querySelectorAll("[data-workspace-name]").forEach((element) => {
+    element.textContent = workspaceName;
+    element.title = workspaceName;
+  });
+  const initials = workspaceName
+    .replace(/workspace$/i, " Workspace")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => Array.from(word)[0])
+    .join("")
+    .toUpperCase();
+  document.querySelectorAll("[data-workspace-initials]").forEach((element) => {
+    element.innerHTML = branding.logo
+      ? `<img class="workspace-logo" src="${esc(branding.logo)}" alt=""/>`
+      : esc(initials);
+  });
+  document.querySelectorAll("[data-workspace-logo]").forEach((element) => {
+    element.innerHTML = workspaceLogoMarkup(currentWorkspaceProject);
+  });
+  document.querySelectorAll("[data-workspace-user]").forEach((element) => {
+    element.textContent = fullName;
+    element.title = fullName;
+  });
+}
 function renderSummary() {
+  renderWorkspaceIdentity();
   const c = report.counts;
   $("#run-summary").innerHTML =
-    `<div><span class="eyebrow">${isPreviousImport() ? "PREVIOUS IMPORT" : "LATEST IMPORTED RUN"}</span><h2>${badge(report.status)} ${esc(sourceName)}</h2><p>Started ${esc(date(report.start))}<br />Finished ${esc(date(report.end))}</p></div><div class="run-summary-stats"><strong>${duration(report.duration)}</strong><span>Reported run duration</span><span>${report.specs.length} specs · ${report.failedSpecs} with failures</span></div>`;
+    `<div><span class="eyebrow">${isPreviousImport() ? "PREVIOUS IMPORT" : "LATEST IMPORTED RUN"}</span><h2>${badge(report.status)} ${esc(sourceName)}</h2><p class="report-workspace-brand">${workspaceLogoMarkup(report.metadata?.project || currentWorkspaceProject)}<span>${esc(workspaceBranding(report.metadata?.project || currentWorkspaceProject).name)}</span></p><p>Started ${esc(date(report.start))}<br />Finished ${esc(date(report.end))}</p></div><div class="run-summary-stats"><strong>${duration(report.duration)}</strong><span>Reported run duration</span><span>${report.specs.length} specs · ${report.failedSpecs} with failures</span></div>`;
   const metrics = [
     [
       "Registered tests",
@@ -392,6 +451,13 @@ function showTest(id) {
 function navigate(force = false) {
   if (loading && force !== true) return;
   view = location.hash.slice(1) || "runs";
+  if (view === "team") {
+    const url = new URL(location.href);
+    url.hash = "workspace-settings";
+    url.searchParams.set("settingsTab", "sharing");
+    history.replaceState(null, "", url);
+    view = "workspace-settings";
+  }
   if (
     ![
       "runs",
@@ -402,17 +468,51 @@ function navigate(force = false) {
       "flaky",
       "settings",
       "workspace-settings",
+      "profile",
+      "projects",
+      "integrations",
       "history",
       "team",
     ].includes(view)
   )
     view = "runs";
+  const workspaceContext = [
+    "integrations",
+    "projects",
+    "profile",
+    "workspace-settings",
+    "settings",
+    "team",
+  ].includes(view);
+  document.body.classList.toggle("workspace-context", workspaceContext);
+  document
+    .querySelectorAll(
+      'nav[aria-label="Project navigation"], nav[aria-label="Mobile project navigation"]',
+    )
+    .forEach((nav) => {
+      nav.hidden = workspaceContext;
+    });
+  document.querySelectorAll("[data-workspace-navigation]").forEach((nav) => {
+    nav.hidden = !workspaceContext;
+  });
   document.querySelectorAll("nav a").forEach((link) => {
     link.classList.toggle("active", link.dataset.view === view);
     if (link.dataset.view === view) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
   const labels = {
+    integrations: [
+      "Integrations",
+      "Connect report collection and notifications to your workspace.",
+    ],
+    projects: [
+      "Projects",
+      "Browse the projects and saved runs in your workspace.",
+    ],
+    profile: [
+      "My Profile",
+      "Manage your personal details and workspace preferences.",
+    ],
     runs: [
       "Latest run",
       "A snapshot of test health, failures, and execution from your latest run.",
@@ -421,10 +521,7 @@ function navigate(force = false) {
       "Compare runs",
       "Identify regressions, fixes, and performance changes between saved reports.",
     ],
-    team: [
-      "Team & CI",
-      "Share reports locally, manage project access, and collect CI results.",
-    ],
+    team: ["Team", "Share reports locally and manage project access."],
     history: ["Import history", "Revisit reports saved in this browser."],
     results: [
       "Test results",
@@ -444,7 +541,7 @@ function navigate(force = false) {
     ],
     "workspace-settings": [
       "Settings",
-      "Make Tomatoes feel at home in your workspace.",
+      "Manage appearance, shared reports, and workspace access.",
     ],
     settings: [
       "Report settings",
@@ -457,6 +554,7 @@ function navigate(force = false) {
     view === "runs" && isPreviousImport()
       ? "Dashboard and test results for the selected saved report."
       : labels[view][1];
+  renderWorkspaceIdentity();
   $("#refresh").hidden = isReportIndependentView();
   if (isReportIndependentView()) {
     $("#load-state").hidden = true;
@@ -476,8 +574,19 @@ function navigate(force = false) {
   $("#history-section").hidden = view !== "history";
   if (view === "history") renderHistory();
   $("#failure-groups").hidden = view !== "failures";
-  if (view === "team") {
-    renderTeam($("#alternate"));
+  if (view === "integrations") {
+    $("#report-content").hidden = false;
+    renderIntegrations($("#alternate"));
+    return;
+  }
+  if (view === "projects") {
+    $("#report-content").hidden = false;
+    renderProjects($("#alternate"));
+    return;
+  }
+  if (view === "profile") {
+    $("#report-content").hidden = false;
+    renderUserProfile($("#alternate"));
     return;
   }
   if (view === "workspace-settings") {
@@ -512,6 +621,7 @@ async function refreshHistory() {
   renderHistory();
 }
 function renderHistory() {
+  renderWorkspaceIdentity();
   $("#history-count").textContent = historyEntries.length;
   $("#history-total").textContent =
     `${historyEntries.length} saved ${historyEntries.length === 1 ? "report" : "reports"}`;
@@ -725,6 +835,11 @@ async function loadReport(file = currentFile, options = {}) {
       next.metadata = ReportData.normalizeMetadata(saved.entry.metadata);
     if (options.metadataOverride)
       next.metadata = ReportData.normalizeMetadata(options.metadataOverride);
+    if (options.branch !== undefined)
+      next.metadata = ReportData.normalizeMetadata({
+        ...next.metadata,
+        branch: options.branch,
+      });
     report = next;
     report.importedAt =
       saved?.entry.lastImportedAt ?? saved?.entry.importedAt ?? Date.now();
@@ -909,7 +1024,12 @@ $("#load-bundled").onclick = () => loadReport(null, { openDashboard: true });
 ReportImport.setup({
   document,
   isBusy: () => loading || document.body.classList.contains("is-rendering"),
-  importFile: (file) => loadReport(file, { recordImport: true }),
+  prepareImport: ImportBranches.prepare,
+  getImportOptions: ImportBranches.options,
+  importFile: async (file, options) => {
+    const success = await loadReport(file, { recordImport: true, ...options });
+    if (success) await ImportBranches.remember(report.metadata);
+  },
 });
 $(".dialog-close").onclick = () => $("#detail").close();
 $("#detail").onclick = (event) => {
@@ -987,7 +1107,7 @@ reloadUserPreferences().finally(() => {
 });
 
 window.addEventListener("beforeunload", (event) => {
-  if (hasUnsavedAppearance()) {
+  if (hasUnsavedAppearance() || hasUnsavedProfile() || hasUnsavedWorkspace()) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -1002,7 +1122,66 @@ function hasUnsavedAppearance() {
   );
 }
 
+function isSharingSettingsView() {
+  return (
+    view === "workspace-settings" &&
+    new URL(location.href).searchParams.get("settingsTab") === "sharing"
+  );
+}
 function renderWorkspaceSettings(alt) {
+  const requested = new URL(location.href).searchParams.get("settingsTab");
+  const section = ["general", "sharing"].includes(requested)
+    ? requested
+    : "appearance";
+  alt.innerHTML = `<div class="workspace-settings-page"><div class="workspace-settings-tabs" role="tablist" aria-label="Settings sections">${[
+    ["general", "General"],
+    ["appearance", "Appearance"],
+    ["sharing", "Sharing & access"],
+  ]
+    .map(
+      ([id, label]) =>
+        `<button type="button" role="tab" id="settings-tab-${id}" data-settings-section="${id}" aria-controls="workspace-settings-panel" aria-selected="${section === id}" tabindex="${section === id ? "0" : "-1"}">${label}</button>`,
+    )
+    .join(
+      "",
+    )}</div><div id="workspace-settings-panel" role="tabpanel" aria-labelledby="settings-tab-${section}"></div></div>`;
+  function selectSection(next, focus = false) {
+    if (next !== section) {
+      const url = new URL(location.href);
+      if (next !== "appearance") url.searchParams.set("settingsTab", next);
+      else url.searchParams.delete("settingsTab");
+      history.pushState(null, "", url);
+      navigate();
+    }
+    if (focus) document.querySelector("#settings-tab-" + next).focus();
+  }
+  alt.querySelectorAll("[data-settings-section]").forEach((button) => {
+    button.onclick = () => selectSection(button.dataset.settingsSection);
+    button.onkeydown = (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
+        return;
+      event.preventDefault();
+      const tabs = ["general", "appearance", "sharing"];
+      selectSection(
+        event.key === "Home"
+          ? tabs[0]
+          : event.key === "End"
+            ? tabs[2]
+            : tabs[
+                (tabs.indexOf(section) + (event.key === "ArrowRight" ? 1 : 2)) %
+                  3
+              ],
+        true,
+      );
+    };
+  });
+  const panel = document.querySelector("#workspace-settings-panel");
+  if (section === "general") renderWorkspaceGeneral(panel);
+  else if (section === "sharing") renderTeam(panel);
+  else renderAppearanceSettings(panel);
+}
+
+function renderAppearanceSettings(alt) {
   const state = userPreferences.getState();
   if (!appearanceDraft || appearanceDraft.profileId !== state.profileId)
     appearanceDraft = {
@@ -1045,7 +1224,12 @@ function renderWorkspaceSettings(alt) {
     const button = $("#reload-user-preferences");
     button.disabled = true;
     const loaded = await reloadUserPreferences();
-    if (view === "workspace-settings") renderWorkspaceSettings(alt);
+    if (
+      view === "workspace-settings" &&
+      !isSharingSettingsView() &&
+      alt.isConnected
+    )
+      renderAppearanceSettings(alt);
     showToast(
       loaded.ready ? "Preferences reloaded." : loaded.error,
       loaded.ready ? "success" : "error",
@@ -1072,7 +1256,7 @@ function renderWorkspaceSettings(alt) {
   };
   discard.onclick = () => {
     appearanceDraft = null;
-    renderWorkspaceSettings(alt);
+    renderAppearanceSettings(alt);
   };
   updateFeedback();
   form.onsubmit = async (event) => {
@@ -1089,7 +1273,168 @@ function renderWorkspaceSettings(alt) {
       showToast(error.message, "error");
     } finally {
       draft.saving = false;
-      if (view === "workspace-settings") renderWorkspaceSettings(alt);
+      if (
+        view === "workspace-settings" &&
+        !isSharingSettingsView() &&
+        alt.isConnected
+      )
+        renderAppearanceSettings(alt);
     }
   };
+}
+
+let currentWorkspaceProject = "tomatoes";
+let workspaceDraft = null;
+function workspaceBranding(project = currentWorkspaceProject) {
+  return (
+    userPreferences
+      .getState()
+      .preferences.workspaces.find((item) => item.project === project) || {
+      project,
+      name: project,
+      website: "",
+      logo: "",
+    }
+  );
+}
+function workspaceLogoMarkup(project) {
+  const brand = workspaceBranding(project);
+  return brand.logo
+    ? `<img class="workspace-logo" src="${esc(brand.logo)}" alt=""/>`
+    : `<img class="workspace-logo" src="/assets/tomatoes-logo.svg" alt=""/>`;
+}
+function hasUnsavedWorkspace() {
+  return Boolean(
+    workspaceDraft &&
+    workspaceDraft.profileId === userPreferences.getState().profileId &&
+    JSON.stringify(workspaceDraft.brand) !==
+      JSON.stringify(workspaceBranding(workspaceDraft.brand.project)),
+  );
+}
+function renderWorkspaceGeneral(host) {
+  const state = userPreferences.getState();
+  if (
+    !workspaceDraft ||
+    workspaceDraft.profileId !== state.profileId ||
+    workspaceDraft.brand.project !== currentWorkspaceProject
+  )
+    workspaceDraft = {
+      profileId: state.profileId,
+      brand: { ...workspaceBranding() },
+      saving: false,
+    };
+  const draft = workspaceDraft;
+  const brand = draft.brand;
+  host.innerHTML = `<form class="profile-details workspace-general" id="workspace-general-form"><h2>General</h2><fieldset ${!state.ready || draft.saving ? "disabled" : ""}><legend class="visually-hidden">Workspace branding</legend>
+    <div class="profile-detail-row"><div><label for="workspace-brand-name">Workspace name</label><p>The name displayed throughout Tomatoes. Report project identifiers stay the same.</p></div><input id="workspace-brand-name" name="name" maxlength="80" required value="${esc(brand.name)}"/></div>
+    <div class="profile-detail-row"><div><label for="workspace-brand-website">Workspace website</label><p>An optional link for your company or team.</p></div><input id="workspace-brand-website" name="website" type="url" maxlength="500" placeholder="https://example.com" value="${esc(brand.website)}"/></div>
+    <div class="profile-detail-row"><div><label for="workspace-brand-logo">Workspace logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Displayed in workspace navigation, project cards, run summaries, and PDF reports.</p></div><div><div class="workspace-logo-preview" id="workspace-logo-preview">${brand.logo ? `<img src="${esc(brand.logo)}" alt="Workspace logo preview"/>` : "<span>No logo uploaded</span>"}</div><input id="workspace-brand-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="workspace-remove-logo">Remove logo</button><p id="workspace-logo-status" role="status"></p></div></div>
+    <div class="profile-detail-row"><div><span>Report project</span><p>Branding is saved for this project in your database preferences.</p></div><code>${esc(brand.project)}</code></div></fieldset>
+    <div class="profile-form-actions"><span id="workspace-brand-status" role="status"></span><button type="button" class="button" id="workspace-brand-reset">Reset</button><button class="button primary" type="submit">Save changes</button></div></form>`;
+  const form = host.querySelector("form");
+  const save = form.querySelector('[type="submit"]');
+  const reset = form.querySelector("#workspace-brand-reset");
+  const file = form.querySelector('[type="file"]');
+  let reading = false;
+  const update = () => {
+    save.disabled =
+      !state.ready || draft.saving || reading || !hasUnsavedWorkspace();
+    reset.disabled = draft.saving || reading || !hasUnsavedWorkspace();
+    file.disabled = !state.ready || reading || draft.saving;
+    form.querySelector("#workspace-remove-logo").disabled =
+      !state.ready || reading || draft.saving || !brand.logo;
+    form.querySelector("#workspace-brand-status").textContent = draft.saving
+      ? "Saving…"
+      : hasUnsavedWorkspace()
+        ? "Unsaved changes"
+        : "";
+    form.setAttribute("aria-busy", String(reading || draft.saving));
+  };
+  form.oninput = () => {
+    brand.name = form.elements.name.value;
+    brand.website = form.elements.website.value;
+    update();
+  };
+  reset.onclick = () => {
+    workspaceDraft = null;
+    renderWorkspaceGeneral(host);
+  };
+  form.querySelector("#workspace-remove-logo").onclick = () => {
+    brand.logo = "";
+    renderWorkspaceGeneral(host);
+  };
+  file.onchange = async () => {
+    const imageFile = file.files[0];
+    if (!imageFile) return;
+    reading = true;
+    update();
+    const status = form.querySelector("#workspace-logo-status");
+    status.textContent = "Preparing logo…";
+    try {
+      if (
+        !["image/png", "image/jpeg", "image/webp"].includes(imageFile.type) ||
+        imageFile.size > 2 * 1024 * 1024
+      )
+        throw new Error("Choose a PNG, JPEG, or WebP image up to 2 MB.");
+      const image = await createImageBitmap(imageFile);
+      try {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 128 / Math.max(image.width, image.height));
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        canvas
+          .getContext("2d")
+          .drawImage(image, 0, 0, canvas.width, canvas.height);
+        const logo = canvas.toDataURL("image/png");
+        if (logo.length > 100000)
+          throw new Error("This logo is too detailed. Choose a simpler image.");
+        brand.logo = logo;
+      } finally {
+        image.close();
+      }
+      if (host.isConnected && workspaceDraft === draft)
+        renderWorkspaceGeneral(host);
+    } catch (error) {
+      status.textContent = "Logo could not be loaded.";
+      showToast(error.message || "Choose a valid image.", "error");
+    } finally {
+      reading = false;
+      file.value = "";
+      if (form.isConnected) update();
+    }
+  };
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (save.disabled) return;
+    draft.saving = true;
+    form.inert = true;
+    update();
+    try {
+      const workspaces = [
+        ...userPreferences
+          .getState()
+          .preferences.workspaces.filter(
+            (item) => item.project !== brand.project,
+          ),
+        { ...brand, name: brand.name.trim(), website: brand.website.trim() },
+      ];
+      await userPreferences.save({ workspaces });
+      if (workspaceDraft === draft) workspaceDraft = null;
+      renderWorkspaceIdentity();
+      if (report) renderSummary();
+      showToast("Workspace branding saved.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      draft.saving = false;
+      form.inert = false;
+      if (
+        host.isConnected &&
+        view === "workspace-settings" &&
+        new URL(location.href).searchParams.get("settingsTab") === "general"
+      )
+        renderWorkspaceGeneral(host);
+    }
+  };
+  update();
 }

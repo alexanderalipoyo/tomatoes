@@ -426,6 +426,12 @@ test("PostgreSQL preferences isolate accounts, allow viewers' own settings, and 
       dashboardGroups,
       display: { timeZone: "UTC", rows: 30 },
       appearance: { colorMode: "dark" },
+      importBranches: [{ project: "web", branch: "main" }],
+      profile: {
+        firstName: "Alex",
+        lastName: "Ali",
+        email: "alex@example.com",
+      },
     },
   });
   assert.equal(saved.status, 200);
@@ -457,6 +463,8 @@ test("PostgreSQL preferences isolate accounts, allow viewers' own settings, and 
   );
   const own = await api.store.getPreferences("user:alice");
   assert.equal(own.appearance.colorMode, "dark");
+  assert.equal(own.profile.firstName, "Alex");
+  assert.equal(own.importBranches[0].branch, "main");
   assert.equal(own.display.rows, 50);
   assert.deepEqual(own.dashboardGroups, []);
   const connection = new Pool(databaseConfig());

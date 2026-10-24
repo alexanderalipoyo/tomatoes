@@ -409,7 +409,13 @@ function createTeamService({
             body.importedAt > 8640000000000000)
         )
           throw apiError(400, "Report import time is invalid.");
-        const id = hashToken(metadata.project + "\0" + text);
+        const id = hashToken(
+          ReportData.reportIdentityText(
+            text,
+            metadata.project,
+            metadata.branch,
+          ),
+        );
         const record = {
           id,
           name:

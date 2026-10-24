@@ -13,6 +13,7 @@ for (const name of [
   "report-navigation",
   "import-history",
   "report-import",
+  "import-branches",
   "preferences",
   "custom-widgets",
   "insights",
@@ -22,6 +23,10 @@ for (const name of [
   "report-views",
   "pdf-export",
   "workspace-tools",
+  "workspace-menu",
+  "profile",
+  "projects",
+  "integrations",
 ]) {
   add(`/js/${name}.js`, `src/client/${name}.js`);
   add(`/${name}.js`, `src/client/${name}.js`);
@@ -29,6 +34,7 @@ for (const name of [
 for (const name of [
   "report-data",
   "report-links",
+  "project-catalog",
   "dashboard-groups",
   "user-preferences",
   "investigation-model",
@@ -60,6 +66,9 @@ add("/vendor/pdf.mjs", "node_modules/pdfjs-dist/build/pdf.mjs");
 add("/vendor/pdf.worker.mjs", "node_modules/pdfjs-dist/build/pdf.worker.mjs");
 add("/vendor/jspdf.umd.min.js", "node_modules/jspdf/dist/jspdf.umd.min.js");
 add("/results.json", "examples/reports/results.json");
+for (const name of ["terms-of-use", "privacy-policy"]) {
+  add(`/legal/${name}.sample.md`, `docs/legal/${name}.sample.md`);
+}
 function getStaticFile(pathname) {
   return files[pathname] || null;
 }

@@ -11,6 +11,7 @@
       ready: false,
       profile: null,
       profileId: null,
+      user: null,
       storage: null,
       error: "Connecting to saved preferences…",
     };
@@ -28,6 +29,7 @@
         ready: false,
         profile: null,
         profileId: null,
+        user: null,
         storage: null,
         error: "Connecting to saved preferences…",
       };
@@ -35,7 +37,7 @@
         const status = await request("/api/team/status");
         if (!owner(status))
           throw new Error(
-            "Sign in through Team & CI to load and save your preferences.",
+            "Sign in through Settings > Sharing & access to load and save your preferences.",
           );
         let payload = await request("/api/preferences");
         if (payload.profileId !== owner(status))
@@ -58,6 +60,7 @@
         if (version === epoch)
           state = {
             ...payload,
+            user: status.authenticated ? status.user : null,
             preferences: Model.withDefaults(payload.preferences),
             ready: true,
             error: "",
@@ -92,6 +95,7 @@
             );
           state = {
             ...payload,
+            user: status.authenticated ? status.user : null,
             preferences: Model.withDefaults(payload.preferences),
             ready: true,
             error: "",

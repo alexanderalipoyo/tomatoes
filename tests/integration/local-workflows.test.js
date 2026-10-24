@@ -813,3 +813,37 @@ test("Slack delivery respects signed-in roles, project scope, CSRF, and rejects 
   );
   assert.equal(deliveries, 1);
 });
+
+test("identical report JSON on different branches retains independent browser and server runs", async (t) => {
+  const api = await serviceFixture(t);
+  const history = createHistory({
+    indexedDB: new IDBFactory(),
+    crypto: webcrypto,
+  });
+  const text = JSON.stringify(fixture());
+  const ids = [];
+  for (const branch of ["main", "feature/a"]) {
+    const report = ReportData.parseReportText(text);
+    report.metadata = ReportData.normalizeMetadata({ project: "web", branch });
+    const local = await history.save({ text, name: "report.json", report });
+    const response = await api.request("/api/runs", {
+      method: "POST",
+      headers: { Origin: api.origin },
+      body: JSON.stringify({ reportText: text, metadata: report.metadata }),
+    });
+    assert.equal(response.status, 201);
+    ids.push({ local: local.id, server: response.body.run.id });
+    const restored = await history.get(local.id);
+    assert.equal(restored.text, text);
+    assert.equal(restored.entry.metadata.branch, branch);
+    const server = await api.request("/api/runs/" + response.body.run.id);
+    assert.equal(server.body.run.metadata.branch, branch);
+    assert.equal(server.body.originalText, text);
+    const repeat = await history.save({ text, name: "report.json", report });
+    assert.equal(repeat.id, local.id);
+  }
+  assert.notEqual(ids[0].local, ids[1].local);
+  assert.notEqual(ids[0].server, ids[1].server);
+  assert.equal((await history.list()).length, 2);
+  assert.equal((await api.request("/api/runs")).body.runs.length, 2);
+});

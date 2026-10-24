@@ -6,6 +6,13 @@
     "commit",
     "buildUrl",
   ];
+  function reportIdentityText(text, project = "", branch = "") {
+    return (
+      (project ? project + "\0" : "") +
+      (branch ? "branch:" + JSON.stringify(branch) + "\0" : "") +
+      text
+    );
+  }
   function normalizeMetadata(value = {}) {
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error("Run metadata must be an object.");
@@ -20,6 +27,8 @@
         value[key].length > (key === "buildUrl" ? 2048 : 160)
       )
         throw new Error(`Metadata ${key} must be a short string.`);
+      if (key === "branch" && /[\x00-\x1f\x7f]/.test(value[key]))
+        throw new Error("Branch names must not contain control characters.");
       result[key] = value[key].trim();
     }
     if (
@@ -570,6 +579,7 @@
     };
   }
   const api = {
+    reportIdentityText,
     normalizeMetadata,
     normalizeAttempts,
     retryStats,

@@ -6,7 +6,7 @@ Tomatoes turns JSON reports from Cypress test runs into a dashboard for reviewin
 
 Tomatoes is an independent application with its own branding. It is not the Cypress Cloud product. Cypress is the tool that executes the tests; Tomatoes reads the resulting **Mochawesome-compatible JSON report** and presents the results.
 
-The application runs locally. Imports and evidence are available in your browser; **Team & CI** uses PostgreSQL or the local file store for persistent server copies. With PostgreSQL enabled, new file imports and attachments are also saved to the server when your account has access. It does not require a Cypress Cloud account, recording key, or API connection.
+The application runs locally. Imports and evidence are available in your browser; **Settings > Sharing & access** uses PostgreSQL or the local file store for persistent server copies. With PostgreSQL enabled, new file imports and attachments are also saved to the server when your account has access. It does not require a Cypress Cloud account, recording key, or API connection.
 
 ## See Tomatoes in action
 
@@ -55,17 +55,17 @@ A blocking loading overlay shows progress through reading, parsing, validation, 
 
 ## Explore your results
 
-| View                | What you can do                                                                                                                                           |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Latest run**      | Review outcome totals, pass rate, failure hotspots, spec health, slow tests, execution coverage, and timing.                                              |
-| **Test results**    | Switch between specs and individual tests; search titles, paths, and errors; filter by spec and outcome.                                                  |
-| **Compare runs**    | Select baseline and target reports to review regressions, fixes, added/missing tests, other outcome changes, and slower tests; export a Markdown summary. |
-| **Failed tests**    | Review groups of matching failure messages and inspect their affected tests, original errors, stack traces, code, and context.                            |
-| **Import history**  | Reopen a saved report and its complete dashboard and test details.                                                                                        |
-| **Analytics**       | Explore failure message patterns, affected directories, duration distributions, performance percentiles, and saved-run trends.                            |
-| **Flaky tests**     | Review explicit retry recovery and compare matching tests across up to 10 saved reports to investigate pass/fail changes.                                 |
-| **Team & CI**       | Publish reports to the local server, open saved reports by project, and configure optional account access or CI uploads.                                  |
-| **Report settings** | Save display preferences and custom spec-group widgets, export reports, revalidate a report, and review data quality.                                     |
+| View                            | What you can do                                                                                                                                           |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Latest run**                  | Review outcome totals, pass rate, failure hotspots, spec health, slow tests, execution coverage, and timing.                                              |
+| **Test results**                | Switch between specs and individual tests; search titles, paths, and errors; filter by spec and outcome.                                                  |
+| **Compare runs**                | Select baseline and target reports to review regressions, fixes, added/missing tests, other outcome changes, and slower tests; export a Markdown summary. |
+| **Failed tests**                | Review groups of matching failure messages and inspect their affected tests, original errors, stack traces, code, and context.                            |
+| **Import history**              | Reopen a saved report and its complete dashboard and test details.                                                                                        |
+| **Analytics**                   | Explore failure message patterns, affected directories, duration distributions, performance percentiles, and saved-run trends.                            |
+| **Flaky tests**                 | Review explicit retry recovery and compare matching tests across up to 10 saved reports to investigate pass/fail changes.                                 |
+| **Settings > Sharing & access** | Publish reports to the local server, open saved reports by project, and configure optional account access.                                                |
+| **Report settings**             | Save display preferences and custom spec-group widgets, export reports, revalidate a report, and review data quality.                                     |
 
 On tablets and phones, navigation moves into a labelled drawer. Phone results use cards, widgets stack, and test details open in a scrollable bottom sheet.
 
@@ -112,9 +112,23 @@ To change the bundled report, replace `examples/reports/results.json`, then sele
 
 Successful imports can notify Slack with the saved report's actual outcome totals, duration, spec links, and available metadata. Missing retry data is marked unavailable rather than reported as zero flaky tests. The webhook stays in private `.env` configuration, and delivery failures preserve the imported report. See [Slack setup and message details](docs/SLACK.md).
 
+## Integrations
+
+Open **Integration**, below **Report settings** in workspace navigation, to view CI report collection, the report API, Slack, and provider setup options. CI setup is separate from sharing and access settings. New, Enabled, and Available sections reflect server configuration. GitHub Actions, GitLab, Bitbucket, and enterprise runners use the existing report uploader; this does not install provider apps or enable pull-request comments. Microsoft Teams, Jira, SSO, and MCP are listed as not available yet. Setup and Configure open a modal with a Close button, Escape support, and a scrollable body. Setup instructions keep tokens and webhook values on the server and do not display stored secrets.
+
+## Workspace projects
+
+Choose **Projects** from workspace navigation to search project cards built from accessible server reports and this browser's saved imports. Cards show recorded branches, latest outcomes, and links to saved results. Missing branches are labelled explicitly. Server runs and browser imports have separate counts because the same report can exist in both stores. Use **Import report** on Latest run to add report data. **View all runs** opens a dialog scoped to the selected project, including its server and browser copies.
+
+## Branches when importing
+
+Before browsing or dropping a report, choose an existing branch from previous runs in the current project, select **Create a new branch...**, or keep **Use branch from report**. The last successfully used branch is saved per project in user preferences and selected again when it still exists. Branch choices use accessible server runs and this browser's history. Importing identical JSON on different branches keeps separate results while preserving the original file; existing report URLs remain supported.
+
 ## User preferences
 
-Open **Workspace > Settings > Color Mode** to choose Light, Dark, or System, then select **Save appearance**. System follows changes to your computer's theme. Color mode is saved as a separate preference in the server store and applies across Tomatoes after reloads. Unsaved selections show a reminder and stay selected while switching pages; use **Discard changes** to return to the saved mode. Leaving or reloading the page with unsaved changes triggers the browser's warning. Settings, Team & CI, and Import history open without loading the selected report. A validated color-only browser cache applies the last confirmed mode before the page paints; server preferences replace this hint after connecting.
+Open the workspace menu and choose **Manage profile** to edit your first name, last name, and optional contact email. Changes save to your profile in the database and update the name shown throughout Tomatoes. Workspace navigation on this page contains **Projects**, **My profile**, **Settings**, **Report settings**, and **Integration**. Email is stored as a contact detail; email notifications are not enabled.
+
+Open **Workspace > Settings > Color Mode** to choose Light, Dark, or System, then select **Save appearance**. System follows changes to your computer's theme. Color mode is saved as a separate preference in the server store and applies across Tomatoes after reloads. Unsaved selections show a reminder and stay selected while switching pages; use **Discard changes** to return to the saved mode. Leaving or reloading the page with unsaved changes triggers the browser's warning. Settings and Import history open without loading the selected report. A validated color-only browser cache applies the last confirmed mode before the page paints; server preferences replace this hint after connecting.
 
 **Report settings** saves the time zone, results per page, and custom dashboard groups in the server store. With PostgreSQL enabled, these are stored in `tomatoes.user_preferences` as validated JSONB. Saving a widget or display preference updates only that section, preserving the other settings. The UI confirms saves with dismissible toast notifications only after the server succeeds and offers **Reload preferences** to reconnect or fetch changes. Saves, updates, imports, report publishing and evidence uploads show visible success or error notifications. Toasts pause while hovered or focused and wait until blocking progress dialogs close.
 
@@ -164,7 +178,7 @@ To provide retry evidence, add an `attempts` array to an individual test, for ex
 
 ## Local team store and CI
 
-Start normally with `npm start`, then open **Team & CI**. **Publish report** saves the selected run to the configured server store; **Open browser copy** imports a server report and its attachments into this browser. **Save browser imports** copies existing browser history, including display names, notes, metadata, and attachments. Trash is excluded, and browser originals are preserved. Server copies survive browser storage clearing. Browser copies remain available after sign-out. The server binds to `127.0.0.1`, so this setup stays on this machine.
+Start normally with `npm start`, then open **Settings > Sharing & access**. **Publish report** saves the selected run to the configured server store; **Open browser copy** imports a server report and its attachments into this browser. **Save browser imports** copies existing browser history, including display names, notes, metadata, and attachments. Trash is excluded, and browser originals are preserved. Server copies survive browser storage clearing. Browser copies remain available after sign-out. The server binds to `127.0.0.1`, so this setup stays on this machine.
 
 ### Optional accounts
 
@@ -177,7 +191,7 @@ $env:TOMATOES_TEAM_MODE = "1"
 npm start
 ```
 
-Open **Team & CI** to sign in. Viewers can read allowed projects; editors and admins can also publish to allowed projects. Assign multiple projects with `--projects tomatoes,another-project`; `--projects "*"` grants all projects. Admins default to all projects if the option is omitted. Account provisioning is performed through the local command, rather than a web administration page. Passwords use salted scrypt hashes, sessions expire after eight hours, and restarting the server signs everyone out.
+Open **Settings > Sharing & access** to sign in. Viewers can read allowed projects; editors and admins can also publish to allowed projects. Assign multiple projects with `--projects tomatoes,another-project`; `--projects "*"` grants all projects. Admins default to all projects if the option is omitted. Account provisioning is performed through the local command, rather than a web administration page. Passwords use salted scrypt hashes, sessions expire after eight hours, and restarting the server signs everyone out.
 
 ### CI ingestion on this machine
 
@@ -194,7 +208,7 @@ $env:TOMATOES_SERVER_URL = "http://127.0.0.1:3000"
 node scripts/publish-report.js --file report.json --project tomatoes --environment staging --branch main --commit abc123
 ```
 
-The publisher validates the report before upload. Add `--dry-run` to validate without a token or upload. `--build-url` records a link to the build. Uploads are scoped to the token's project and appear in **Team & CI**. Repeating the same report in the same project updates its existing server entry.
+The publisher validates the report before upload. Add `--dry-run` to validate without a token or upload. `--build-url` records a link to the build. Uploads are scoped to the token's project and appear in **Settings > Sharing & access**. Repeating the same report in the same project updates its existing server entry.
 
 A runner on another machine cannot reach this loopback-only server. External hosting, network access, and deployment are not configured by this local setup.
 
@@ -246,7 +260,7 @@ The schema contains:
 - `tomatoes.user_preferences`: display settings and customized dashboard groups scoped to each application account or the shared local profile.
 - `tomatoes.schema_migrations`: applied schema versions.
 
-Open **Team & CI** to see **PostgreSQL connected**. Existing browser history can be copied using **Save browser imports**. New file imports are copied automatically when the database is available and the signed-in account can write to the project. If saving a server copy fails, the valid browser import remains usable and a notice explains the result. Opening an existing browser import or a server copy does not automatically republish it. Browser backup files continue to cover browser data; back up the PostgreSQL schema and private attachment folder together for server recovery.
+Open **Settings > Sharing & access** to see **PostgreSQL connected**. Existing browser history can be copied using **Save browser imports**. New file imports are copied automatically when the database is available and the signed-in account can write to the project. If saving a server copy fails, the valid browser import remains usable and a notice explains the result. Opening an existing browser import or a server copy does not automatically republish it. Browser backup files continue to cover browser data; back up the PostgreSQL schema and private attachment folder together for server recovery.
 
 Set `TOMATOES_STORAGE=files` and restart to use the original file store. The stores remain separate; there is no automatic database-to-file overwrite. The HTTP server continues to bind to `127.0.0.1`, so this setup does not expose PostgreSQL or Tomatoes externally. A dedicated PostgreSQL application role with access to the Tomatoes schema can be configured through `PGUSER` instead of an administrator account.
 

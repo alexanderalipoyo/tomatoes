@@ -50,6 +50,7 @@
   }
   async function createDocument(report, name, options = {}) {
     const {
+      branding = {},
       jsPDF,
       fontData,
       groups: sourceGroups = [],
@@ -119,16 +120,36 @@
     function header() {
       doc.setFillColor(...colors.green);
       doc.rect(0, 0, 210, 4, "F");
-      // A compact vector tomato stays sharp in print.
-      doc.setFillColor(225, 78, 65);
-      doc.circle(22, 16, 3.5, "F");
-      doc.setDrawColor(...colors.green);
-      doc.setLineWidth(0.8);
-      doc.line(22, 12.5, 23, 10.5);
-      doc.line(22, 12.5, 19.5, 11.5);
+      if (branding.logo) {
+        const image = doc.getImageProperties(branding.logo);
+        const scale = 9 / Math.max(image.width, image.height);
+        const w = image.width * scale,
+          h = image.height * scale;
+        doc.addImage(
+          branding.logo,
+          "PNG",
+          18 + (9 - w) / 2,
+          9 + (9 - h) / 2,
+          w,
+          h,
+          undefined,
+          "FAST",
+        );
+      } else {
+        // A compact vector tomato stays sharp in print.
+        doc.setFillColor(225, 78, 65);
+        doc.circle(22, 16, 3.5, "F");
+        doc.setDrawColor(...colors.green);
+        doc.setLineWidth(0.8);
+        doc.line(22, 12.5, 23, 10.5);
+        doc.line(22, 12.5, 19.5, 11.5);
+      }
       doc.setTextColor(...colors.ink);
       doc.setFontSize(15);
-      doc.text("tomatoes", 29, 18);
+
+      doc.text(clean(branding.name || "tomatoes").slice(0, 45), 29, 18, {
+        maxWidth: 115,
+      });
       doc.setFontSize(8);
       doc.setTextColor(...colors.muted);
       doc.text(section.toUpperCase(), 192, 17, { align: "right" });
