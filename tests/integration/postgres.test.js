@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    2,
+    4,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -334,11 +334,20 @@ test("real PostgreSQL file migration is repeatable, preserves sources, and rolls
   });
   await source.addUser({
     username: "editor",
+    fullName: "Migrated Editor",
+    email: "editor@example.com",
+    disabled: true,
     role: "editor",
     projects: ["web"],
     ...hashPassword("test-password-only"),
   });
   assert.equal((await importFiles(api.store, api.dataDir)).imported, 1);
+  const migratedUser = (await api.store.getUsers()).find(
+    (user) => user.username === "editor",
+  );
+  assert.equal(migratedUser.disabled, true);
+  assert.equal(migratedUser.fullName, "Migrated Editor");
+  assert.equal(migratedUser.email, "editor@example.com");
   assert.equal((await api.store.listEvidence(record().id)).length, 1);
   assert.equal(
     (await api.store.listEvidence(record().id))[0].contentHash,
@@ -482,4 +491,104 @@ test("PostgreSQL preferences isolate accounts, allow viewers' own settings, and 
   }
   await api.store.migrate();
   assert.equal((await api.store.getPreferences("user:alice")).display.rows, 50);
+});
+
+test("PostgreSQL user administration persists details, restores accounts, and serializes last-admin protection", async (t) => {
+  const f = await fixture(t);
+  const admin = (username) => ({
+    username,
+    fullName: "Workspace Admin",
+    email: `${username}@example.com`,
+    role: "admin",
+    projects: ["*"],
+    disabled: false,
+    password: "test-only-password-123",
+  });
+  const create = (username) =>
+    f.request("/api/users", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: admin(username),
+    });
+  assert.equal((await create("admin1")).status, 201);
+  assert.equal((await create("admin2")).status, 201);
+  const results = await Promise.all(
+    ["admin1", "admin2"].map((username) =>
+      f.request(`/api/users/${username}`, {
+        method: "DELETE",
+        headers: { Origin: f.origin },
+      }),
+    ),
+  );
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+  const list = await f.request("/api/users");
+  assert.doesNotMatch(JSON.stringify(list.body), /password|salt|hash/);
+  const disabled = list.body.users.find((user) => user.disabled);
+  assert.equal(
+    (
+      await f.request(`/api/users/${disabled.username}`, {
+        method: "PUT",
+        headers: { Origin: f.origin },
+        body: { ...disabled, disabled: false, fullName: "Restored Admin" },
+      })
+    ).status,
+    200,
+  );
+  const saved = (await f.store.getUsers()).find(
+    (user) => user.username === disabled.username,
+  );
+  assert.equal(saved.fullName, "Restored Admin");
+  assert.equal(saved.disabled, false);
+  assert.equal(saved.email, `${disabled.username}@example.com`);
+  await f.store.migrate();
+  assert.equal((await f.store.getUsers()).length, 2);
+});
+
+test("PostgreSQL email recovery stores only token hashes and atomically changes credentials", async (t) => {
+  const f = await fixture(t, { teamMode: true });
+  const email = "alextest@gmail.com",
+    password = "test-password-before-reset",
+    next = "test-password-after-reset";
+  await f.store.addUser({
+    username: "alex",
+    email,
+    fullName: "Alex Ali",
+    role: "admin",
+    projects: ["*"],
+    ...hashPassword(password),
+  });
+  const post = (route, body) =>
+    f.request(route, { method: "POST", headers: { Origin: f.origin }, body });
+  const login = await post("/api/login", { email, password });
+  assert.equal(login.status, 200);
+  assert.equal((await post("/api/forgot-password", { email })).status, 202);
+  const link = JSON.parse(
+    await fs.readFile(
+      path.join(f.dataDir, "recovery-inbox", hashToken(email) + ".json"),
+      "utf8",
+    ),
+  ).link;
+  const token = new URLSearchParams(link.split("?")[1]).get("token");
+  const stored = (await f.store.getUsers())[0];
+  assert.equal(stored.resetHash, hashToken(token));
+  assert.notEqual(stored.resetHash, token);
+  const results = await Promise.all([
+    post("/api/reset-password", { token, password: next }),
+    post("/api/reset-password", { token, password: next }),
+  ]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 400]);
+  assert.equal((await post("/api/login", { email, password })).status, 401);
+  assert.equal(
+    (await post("/api/login", { email, password: next })).status,
+    200,
+  );
+  assert.equal(
+    (
+      await f.request("/api/preferences", {
+        headers: { Cookie: login.headers.get("set-cookie").split(";")[0] },
+      })
+    ).status,
+    401,
+  );
+  assert.equal((await f.store.getUsers())[0].resetHash, null);
 });

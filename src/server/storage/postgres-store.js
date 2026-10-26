@@ -44,8 +44,17 @@ function createPostgresStore({
     );
   const insertUser = (client, user, skip = false) =>
     client.query(
-      `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash) VALUES($1,$2,$3,$4,$5) ${skip ? "ON CONFLICT(username) DO NOTHING" : ""}`,
-      [user.username, user.role, user.projects, user.salt, user.hash],
+      `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ${skip ? "ON CONFLICT(username) DO NOTHING" : ""}`,
+      [
+        user.username,
+        user.role,
+        user.projects,
+        user.salt,
+        user.hash,
+        user.fullName || "",
+        user.email || "",
+        Boolean(user.disabled),
+      ],
     );
   const insertToken = (client, token, skip = false) =>
     client.query(
@@ -60,7 +69,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=2`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=4`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {
@@ -100,9 +109,38 @@ function createPostgresStore({
     async getUsers() {
       return (
         await pool.query(
-          `SELECT username,role,projects,salt,password_hash AS hash FROM ${ns}.users`,
+          `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,reset_hash AS "resetHash",reset_expires AS "resetExpires" FROM ${ns}.users`,
         )
       ).rows;
+    },
+    async manageUser(username, mutate) {
+      return transaction(async (client) => {
+        await client.query(
+          `LOCK TABLE ${ns}.users IN SHARE ROW EXCLUSIVE MODE`,
+        );
+        const users = (
+          await client.query(
+            `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,reset_hash AS "resetHash",reset_expires AS "resetExpires" FROM ${ns}.users`,
+          )
+        ).rows;
+        const next = mutate(users);
+        await client.query(
+          `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,reset_hash,reset_expires) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(username) DO UPDATE SET role=EXCLUDED.role,projects=EXCLUDED.projects,full_name=EXCLUDED.full_name,email=EXCLUDED.email,disabled=EXCLUDED.disabled,salt=EXCLUDED.salt,password_hash=EXCLUDED.password_hash,reset_hash=EXCLUDED.reset_hash,reset_expires=EXCLUDED.reset_expires`,
+          [
+            username,
+            next.role,
+            next.projects,
+            next.salt,
+            next.hash,
+            next.fullName || "",
+            next.email || "",
+            Boolean(next.disabled),
+            next.resetHash || null,
+            next.resetExpires || null,
+          ],
+        );
+        return next;
+      });
     },
     async getTokens() {
       return (

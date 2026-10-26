@@ -6,6 +6,7 @@ const ReportData = require("../shared/report-data");
 const UserPreferences = require("../shared/user-preferences");
 const { createFileStore } = require("./storage/index");
 const { readJSON, writeJSON } = require("./storage/json-store");
+const UserManagement = require("./user-management");
 const Features = require("../shared/report-features");
 const Investigations = require("../shared/investigation-model");
 const hashToken = (value) =>
@@ -46,6 +47,8 @@ function createTeamService({
 } = {}) {
   const sessions = new Map(),
     attempts = new Map();
+  const recoveryAttempts = new Map();
+  let recoveryDeliveryQueue = Promise.resolve();
   const send = (res, status, value, headers = {}) => {
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
@@ -88,7 +91,7 @@ function createTeamService({
     }
     const users = await store.getUsers();
     const user = users.find((user) => user.username === saved.username);
-    if (!user) {
+    if (!user || user.disabled || saved.passwordHash !== user.hash) {
       sessions.delete(key);
       return null;
     }
@@ -96,6 +99,7 @@ function createTeamService({
       ...saved,
       key,
       username: user.username,
+      fullName: user.fullName || user.username,
       role: user.role,
       projects: user.projects,
     };
@@ -195,6 +199,7 @@ function createTeamService({
           authenticated: Boolean(user),
           user: user
             ? {
+                fullName: user.fullName || user.username,
                 username: user.username,
                 role: user.role,
                 projects: user.projects,
@@ -215,11 +220,11 @@ function createTeamService({
             "Sign-in is not enabled. The server is in local mode.",
           );
         const body = await bodyJSON(req, 8192);
-        const username =
-          typeof body?.username === "string"
-            ? body.username.trim().toLowerCase()
+        const identifier =
+          typeof (body?.email ?? body?.username) === "string"
+            ? (body.email ?? body.username).trim().toLowerCase()
             : "";
-        const key = req.socket.remoteAddress + ":" + username;
+        const key = req.socket.remoteAddress + ":" + identifier;
         const previous = attempts.get(key);
         if (!previous && attempts.size >= 1000) {
           for (const [id, value] of attempts)
@@ -233,7 +238,13 @@ function createTeamService({
             "Too many sign-in attempts. Try again in 15 minutes.",
           );
         const users = await store.getUsers();
-        const user = users.find((item) => item.username === username);
+        const matches = users.filter(
+          (item) =>
+            !item.disabled &&
+            (item.username === identifier ||
+              (item.email && item.email.toLowerCase() === identifier)),
+        );
+        const user = matches.length === 1 ? matches[0] : null;
         if (!verifyPassword(body?.password, user)) {
           const record =
             previous && previous.until > now()
@@ -244,8 +255,9 @@ function createTeamService({
           if (attempts.size > 1000)
             for (const [old, value] of attempts)
               if (value.until < now()) attempts.delete(old);
-          throw apiError(401, "Username or password is incorrect.");
+          throw apiError(401, "Email, username, or password is incorrect.");
         }
+        const username = user.username;
         attempts.delete(key);
         const token = crypto.randomBytes(32).toString("base64url"),
           csrf = crypto.randomBytes(24).toString("base64url");
@@ -254,6 +266,7 @@ function createTeamService({
         if (sessions.size >= 1000)
           sessions.delete(sessions.keys().next().value);
         sessions.set(hashToken(token), {
+          passwordHash: user.hash,
           username,
           csrf,
           expires: now() + 8 * 60 * 60 * 1000,
@@ -268,6 +281,148 @@ function createTeamService({
           },
           {
             "Set-Cookie": `tomatoes_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${secure}`,
+          },
+        );
+        return true;
+      }
+      if (
+        req.method === "POST" &&
+        ["/api/forgot-password", "/api/reset-password"].includes(url.pathname)
+      ) {
+        checkOrigin(req);
+        if (!teamMode)
+          throw apiError(409, "Password recovery requires sign-in mode.");
+        const key = req.socket.remoteAddress + ":" + url.pathname;
+        for (const [id, attempt] of recoveryAttempts)
+          if (attempt.until <= now()) recoveryAttempts.delete(id);
+        const attempt = recoveryAttempts.get(key) || {
+          count: 0,
+          until: now() + 15 * 60 * 1000,
+        };
+        if (
+          attempt.count >= 10 ||
+          (!recoveryAttempts.has(key) && recoveryAttempts.size >= 1000)
+        )
+          throw apiError(
+            429,
+            "Too many recovery attempts. Try again in 15 minutes.",
+          );
+        attempt.count++;
+        recoveryAttempts.set(key, attempt);
+        const body = await bodyJSON(req, 8192);
+        if (url.pathname === "/api/forgot-password") {
+          const email =
+            typeof body?.email === "string"
+              ? body.email.trim().toLowerCase()
+              : "";
+          if (
+            !email ||
+            email.length > 254 ||
+            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+          )
+            throw apiError(400, "Enter a valid account email address.");
+          const matches = (await store.getUsers()).filter(
+            (user) => !user.disabled && user.email?.toLowerCase() === email,
+          );
+          if (matches.length === 1) {
+            const target = matches[0];
+            const token = crypto.randomBytes(32).toString("base64url");
+            const expires = now() + 15 * 60 * 1000;
+            // Keep database token replacement and private inbox delivery in order.
+            const delivery = recoveryDeliveryQueue
+              .catch(() => {})
+              .then(async () => {
+                await store.manageUser(target.username, (rows) => {
+                  const user = rows.find(
+                    (item) => item.username === target.username,
+                  );
+                  if (
+                    !user ||
+                    user.disabled ||
+                    user.email?.toLowerCase() !== email
+                  )
+                    throw apiError(
+                      400,
+                      "Could not prepare password recovery. Please try again.",
+                    );
+                  return {
+                    ...user,
+                    resetHash: hashToken(token),
+                    resetExpires: expires,
+                  };
+                });
+                const folder = path.join(dataDir, "recovery-inbox");
+                await fs.mkdir(folder, { recursive: true, mode: 0o700 });
+                await writeJSON(path.join(folder, hashToken(email) + ".json"), {
+                  email,
+                  expires,
+                  link:
+                    (publicOrigin || "http://" + req.headers.host) +
+                    "/#reset-password?token=" +
+                    token,
+                });
+              });
+            recoveryDeliveryQueue = delivery;
+            await delivery;
+          }
+          send(res, 202, {
+            message:
+              "If an active account matches this email, a reset link is available in the private local recovery inbox. Links expire after 15 minutes.",
+            delivery: "local",
+          });
+          return true;
+        }
+        if (
+          typeof body?.token !== "string" ||
+          !/^[A-Za-z0-9_-]{43}$/.test(body.token)
+        )
+          throw apiError(
+            400,
+            "This reset link is invalid or expired. Request a new one.",
+          );
+        let credentials;
+        try {
+          credentials = hashPassword(body.password);
+        } catch (error) {
+          throw apiError(400, error.message);
+        }
+        const digest = hashToken(body.token);
+        const target = (await store.getUsers()).find(
+          (user) => user.resetHash === digest,
+        );
+        if (!target)
+          throw apiError(
+            400,
+            "This reset link is invalid or expired. Request a new one.",
+          );
+        await store.manageUser(target.username, (rows) => {
+          const user = rows.find((item) => item.username === target.username);
+          if (
+            !user ||
+            user.disabled ||
+            user.resetHash !== digest ||
+            Number(user.resetExpires) <= now()
+          )
+            throw apiError(
+              400,
+              "This reset link is invalid or expired. Request a new one.",
+            );
+          return {
+            ...user,
+            ...credentials,
+            resetHash: null,
+            resetExpires: null,
+          };
+        });
+        for (const [id, value] of sessions)
+          if (value.username === target.username) sessions.delete(id);
+        send(
+          res,
+          200,
+          { message: "Password updated. Sign in with your new password." },
+          {
+            "Set-Cookie":
+              "tomatoes_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
           },
         );
         return true;
@@ -288,6 +443,126 @@ function createTeamService({
         return true;
       }
       const user = await principal(req);
+      if (
+        url.pathname === "/api/users" ||
+        url.pathname.startsWith("/api/users/")
+      ) {
+        if (user.kind === "token" || !UserManagement.isGlobalAdmin(user))
+          throw apiError(
+            403,
+            "Only admins with all-project access can manage users.",
+          );
+        if (req.method === "GET" && url.pathname === "/api/users") {
+          send(res, 200, {
+            users: (await store.getUsers()).map(UserManagement.publicUser),
+            roles: UserManagement.roles,
+            currentUsername: user.username || null,
+            localMode: !teamMode,
+          });
+          return true;
+        }
+        if (
+          !(url.pathname === "/api/users"
+            ? req.method === "POST"
+            : ["PUT", "DELETE"].includes(req.method))
+        )
+          throw apiError(405, "Use GET, POST, PUT, or DELETE for users.");
+        canWrite(req, user);
+        const creating = req.method === "POST" && url.pathname === "/api/users";
+        const username = creating
+          ? null
+          : decodeURIComponent(url.pathname.slice("/api/users/".length));
+        if (!creating && !/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(username))
+          throw apiError(400, "Choose a valid username.");
+        const body =
+          req.method === "DELETE" ? null : await bodyJSON(req, 16384);
+        const changes = body
+          ? UserManagement.validateUser(body, creating)
+          : null;
+        if (
+          changes &&
+          !creating &&
+          body.username !== undefined &&
+          body.username !== username
+        )
+          throw apiError(400, "Usernames cannot be changed.");
+        const target = creating ? changes.username : username;
+        const credentials = creating ? hashPassword(body.password) : null;
+        const saved = await store.manageUser(target, (rows) => {
+          if (
+            user.kind === "session" &&
+            !rows.some(
+              (row) =>
+                row.username === user.username &&
+                UserManagement.isGlobalAdmin(row),
+            )
+          )
+            throw apiError(
+              403,
+              "Your user-management access has changed. Sign in again.",
+            );
+          const previous = rows.find((row) => row.username === target);
+          if (
+            changes?.email &&
+            rows.some(
+              (row) =>
+                row.username !== target &&
+                row.email?.toLowerCase() === changes.email.toLowerCase(),
+            )
+          )
+            throw apiError(
+              409,
+              "This email address is already assigned to an account.",
+            );
+          if (creating && previous)
+            throw apiError(
+              409,
+              "This username already exists. Restore the account if it is deactivated.",
+            );
+          if (!creating && !previous) throw apiError(404, "User not found.");
+          const next = creating
+            ? { ...changes, ...credentials }
+            : req.method === "DELETE"
+              ? { ...previous, disabled: true }
+              : { ...previous, ...changes, username: target };
+          if (
+            user.username === target &&
+            (next.disabled ||
+              next.role !== previous.role ||
+              JSON.stringify([...next.projects].sort()) !==
+                JSON.stringify([...previous.projects].sort()))
+          )
+            throw apiError(
+              409,
+              "You cannot deactivate your own account or change your own access. Ask another administrator.",
+            );
+          if (
+            previous &&
+            UserManagement.isGlobalAdmin(previous) &&
+            !UserManagement.isGlobalAdmin(next) &&
+            !rows.some(
+              (row) =>
+                row.username !== target && UserManagement.isGlobalAdmin(row),
+            )
+          )
+            throw apiError(
+              409,
+              "Keep at least one active admin with all-project access.",
+            );
+          if (next.disabled || next.email !== previous?.email) {
+            next.resetHash = null;
+            next.resetExpires = null;
+          }
+          return next;
+        });
+        if (saved.disabled)
+          for (const [key, value] of sessions)
+            if (value.username === target) sessions.delete(key);
+        send(res, creating ? 201 : 200, {
+          user: UserManagement.publicUser(saved),
+        });
+        return true;
+      }
       if (url.pathname === "/api/preferences") {
         if (user.kind === "token")
           throw apiError(403, "CI tokens cannot access user preferences.");

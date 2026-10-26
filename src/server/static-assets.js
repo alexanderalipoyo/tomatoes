@@ -25,6 +25,8 @@ for (const name of [
   "workspace-tools",
   "workspace-menu",
   "profile",
+  "users",
+  "auth",
   "projects",
   "integrations",
 ]) {

@@ -270,3 +270,29 @@ npm run test:postgres   # Live database tests using isolated temporary schemas
 ```
 
 The PostgreSQL tests use the configured local connection, create uniquely named test schemas and temporary attachment directories, and remove only their own test data. They verify persistence, project scoping, role enforcement, original-text fidelity, attachments, repeatable migrations, and transaction rollback.
+
+### Manage workspace users
+
+Open **Manage profile → Users** to search local accounts, filter by role or status, and add or edit users. Accounts have a full name, optional contact email, a unique username, and explicit project access. Use `*` for all projects. Creating an account does not send an invitation email; share its initial password securely.
+
+- **Viewer:** read reports in assigned projects and save personal preferences.
+- **Editor:** Viewer access plus publishing reports and updating report notes and attachments in assigned projects.
+- **Admin:** Editor access; admins with `*` project access can administer users.
+
+Deactivating an account blocks sign-in and ends its active sessions. Its reports and account details are retained, and the account can be restored from the deactivated-account filter. Previously saved browser copies remain on their devices. The server prevents removing the last active admin with all-project access and prevents administrators from deactivating themselves or changing their own access.
+
+Local mode allows the operator of the local installation to manage accounts without signing in. To enforce account roles and project restrictions, enable the existing team sign-in mode after creating an all-project admin. Run `npm run db:migrate` when upgrading a PostgreSQL installation to add the user-management columns.
+
+### Sign-in and local password recovery
+
+With `TOMATOES_TEAM_MODE=1`, Tomatoes opens a dedicated sign-in page. Sign in with your account email or username and existing password. Email matching is case-insensitive; each account must have a unique email for email login and recovery. Report APIs enforce account roles and project access.
+
+Choose **Forgot password?** and enter your account email. This local setup writes a recovery message to the private `.tomatoes-data/recovery-inbox/` folder (or your configured private data folder); it does not send email. From the Tomatoes project folder, retrieve your link with:
+
+```powershell
+node scripts/password-recovery.js alextest@gmail.com
+```
+
+Open that private link and enter a new password of 12–256 characters. Links expire after 15 minutes, can be used once, and are replaced by a newer request. The recovery command checks the current database token before displaying a link, so used or revoked links cannot be retrieved as valid. Password changes invalidate existing sessions. Never share reset links or expose the private data directory. Account lookups return the same browser response whether an email exists or not. Recovery requests and reset attempts are rate-limited.
+
+Run `npm run db:migrate` when upgrading PostgreSQL to install password-recovery storage. The database stores hashed tokens; the private local inbox contains the actual links for the person who controls this computer. Email delivery is not configured in this local recovery mode.

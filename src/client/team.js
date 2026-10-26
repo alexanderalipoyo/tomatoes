@@ -13,6 +13,12 @@ async function teamRequest(route, options = {}) {
     credentials: "same-origin",
   });
   const result = await response.json();
+  if (
+    response.status === 401 &&
+    !["/api/login", "/api/reset-password"].includes(route) &&
+    typeof authSessionExpired === "function"
+  )
+    authSessionExpired();
   if (!response.ok)
     throw new Error(result.error || `Request failed (${response.status}).`);
   return result;
@@ -38,7 +44,7 @@ async function renderTeam(alt) {
     if (!isTeamSettingsView(alt) || version !== teamRenderVersion) return;
     teamState = status;
     if (status.enabled && !status.authenticated) {
-      alt.innerHTML = `<form id="team-login" class="settings-card preference-form team-login"><h2>Sign in to the local team store</h2><p>Your account determines which projects you can access. Browser import history is stored separately on this device.</p><label>Username<input id="team-username" autocomplete="username" required maxlength="64"/></label><label>Password<input id="team-password" type="password" autocomplete="current-password" required maxlength="256"/></label><button class="button primary" type="submit">Sign in</button><p id="team-login-error" role="alert"></p></form><article class="settings-card"><h2>Local account setup</h2><p>In a terminal, create an account with a role and project scope:</p><pre>node scripts/team-admin.js add-user alex --projects tomatoes --role editor</pre><p class="widget-footnote">Account setup runs on this machine; the password is prompted without echo.</p></article>`;
+      alt.innerHTML = `<form id="team-login" class="settings-card preference-form team-login"><h2>Sign in to the local team store</h2><p>Your account determines which projects you can access. Browser import history is stored separately on this device.</p><label>Email or username<input id="team-username" autocomplete="username" required maxlength="64"/></label><label>Password<input id="team-password" type="password" autocomplete="current-password" required maxlength="256"/></label><button class="button primary" type="submit">Sign in</button><p id="team-login-error" role="alert"></p></form><article class="settings-card"><h2>Local account setup</h2><p>In a terminal, create an account with a role and project scope:</p><pre>node scripts/team-admin.js add-user alex --projects tomatoes --role editor</pre><p class="widget-footnote">Account setup runs on this machine; the password is prompted without echo.</p></article>`;
       $("#team-login").onsubmit = async (event) => {
         event.preventDefault();
         const form = event.target;

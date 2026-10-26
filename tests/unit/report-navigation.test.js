@@ -9,6 +9,9 @@ function fixture(hash, search = "?import=invalid") {
   const elements = {};
   const context = {
     location: { hash, search, href: "http://localhost/" + search + hash },
+    authRequiresLogin: () => false,
+    isAuthRoute: () => false,
+    renderAuthScreen: () => calls.push("auth"),
     loading: false,
     report: null,
     activeHistoryId: null,
@@ -85,4 +88,11 @@ test("report links resolve both legacy IDs and branch-aware IDs without matching
     await f.context.serverMatchesImport(saved, id("feature/a")),
     false,
   );
+});
+
+test("signed-out navigation stops before looking up or rendering private reports", async () => {
+  const f = fixture("#results", "?server=" + "a".repeat(64));
+  f.context.authRequiresLogin = () => true;
+  await f.context.navigateReportLocation();
+  assert.deepEqual(f.calls, ["auth"]);
 });

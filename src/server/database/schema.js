@@ -12,15 +12,22 @@ function schemaName(value) {
 async function migrateSchema(client, schema) {
   const ns = schemaName(schema);
   await client.query(initialSQL.replaceAll("__SCHEMA__", ns));
-  const applied = await client.query(
-    `SELECT version FROM ${ns}.schema_migrations WHERE version=2`,
-  );
-  if (!applied.rows.length) {
-    const sql = fs.readFileSync(
-      path.join(__dirname, "migrations", "002-user-preferences.sql"),
-      "utf8",
+  for (const [version, filename] of [
+    [2, "002-user-preferences.sql"],
+    [3, "003-user-management.sql"],
+    [4, "004-password-recovery.sql"],
+  ]) {
+    const applied = await client.query(
+      `SELECT version FROM ${ns}.schema_migrations WHERE version=$1`,
+      [version],
     );
-    await client.query(sql.replaceAll("__SCHEMA__", ns));
+    if (!applied.rows.length) {
+      const sql = fs.readFileSync(
+        path.join(__dirname, "migrations", filename),
+        "utf8",
+      );
+      await client.query(sql.replaceAll("__SCHEMA__", ns));
+    }
   }
 }
 module.exports = { schemaName, migrateSchema };

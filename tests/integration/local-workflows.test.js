@@ -847,3 +847,411 @@ test("identical report JSON on different branches retains independent browser an
   assert.equal((await history.list()).length, 2);
   assert.equal((await api.request("/api/runs")).body.runs.length, 2);
 });
+
+test("user CRUD retains accounts for restoration, protects the last admin, and never exposes credentials", async (t) => {
+  const f = await serviceFixture(t);
+  const body = (username, role = "viewer", projects = ["web"]) => ({
+    username,
+    fullName: "Example User",
+    email: `${username}@example.com`,
+    role,
+    projects,
+    disabled: false,
+    password: "test-only-password-123",
+  });
+  const request = (route, method, value, headers = {}) =>
+    f.request(route, {
+      method,
+      headers: { Origin: f.origin, ...headers },
+      ...(value ? { body: JSON.stringify(value) } : {}),
+    });
+  assert.equal(
+    (await request("/api/users", "POST", body("reader"))).status,
+    201,
+  );
+  assert.equal(
+    (await request("/api/users", "POST", body("reader"))).status,
+    409,
+  );
+  assert.equal(
+    (await request("/api/users", "POST", { ...body("bad"), role: "owner" }))
+      .status,
+    400,
+  );
+  const directory = await f.request("/api/users");
+  assert.equal(directory.body.users.length, 1);
+  assert.doesNotMatch(
+    JSON.stringify(directory.body),
+    /password|salt|hash|test-only/,
+  );
+  const updated = {
+    ...directory.body.users[0],
+    fullName: "Updated Name",
+    role: "editor",
+    projects: ["api"],
+  };
+  assert.equal(
+    (await request("/api/users/reader", "PUT", updated)).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request("/api/users/reader", "PUT", {
+        ...updated,
+        username: "renamed",
+      })
+    ).status,
+    400,
+  );
+  assert.equal((await request("/api/users/reader", "DELETE")).status, 200);
+  const disabled = (await f.request("/api/users")).body.users[0];
+  assert.equal(disabled.disabled, true);
+  assert.deepEqual(disabled.projects, ["api"]);
+  assert.equal(
+    (
+      await request("/api/users/reader", "PUT", {
+        ...disabled,
+        disabled: false,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request("/api/users/reader", "PUT", {
+        ...disabled,
+        password: "another-password",
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await request("/api/users", "POST", body("root1", "admin", ["*"]))).status,
+    201,
+  );
+  assert.equal((await request("/api/users/root1", "DELETE")).status, 409);
+  assert.equal(
+    (await request("/api/users", "POST", body("root2", "admin", ["*"]))).status,
+    201,
+  );
+  const results = await Promise.all([
+    request("/api/users/root1", "DELETE"),
+    request("/api/users/root2", "DELETE"),
+  ]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+  assert.equal((await request("/api/users/missing", "DELETE")).status, 404);
+  assert.equal(
+    (
+      await request("/api/users", "POST", body("cross-site"), {
+        Origin: "https://evil.example",
+      })
+    ).status,
+    403,
+  );
+});
+test("user administration enforces global admin scope, CSRF, self-protection, and deactivation of live sessions", async (t) => {
+  const f = await serviceFixture(t, { teamMode: true });
+  const password = "test-only-password-123";
+  await writeJSON(path.join(f.dataDir, "users.json"), [
+    {
+      username: "root",
+      role: "admin",
+      projects: ["*"],
+      ...hashPassword(password),
+    },
+    {
+      username: "scoped",
+      role: "admin",
+      projects: ["web"],
+      ...hashPassword(password),
+    },
+    {
+      username: "editor",
+      role: "editor",
+      projects: ["web"],
+      ...hashPassword(password),
+    },
+    {
+      username: "reader",
+      role: "viewer",
+      projects: ["web"],
+      ...hashPassword(password),
+    },
+  ]);
+  const login = async (username) => {
+    const result = await f.request("/api/login", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ username, password }),
+    });
+    return {
+      Cookie: result.headers.get("set-cookie").split(";")[0],
+      Origin: f.origin,
+      "X-CSRF-Token": result.body.csrf,
+    };
+  };
+  assert.equal((await f.request("/api/users")).status, 401);
+  for (const username of ["scoped", "editor", "reader"])
+    assert.equal(
+      (await f.request("/api/users", { headers: await login(username) }))
+        .status,
+      403,
+    );
+  const root = await login("root");
+  const reader = await login("reader");
+  assert.equal((await f.request("/api/users", { headers: root })).status, 200);
+  const records = (await f.request("/api/users", { headers: root })).body.users;
+  const self = records.find((u) => u.username === "root");
+  assert.equal(
+    (await f.request("/api/users/root", { method: "DELETE", headers: root }))
+      .status,
+    409,
+  );
+  assert.equal(
+    (
+      await f.request("/api/users/root", {
+        method: "PUT",
+        headers: root,
+        body: JSON.stringify({ ...self, role: "viewer" }),
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await f.request("/api/users/reader", {
+        method: "DELETE",
+        headers: { ...root, "X-CSRF-Token": "bad" },
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await f.request("/api/users/reader", { method: "DELETE", headers: root }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (await f.request("/api/preferences", { headers: reader })).status,
+    401,
+  );
+  assert.equal(
+    (
+      await f.request("/api/login", {
+        method: "POST",
+        headers: { Origin: f.origin },
+        body: JSON.stringify({ username: "reader", password }),
+      })
+    ).status,
+    401,
+  );
+  const restored = records.find((u) => u.username === "reader");
+  assert.equal(
+    (
+      await f.request("/api/users/reader", {
+        method: "PUT",
+        headers: root,
+        body: JSON.stringify(restored),
+      })
+    ).status,
+    200,
+  );
+  const newReader = await login("reader");
+  assert.equal(
+    (await f.request("/api/preferences", { headers: newReader })).status,
+    200,
+  );
+  assert.equal(
+    (await f.request("/api/users", { headers: newReader })).status,
+    403,
+  );
+});
+
+test("email login and local recovery expire old links, consume tokens once, and revoke existing sessions", async (t) => {
+  let clock = Date.now();
+  const f = await serviceFixture(t, { teamMode: true, now: () => clock });
+  const email = "alextest@gmail.com",
+    password = "old-test-password-123",
+    nextPassword = "new-test-password-456";
+  await writeJSON(path.join(f.dataDir, "users.json"), [
+    {
+      username: "alex",
+      fullName: "Alex Ali",
+      email,
+      role: "admin",
+      projects: ["*"],
+      ...hashPassword(password),
+    },
+  ]);
+  const post = (route, body, origin = f.origin) =>
+    f.request(route, {
+      method: "POST",
+      headers: { Origin: origin },
+      body: JSON.stringify(body),
+    });
+  const login = await post("/api/login", {
+    username: " ALEXTEST@GMAIL.COM ",
+    password,
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.body.user.username, "alex");
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const known = await post("/api/forgot-password", { email });
+  const unknown = await post("/api/forgot-password", {
+    email: "unknown@example.com",
+  });
+  assert.equal(known.status, 202);
+  assert.deepEqual(known.body, unknown.body);
+  const inbox = path.join(
+    f.dataDir,
+    "recovery-inbox",
+    hashToken(email) + ".json",
+  );
+  const token = async () =>
+    new URLSearchParams(
+      JSON.parse(await fs.readFile(inbox, "utf8")).link.split("?")[1],
+    ).get("token");
+  const old = await token();
+  assert.doesNotMatch(JSON.stringify(known.body), new RegExp(old));
+  clock += 16 * 60 * 1000;
+  assert.equal(
+    (await post("/api/reset-password", { token: old, password: nextPassword }))
+      .status,
+    400,
+  );
+  assert.equal(
+    (await post("/api/forgot-password", { email }, "https://evil.example"))
+      .status,
+    403,
+  );
+  await post("/api/forgot-password", { email });
+  const replaced = await token();
+  await post("/api/forgot-password", { email });
+  const current = await token();
+  assert.notEqual(current, replaced);
+  assert.equal(
+    (
+      await post("/api/reset-password", {
+        token: replaced,
+        password: nextPassword,
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await post("/api/reset-password", { token: current, password: "short" }))
+      .status,
+    400,
+  );
+  const attempts = await Promise.all([
+    post("/api/reset-password", { token: current, password: nextPassword }),
+    post("/api/reset-password", { token: current, password: nextPassword }),
+  ]);
+  assert.deepEqual(attempts.map((r) => r.status).sort(), [200, 400]);
+  assert.equal(
+    (await f.request("/api/preferences", { headers: { Cookie: cookie } }))
+      .status,
+    401,
+  );
+  assert.equal((await post("/api/login", { email, password })).status, 401);
+  assert.equal(
+    (await post("/api/login", { email, password: nextPassword })).status,
+    200,
+  );
+  const stored = JSON.parse(
+    await fs.readFile(path.join(f.dataDir, "users.json"), "utf8"),
+  )[0];
+  assert.equal(stored.resetHash, null);
+  assert.notEqual(stored.hash, hashToken(nextPassword));
+});
+test("password recovery rate limits requests and does not create links for disabled accounts", async (t) => {
+  const f = await serviceFixture(t, { teamMode: true });
+  await writeJSON(path.join(f.dataDir, "users.json"), [
+    {
+      username: "alex",
+      email: "alextest@gmail.com",
+      disabled: true,
+      role: "admin",
+      projects: ["*"],
+      ...hashPassword("test-password-only"),
+    },
+  ]);
+  for (let i = 0; i < 10; i++)
+    assert.equal(
+      (
+        await f.request("/api/forgot-password", {
+          method: "POST",
+          headers: { Origin: f.origin },
+          body: JSON.stringify({ email: "alextest@gmail.com" }),
+        })
+      ).status,
+      202,
+    );
+  assert.equal(
+    (
+      await f.request("/api/forgot-password", {
+        method: "POST",
+        headers: { Origin: f.origin },
+        body: JSON.stringify({ email: "alextest@gmail.com" }),
+      })
+    ).status,
+    429,
+  );
+  await assert.rejects(() => fs.access(path.join(f.dataDir, "recovery-inbox")));
+});
+
+test("concurrent recovery requests leave a usable inbox link and recovery tools reject consumed or replaced links", async (t) => {
+  const { readRecoveryLink } = require("../../scripts/password-recovery");
+  const f = await serviceFixture(t, { teamMode: true });
+  const email = "local-recovery@example.com";
+  const usersFile = path.join(f.dataDir, "users.json");
+  await writeJSON(usersFile, [
+    {
+      username: "alex",
+      email,
+      role: "admin",
+      projects: ["*"],
+      ...hashPassword("test-password-only"),
+    },
+  ]);
+  const request = () =>
+    f.request("/api/forgot-password", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ email }),
+    });
+  const results = await Promise.all(Array.from({ length: 4 }, request));
+  assert.ok(results.every((result) => result.status === 202));
+  const store = {
+    getUsers: async () => JSON.parse(await fs.readFile(usersFile, "utf8")),
+  };
+  const options = { email, dataDir: f.dataDir, store };
+  const link = await readRecoveryLink(options);
+  const token = new URLSearchParams(link.split("?")[1]).get("token");
+  assert.equal((await store.getUsers())[0].resetHash, hashToken(token));
+  await assert.rejects(
+    () => readRecoveryLink({ ...options, now: Date.now() + 16 * 60 * 1000 }),
+    /expired/,
+  );
+  await request();
+  const next = await readRecoveryLink(options);
+  assert.notEqual(next, link);
+  const currentToken = new URLSearchParams(next.split("?")[1]).get("token");
+  assert.equal(
+    (
+      await f.request("/api/reset-password", {
+        method: "POST",
+        headers: { Origin: f.origin },
+        body: JSON.stringify({
+          token: currentToken,
+          password: "new-test-password-only",
+        }),
+      })
+    ).status,
+    200,
+  );
+  await assert.rejects(
+    () => readRecoveryLink(options),
+    /used, replaced, or revoked/,
+  );
+});

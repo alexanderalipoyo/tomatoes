@@ -34,12 +34,32 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
       });
     },
     getUsers: () => readJSON(file("users"), []),
+    async manageUser(username, mutate) {
+      return serial(async () => {
+        const rows = await readJSON(file("users"), []);
+        const next = mutate(rows);
+        await writeJSON(file("users"), [
+          ...rows.filter((row) => row.username !== username),
+          next,
+        ]);
+        return next;
+      });
+    },
     getTokens: () => readJSON(file("tokens"), []),
     async addUser(user) {
       return serial(async () => {
         const rows = await readJSON(file("users"), []);
         if (rows.some((row) => row.username === user.username))
           throw new Error("This username already exists.");
+        if (
+          user.email &&
+          rows.some(
+            (row) => row.email?.toLowerCase() === user.email.toLowerCase(),
+          )
+        )
+          throw new Error(
+            "This email address is already assigned to an account.",
+          );
         await writeJSON(file("users"), [...rows, user]);
       });
     },

@@ -8,6 +8,7 @@ const esc = (value) =>
       ],
   );
 const icons = {
+  close: '<path d="m6 6 12 12M6 18 18 6"/>',
   integration:
     '<path d="m9 3 3 3-6 6-3-3m12 12-3-3 6-6 3 3M8 16l-4 4m12-12 4-4M8 12l4 4m0-8 4 4"/>',
   profile:
@@ -449,6 +450,11 @@ function showTest(id) {
   $("#detail").showModal();
 }
 function navigate(force = false) {
+  if (authRequiresLogin() || isAuthRoute()) {
+    renderAuthScreen();
+    return;
+  }
+  hideAuthScreen();
   if (loading && force !== true) return;
   view = location.hash.slice(1) || "runs";
   if (view === "team") {
@@ -468,6 +474,7 @@ function navigate(force = false) {
       "flaky",
       "settings",
       "workspace-settings",
+      "users",
       "profile",
       "projects",
       "integrations",
@@ -479,6 +486,7 @@ function navigate(force = false) {
   const workspaceContext = [
     "integrations",
     "projects",
+    "users",
     "profile",
     "workspace-settings",
     "settings",
@@ -508,6 +516,10 @@ function navigate(force = false) {
     projects: [
       "Projects",
       "Browse the projects and saved runs in your workspace.",
+    ],
+    users: [
+      "Users",
+      "Manage workspace accounts, roles, and project permissions.",
     ],
     profile: [
       "My Profile",
@@ -582,6 +594,11 @@ function navigate(force = false) {
   if (view === "projects") {
     $("#report-content").hidden = false;
     renderProjects($("#alternate"));
+    return;
+  }
+  if (view === "users") {
+    $("#report-content").hidden = false;
+    renderUsers($("#alternate"));
     return;
   }
   if (view === "profile") {
@@ -1098,7 +1115,12 @@ matchMedia("(max-width: 1024px)").addEventListener("change", (event) => {
   if (!event.matches) $("#mobile-navigation").close();
 });
 window.addEventListener("hashchange", () => $("#mobile-navigation").close());
-reloadUserPreferences().finally(() => {
+initializeAuth().then(async () => {
+  if (authRequiresLogin() || isAuthRoute()) {
+    renderAuthScreen();
+    return;
+  }
+  await reloadUserPreferences();
   void refreshHistory()
     .catch((error) =>
       historyNotice(`Could not load import history: ${error.message}`, "error"),

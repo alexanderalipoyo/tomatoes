@@ -74,6 +74,7 @@ function isReportIndependentView() {
   return [
     "projects",
     "integrations",
+    "users",
     "profile",
     "workspace-settings",
     "team",
@@ -81,6 +82,10 @@ function isReportIndependentView() {
   ].includes(location.hash.slice(1));
 }
 async function navigateReportLocation() {
+  if (authRequiresLogin() || isAuthRoute()) {
+    renderAuthScreen();
+    return;
+  }
   if (loading) {
     pendingReportNavigation = true;
     return;

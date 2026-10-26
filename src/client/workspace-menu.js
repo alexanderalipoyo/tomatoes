@@ -77,8 +77,9 @@
       await teamRequest("/api/logout", { method: "POST", body: "{}" });
       teamState = null;
       close();
+      await initializeAuth();
       await reloadUserPreferences();
-      location.hash = "team";
+      location.hash = "login";
       navigate();
       showToast("Signed out.", "success");
     } catch (error) {
