@@ -69,7 +69,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=4`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=5`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {
@@ -207,10 +207,61 @@ function createPostgresStore({
         ])
       ).rows.map((row) => row.record);
     },
-    async saveEvidence(record) {
+    async getSession(key) {
+      return (
+        (
+          await pool.query(
+            `SELECT record FROM ${ns}.auth_sessions WHERE key=$1`,
+            [key],
+          )
+        ).rows[0]?.record || null
+      );
+    },
+    async setSession(key, record, clock) {
+      await pool.query(`DELETE FROM ${ns}.auth_sessions WHERE expires <= $1`, [
+        clock,
+      ]);
       await pool.query(
-        `INSERT INTO ${ns}.evidence(id,run_id,record) VALUES($1,$2,$3::jsonb) ON CONFLICT(id) DO UPDATE SET record=EXCLUDED.record`,
-        [record.id, record.runId, JSON.stringify(record)],
+        `INSERT INTO ${ns}.auth_sessions(key,username,record,expires) VALUES($1,$2,$3::jsonb,$4) ON CONFLICT(key) DO UPDATE SET record=EXCLUDED.record,expires=EXCLUDED.expires`,
+        [key, record.username, JSON.stringify(record), record.expires],
+      );
+    },
+    async deleteSession(key) {
+      await pool.query(`DELETE FROM ${ns}.auth_sessions WHERE key=$1`, [key]);
+    },
+    async revokeSessions(username) {
+      await pool.query(`DELETE FROM ${ns}.auth_sessions WHERE username=$1`, [
+        username,
+      ]);
+    },
+    async clearAuthAttempt(key) {
+      await pool.query(`DELETE FROM ${ns}.auth_attempts WHERE key=$1`, [key]);
+    },
+    async consumeAuthAttempt(key, limit, duration, clock) {
+      await pool.query(`DELETE FROM ${ns}.auth_attempts WHERE expires <= $1`, [
+        clock,
+      ]);
+      const row = (
+        await pool.query(
+          `INSERT INTO ${ns}.auth_attempts(key,count,expires) VALUES($1,1,$3) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN ${ns}.auth_attempts.expires <= $2 THEN 1 ELSE LEAST(${ns}.auth_attempts.count+1,$4+1) END,expires=CASE WHEN ${ns}.auth_attempts.expires <= $2 THEN $3 ELSE ${ns}.auth_attempts.expires END RETURNING count`,
+          [key, clock, clock + duration, limit],
+        )
+      ).rows[0];
+      return row.count <= limit;
+    },
+    async getEvidenceContent(id) {
+      return (
+        (
+          await pool.query(`SELECT content FROM ${ns}.evidence WHERE id=$1`, [
+            id,
+          ])
+        ).rows[0]?.content || null
+      );
+    },
+    async saveEvidence(record, bytes = null) {
+      await pool.query(
+        `INSERT INTO ${ns}.evidence(id,run_id,record,content) VALUES($1,$2,$3::jsonb,$4) ON CONFLICT(id) DO UPDATE SET record=EXCLUDED.record,content=COALESCE(EXCLUDED.content,${ns}.evidence.content)`,
+        [record.id, record.runId, JSON.stringify(record), bytes],
       );
     },
     async importSnapshot({

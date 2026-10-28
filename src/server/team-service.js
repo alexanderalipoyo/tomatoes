@@ -39,38 +39,74 @@ function createTeamService({
   dataDir = path.join(PROJECT_ROOT, ".tomatoes-data"),
   teamMode = false,
   publicOrigin = "",
+  additionalOrigins = [],
   ciToken = "",
   ciProject = "tomatoes",
   now = () => Date.now(),
   slackNotifier = null,
+  hosted = false,
+  recoverySender = null,
   store = createFileStore(dataDir),
 } = {}) {
   const sessions = new Map(),
     attempts = new Map();
   const recoveryAttempts = new Map();
   let recoveryDeliveryQueue = Promise.resolve();
+  const maxRequestBytes = hosted ? 4 * 1024 * 1024 : Infinity;
+  const saveSession = async (key, value) =>
+    store.setSession
+      ? store.setSession(key, value, now())
+      : sessions.set(key, value);
+  const deleteSession = async (key) =>
+    store.deleteSession ? store.deleteSession(key) : sessions.delete(key);
+  const revokeSessions = async (username) => {
+    if (store.revokeSessions) return store.revokeSessions(username);
+    for (const [key, value] of sessions)
+      if (value.username === username) sessions.delete(key);
+  };
+  const clientAddress = (req) =>
+    hosted
+      ? String(req.headers["x-real-ip"] || req.socket.remoteAddress)
+      : req.socket.remoteAddress;
   const send = (res, status, value, headers = {}) => {
+    let serialized = JSON.stringify(value);
+    if (hosted && Buffer.byteLength(serialized) > maxRequestBytes) {
+      status = 413;
+      serialized = JSON.stringify({
+        error:
+          "This response exceeds the hosted 4 MB limit. Open this report in your local Tomatoes installation.",
+      });
+    }
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
       ...headers,
     });
-    res.end(JSON.stringify(value));
+    res.end(serialized);
   };
+  const trustedOrigins = [publicOrigin, ...additionalOrigins]
+    .filter(Boolean)
+    .map((origin) => new URL(origin).origin);
   function validHost(req) {
     try {
       const hostname = new URL("http://" + req.headers.host).hostname;
-      return publicOrigin
-        ? new URL(publicOrigin).host === req.headers.host
+      return trustedOrigins.length
+        ? trustedOrigins.some(
+            (origin) => new URL(origin).host === req.headers.host,
+          )
         : ["127.0.0.1", "localhost", "[::1]"].includes(hostname);
     } catch {
       return false;
     }
   }
   function checkOrigin(req) {
-    const expected = publicOrigin || "http://" + req.headers.host;
-    if (req.headers.origin !== expected)
+    const expected = trustedOrigins.length
+      ? trustedOrigins.filter(
+          (origin) => new URL(origin).host === req.headers.host,
+        )
+      : ["http://" + req.headers.host];
+    if (!expected.includes(req.headers.origin))
       throw apiError(
         403,
         "This action requires a request from the Tomatoes origin.",
@@ -83,16 +119,18 @@ function createTeamService({
       .find((item) => item.startsWith("tomatoes_session="));
     if (!cookie) return null;
     const key = hashToken(cookie.slice("tomatoes_session=".length));
-    const saved = sessions.get(key);
+    const saved = store.getSession
+      ? await store.getSession(key)
+      : sessions.get(key);
     if (!saved) return null;
     if (saved.expires <= now()) {
-      sessions.delete(key);
+      await deleteSession(key);
       return null;
     }
     const users = await store.getUsers();
     const user = users.find((user) => user.username === saved.username);
     if (!user || user.disabled || saved.passwordHash !== user.hash) {
-      sessions.delete(key);
+      await deleteSession(key);
       return null;
     }
     return {
@@ -140,6 +178,19 @@ function createTeamService({
     }
   }
   function readBody(req, limit = ReportData.MAX_REPORT_BYTES) {
+    limit = Math.min(limit, maxRequestBytes);
+    if (req.body !== undefined) {
+      const text = Buffer.isBuffer(req.body)
+        ? req.body.toString("utf8")
+        : typeof req.body === "string"
+          ? req.body
+          : JSON.stringify(req.body);
+      return Buffer.byteLength(text) > limit
+        ? Promise.reject(
+            apiError(413, "Request exceeds the hosted upload limit."),
+          )
+        : Promise.resolve(text);
+    }
     return new Promise((resolve, reject) => {
       let length = 0,
         parts = [],
@@ -209,6 +260,12 @@ function createTeamService({
           ciConfigured: Boolean(ciToken || tokens.length),
           slackConfigured: Boolean(slackNotifier?.enabled),
           storage: store.kind === "postgres" ? "postgres" : "local-server",
+          recoveryDelivery: hosted
+            ? recoverySender
+              ? "email"
+              : "unavailable"
+            : "local",
+          maxRequestBytes: hosted ? maxRequestBytes : null,
         });
         return true;
       }
@@ -224,7 +281,21 @@ function createTeamService({
           typeof (body?.email ?? body?.username) === "string"
             ? (body.email ?? body.username).trim().toLowerCase()
             : "";
-        const key = req.socket.remoteAddress + ":" + identifier;
+        const key = clientAddress(req) + ":" + identifier;
+        const persistentAttemptKey = hashToken("login:" + key);
+        if (
+          store.consumeAuthAttempt &&
+          !(await store.consumeAuthAttempt(
+            persistentAttemptKey,
+            5,
+            15 * 60 * 1000,
+            now(),
+          ))
+        )
+          throw apiError(
+            429,
+            "Too many sign-in attempts. Try again in 15 minutes.",
+          );
         const previous = attempts.get(key);
         if (!previous && attempts.size >= 1000) {
           for (const [id, value] of attempts)
@@ -259,13 +330,15 @@ function createTeamService({
         }
         const username = user.username;
         attempts.delete(key);
+        if (store.clearAuthAttempt)
+          await store.clearAuthAttempt(persistentAttemptKey);
         const token = crypto.randomBytes(32).toString("base64url"),
           csrf = crypto.randomBytes(24).toString("base64url");
         for (const [key, value] of sessions)
           if (value.expires < now()) sessions.delete(key);
         if (sessions.size >= 1000)
           sessions.delete(sessions.keys().next().value);
-        sessions.set(hashToken(token), {
+        await saveSession(hashToken(token), {
           passwordHash: user.hash,
           username,
           csrf,
@@ -292,7 +365,20 @@ function createTeamService({
         checkOrigin(req);
         if (!teamMode)
           throw apiError(409, "Password recovery requires sign-in mode.");
-        const key = req.socket.remoteAddress + ":" + url.pathname;
+        const key = clientAddress(req) + ":" + url.pathname;
+        if (
+          store.consumeAuthAttempt &&
+          !(await store.consumeAuthAttempt(
+            hashToken("recovery:" + key),
+            10,
+            15 * 60 * 1000,
+            now(),
+          ))
+        )
+          throw apiError(
+            429,
+            "Too many recovery attempts. Try again in 15 minutes.",
+          );
         for (const [id, attempt] of recoveryAttempts)
           if (attempt.until <= now()) recoveryAttempts.delete(id);
         const attempt = recoveryAttempts.get(key) || {
@@ -311,6 +397,11 @@ function createTeamService({
         recoveryAttempts.set(key, attempt);
         const body = await bodyJSON(req, 8192);
         if (url.pathname === "/api/forgot-password") {
+          if (hosted && !recoverySender)
+            throw apiError(
+              503,
+              "Password recovery email is not configured. Contact your workspace administrator.",
+            );
           const email =
             typeof body?.email === "string"
               ? body.email.trim().toLowerCase()
@@ -351,24 +442,28 @@ function createTeamService({
                     resetExpires: expires,
                   };
                 });
-                const folder = path.join(dataDir, "recovery-inbox");
-                await fs.mkdir(folder, { recursive: true, mode: 0o700 });
-                await writeJSON(path.join(folder, hashToken(email) + ".json"), {
-                  email,
-                  expires,
-                  link:
-                    (publicOrigin || "http://" + req.headers.host) +
-                    "/#reset-password?token=" +
-                    token,
-                });
+                const link =
+                  (publicOrigin || "http://" + req.headers.host) +
+                  "/#reset-password?token=" +
+                  token;
+                if (hosted) await recoverySender({ email, link });
+                else {
+                  const folder = path.join(dataDir, "recovery-inbox");
+                  await fs.mkdir(folder, { recursive: true, mode: 0o700 });
+                  await writeJSON(
+                    path.join(folder, hashToken(email) + ".json"),
+                    { email, expires, link },
+                  );
+                }
               });
             recoveryDeliveryQueue = delivery;
             await delivery;
           }
           send(res, 202, {
-            message:
-              "If an active account matches this email, a reset link is available in the private local recovery inbox. Links expire after 15 minutes.",
-            delivery: "local",
+            message: hosted
+              ? "If an active account matches this email, a password-reset email has been sent. Links expire after 15 minutes."
+              : "If an active account matches this email, a reset link is available in the private local recovery inbox. Links expire after 15 minutes.",
+            delivery: hosted ? "email" : "local",
           });
           return true;
         }
@@ -414,8 +509,7 @@ function createTeamService({
             resetExpires: null,
           };
         });
-        for (const [id, value] of sessions)
-          if (value.username === target.username) sessions.delete(id);
+        await revokeSessions(target.username);
         send(
           res,
           200,
@@ -430,7 +524,7 @@ function createTeamService({
       if (req.method === "POST" && url.pathname === "/api/logout") {
         const user = await principal(req);
         canWrite({ ...req, headers: req.headers }, { ...user, role: "editor" });
-        if (user.key) sessions.delete(user.key);
+        if (user.key) await deleteSession(user.key);
         send(
           res,
           200,
@@ -555,9 +649,7 @@ function createTeamService({
           }
           return next;
         });
-        if (saved.disabled)
-          for (const [key, value] of sessions)
-            if (value.username === target) sessions.delete(key);
+        if (saved.disabled) await revokeSessions(target);
         send(res, creating ? 201 : 200, {
           user: UserManagement.publicUser(saved),
         });
@@ -804,9 +896,24 @@ function createTeamService({
             (item) => item.id === evidenceMatch[2],
           );
           if (!record) throw apiError(404, "Attachment not found.");
-          const bytes = await fs.readFile(
-            path.join(dataDir, "attachments", record.id + ".bin"),
-          );
+          const storedBytes = store.getEvidenceContent
+            ? await store.getEvidenceContent(record.id)
+            : null;
+          if (hosted && !storedBytes)
+            throw apiError(
+              404,
+              "This attachment must be migrated from local storage before it can be opened here.",
+            );
+          const bytes =
+            storedBytes ||
+            (await fs.readFile(
+              path.join(dataDir, "attachments", record.id + ".bin"),
+            ));
+          if (bytes.length > maxRequestBytes)
+            throw apiError(
+              413,
+              "This attachment exceeds the hosted download limit.",
+            );
           res.writeHead(200, {
             "Content-Type": record.type,
             "Content-Length": bytes.length,
@@ -867,14 +974,26 @@ function createTeamService({
               .digest("hex"),
             savedAt: now(),
           };
-          const destination = path.join(dataDir, "attachments", id + ".bin");
-          await fs.mkdir(path.dirname(destination), { recursive: true });
-          try {
-            await fs.writeFile(destination, bytes, { flag: "wx", mode: 0o600 });
-          } catch (error) {
-            if (error.code !== "EEXIST") throw error;
+          if (store.kind === "postgres")
+            await store.saveEvidence(record, bytes);
+          else {
+            if (hosted)
+              throw apiError(
+                503,
+                "Hosted attachments require PostgreSQL storage.",
+              );
+            const destination = path.join(dataDir, "attachments", id + ".bin");
+            await fs.mkdir(path.dirname(destination), { recursive: true });
+            try {
+              await fs.writeFile(destination, bytes, {
+                flag: "wx",
+                mode: 0o600,
+              });
+            } catch (error) {
+              if (error.code !== "EEXIST") throw error;
+            }
+            await store.saveEvidence(record);
           }
-          await store.saveEvidence(record);
           send(res, 201, { evidence: record });
           return true;
         }

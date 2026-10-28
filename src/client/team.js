@@ -2,6 +2,16 @@ let teamState = null;
 let teamRenderVersion = 0;
 let teamProject = "";
 async function teamRequest(route, options = {}) {
+  const limit =
+    typeof authStatus !== "undefined" ? authStatus?.maxRequestBytes : null;
+  if (
+    limit &&
+    typeof options.body === "string" &&
+    new TextEncoder().encode(options.body).length > limit
+  )
+    throw new Error(
+      "This upload exceeds the hosted 4 MB request limit. The browser copy remains available; use a smaller report or the local Tomatoes server to publish it.",
+    );
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {}),

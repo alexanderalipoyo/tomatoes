@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    4,
+    5,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -635,4 +635,120 @@ test("PostgreSQL run archives preserve original reports and project scope across
   );
   assert.equal((await f.request("/api/runs")).body.runs.length, 1);
   assert.equal((await f.store.getRun(record().id, ["web"])).originalText, text);
+});
+
+test("sessions, rate limits and attachment bytes persist across independent serverless instances", async (t) => {
+  const f = await fixture(t, { teamMode: true });
+  const password = "test-hosted-password";
+  await f.store.addUser({
+    username: "hosted",
+    role: "admin",
+    projects: ["*"],
+    ...hashPassword(password),
+  });
+  await f.store.saveRun(record(), raw());
+  const sibling = createTeamService({
+    store: f.store,
+    teamMode: true,
+    hosted: true,
+    dataDir: path.join(f.dataDir, "no-files-here"),
+  });
+  const server = http.createServer((req, res) =>
+    sibling.handle(req, res, new URL(req.url, "http://localhost")),
+  );
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const login = await f.request("/api/login", {
+    method: "POST",
+    headers: { Origin: f.origin },
+    body: { username: "hosted", password },
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  let response = await fetch(origin + "/api/team/status", {
+    headers: { Cookie: cookie },
+  });
+  let status = await response.json();
+  assert.equal(status.authenticated, true);
+  assert.equal(status.csrf, login.body.csrf);
+  const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const uploaded = await f.request(`/api/runs/${record().id}/evidence`, {
+    method: "POST",
+    headers: {
+      Origin: f.origin,
+      Cookie: cookie,
+      "X-CSRF-Token": login.body.csrf,
+    },
+    body: {
+      testKey: Investigations.identity(
+        ReportData.normalizeReport(raw()).tests[0],
+      ),
+      name: "evidence.png",
+      type: "image/png",
+      data: bytes.toString("base64"),
+    },
+  });
+  assert.equal(uploaded.status, 201);
+  response = await fetch(
+    origin + `/api/runs/${record().id}/evidence/${uploaded.body.evidence.id}`,
+    { headers: { Cookie: cookie } },
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  response = await fetch(origin + "/api/forgot-password", {
+    method: "POST",
+    headers: { Origin: origin, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "unknown@example.com" }),
+  });
+  assert.equal(response.status, 503);
+  response = await fetch(origin + "/api/logout", {
+    method: "POST",
+    headers: {
+      Origin: origin,
+      Cookie: cookie,
+      "X-CSRF-Token": login.body.csrf,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  assert.equal(response.status, 200);
+  assert.equal(
+    (await f.request("/api/preferences", { headers: { Cookie: cookie } }))
+      .status,
+    401,
+  );
+  for (let i = 0; i < 5; i++) {
+    if (i % 2 === 0)
+      assert.equal(
+        (
+          await f.request("/api/login", {
+            method: "POST",
+            headers: { Origin: f.origin },
+            body: { username: "hosted", password: "wrong-password" },
+          })
+        ).status,
+        401,
+      );
+    else {
+      response = await fetch(origin + "/api/login", {
+        method: "POST",
+        headers: { Origin: origin, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: "hosted",
+          password: "wrong-password",
+        }),
+      });
+      assert.equal(response.status, 401);
+    }
+  }
+  response = await fetch(origin + "/api/login", {
+    method: "POST",
+    headers: { Origin: origin, "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "hosted", password }),
+  });
+  assert.equal(response.status, 429);
 });

@@ -302,3 +302,46 @@ Run `npm run db:migrate` when upgrading PostgreSQL to install password-recovery 
 From **Manage profile → Projects**, open a project's **Active runs** and choose **Archive run**. Confirm the project, branch, and copy being changed. Recover it from the same project's **Archived runs** with **Restore run** and confirm again. Projects remain visible even when all their runs are archived.
 
 Archiving keeps the report, notes, and attachments. Archived copies leave active report lists; their direct links remain available. Shared server runs require Editor or Admin access in the report's project. Browser imports are separate device-local copies with their own archive state. Backups preserve browser archive status, and reimporting an identical report keeps its archive state until it is restored.
+
+### Supabase production database
+
+The private `.env.production` file contains the Supabase connection parameters for this installation. It is ignored by Git. Set `PGPASSWORD` to your database password locally, then download the database CA certificate from Supabase **Database settings → SSL Configuration** and save it at the `PGSSLROOTCERT` path. The application verifies the certificate and hostname; it does not disable TLS verification. Separate password fields do not require URL percent-encoding. Keep `.env.local` for your local PostgreSQL setup.
+
+```powershell
+npm run db:check:production
+npm run db:migrate:production
+npm run start:production
+```
+
+The check is read-only. The migration command explicitly creates or upgrades Tomatoes tables in its dedicated `tomatoes` schema; it does not copy local reports, accounts, or preferences into Supabase. Provision an administrator in the production database before using sign-in. Production loading reads `.env.production` and never falls back to `.env.local` or `.env`; deployment environment variables take precedence.
+
+The supplied direct Supabase host normally requires IPv6. If your deployment only supports IPv4, use the **Session pooler** host and username shown in your Supabase Connect panel rather than guessing its region or address. See [Supabase connection guidance](https://supabase.com/docs/guides/database/connecting-to-postgres) and [SSL certificate guidance](https://supabase.com/docs/guides/platform/ssl-enforcement).
+
+For an actual deployment, set the application origin and a persistent private attachment/recovery directory. This configuration connects the existing server to PostgreSQL; Supabase Auth and SMTP password-reset delivery are separate integrations.
+
+### Production build and Vercel
+
+Build and verify the deployment assets with Node.js 24:
+
+```powershell
+npm ci
+npm run build:production
+```
+
+This runs syntax checks and the application tests, then writes the public assets to `dist/`. It does not connect to the database, run migrations, upload credentials, or deploy the project. `npm run build` only generates the assets. `vercel.json` selects the build command, static output, and the Node.js function in `api/server.js`.
+
+To deploy:
+
+1. Import this repository into Vercel with framework **Other** and Node.js **24.x**. Keep the supplied build command and output directory.
+2. Add the variables listed in `.env.vercel.example` to the Vercel project's Production environment. Use the Supabase Session pooler, the existing database password, `TOMATOES_STORAGE=postgres`, and `TOMATOES_TEAM_MODE=1`. Keep TLS verification enabled.
+3. Paste the Supabase CA certificate into `PGSSLROOTCERT_PEM` as a multiline value, or set `PGSSLROOTCERT_BASE64`. Do not copy the local certificate file path into Vercel. `.env.production`, local data, and certificate files are excluded from the deployment upload.
+4. Apply the database upgrade once from your trusted machine with `npm run db:migrate:production`. Schema version 5 adds shared sessions, shared sign-in limits, and attachment byte storage. Builds and requests never apply migrations automatically.
+5. Deploy from Vercel. For a custom domain, set `TOMATOES_PUBLIC_ORIGIN` to its exact HTTPS origin. The generated deployment hostname and standard production alias are recognized automatically. Use a separate Supabase project/database for Preview deployments.
+
+Sessions, sign-out, roles, and rate limits work across separate function instances through PostgreSQL. New PostgreSQL-backed attachment uploads store their bytes in the database. Older attachment records that only reference local files must be migrated separately before those files can be opened in a hosted deployment; the app reports unavailable legacy attachments instead of silently losing them.
+
+Hosted password recovery requires `RESEND_API_KEY` and `TOMATOES_AUTH_EMAIL_FROM` with a verified sender. Without those settings, login still works and Forgot password explains that email delivery is not configured. Local servers retain the private recovery inbox. Tests use mocked email delivery and do not send real messages.
+
+Vercel functions have a [4.5 MB request and response ceiling](https://vercel.com/docs/functions/limitations). Hosted requests and responses are capped at 4 MB with a clear error; JSON/base64 overhead counts toward that limit. Larger reports can still be viewed as browser imports or handled by the local server, but cannot be published through this Vercel function. Large-file cloud ingestion would require a separate direct object-storage upload flow.
+
+The build configuration targets [Vercel's supported Node.js runtime](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions). To deploy through the CLI after linking and configuring the project, use `npx vercel --prod`. Running the build alone does not publish anything.

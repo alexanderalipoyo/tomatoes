@@ -1,12 +1,12 @@
 const { Client } = require("pg");
-const { loadLocalEnvironment } = require("../src/server/config");
+const {
+  loadLocalEnvironment,
+  databaseConfig,
+} = require("../src/server/config");
 
 async function checkDatabase({ ClientType = Client, config = {} } = {}) {
   const client = new ClientType({
-    host: process.env.PGHOST || "127.0.0.1",
-    port: Number(process.env.PGPORT || 5432),
-    database: process.env.PGDATABASE || "tomatoes",
-    user: process.env.PGUSER || "postgres",
+    ...databaseConfig(),
     connectionTimeoutMillis: 5000,
     statement_timeout: 5000,
     application_name: "tomatoes-connection-check",
@@ -24,17 +24,27 @@ async function checkDatabase({ ClientType = Client, config = {} } = {}) {
   }
 }
 function errorMessage(error) {
+  if (error.code === "TOMATOES_CONFIG") return error.message;
+  if (
+    [
+      "SELF_SIGNED_CERT_IN_CHAIN",
+      "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+      "CERT_HAS_EXPIRED",
+      "ERR_TLS_CERT_ALTNAME_INVALID",
+    ].includes(error.code)
+  )
+    return "Database TLS verification failed. Check PGSSLROOTCERT and download the current CA certificate from your database provider.";
   if (error.code === "3D000")
-    return "The configured database does not exist. Check PGDATABASE in .env.local.";
+    return "The configured database does not exist. Check PGDATABASE in the selected environment.";
   if (
     error.code === "28P01" ||
     error.code === "28000" ||
     /password|SASL/i.test(error.message || "")
   )
-    return "PostgreSQL requires valid credentials. Set PGUSER and PGPASSWORD in .env.local, then retry.";
+    return "PostgreSQL requires valid credentials. Set PGUSER and PGPASSWORD in the selected environment, then retry.";
   if (["ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND"].includes(error.code))
     return "Could not reach PostgreSQL. Check PGHOST, PGPORT, and the PostgreSQL service.";
-  return "Database check failed. Verify the local connection settings and database access.";
+  return "Database check failed. Verify the selected connection settings and database access.";
 }
 async function main() {
   loadLocalEnvironment();

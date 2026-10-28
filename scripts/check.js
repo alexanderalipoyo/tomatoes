@@ -2,6 +2,7 @@ const { spawnSync } = require("node:child_process");
 const { PROJECT_ROOT, listFiles } = require("./lib/project-files");
 const files = [
   ...listFiles("src"),
+  ...listFiles("api"),
   ...listFiles("scripts"),
   ...listFiles("tests"),
 ];
