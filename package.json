@@ -13,7 +13,13 @@
     "db:import-files": "node scripts/database.js import-files",
     "test:postgres": "node scripts/test.js --postgres",
     "team:admin": "node scripts/team-admin.js",
-    "report:publish": "node scripts/publish-report.js"
+    "report:publish": "node scripts/publish-report.js",
+    "start:production": "node --env-file=.env.production src/server/index.js",
+    "db:check:production": "node --env-file=.env.production scripts/check-database.js",
+    "db:migrate:production": "node --env-file=.env.production scripts/database.js migrate",
+    "build": "node scripts/build.js",
+    "build:production": "npm run check && npm test && npm run build",
+    "vercel-build": "npm run build"
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.6",
@@ -23,5 +29,8 @@
     "jspdf": "4.2.1",
     "pdfjs-dist": "6.4.299",
     "pg": "8.23.1"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }
