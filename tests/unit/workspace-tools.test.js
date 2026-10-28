@@ -297,3 +297,28 @@ test("run fingerprints ignore JSON formatting and test ordering while preserving
     Workspace.runFingerprint(compact),
   );
 });
+
+test("browser archives hide from active history, survive reimport and backup, and restore without losing JSON", async () => {
+  const history = store();
+  const entry = await save(history);
+  const original = (await history.get(entry.id)).text;
+  await history.updateDetails(entry.id, {
+    archivedAt: Date.now(),
+    notes: "Keep this note",
+  });
+  assert.equal((await history.list()).length, 0);
+  assert.equal((await history.list(false, true)).length, 1);
+  await save(history);
+  assert.ok((await history.get(entry.id)).entry.archivedAt);
+  const restored = store();
+  const backup = await validate(await archive(history));
+  await restored.restoreSnapshot(backup);
+  assert.ok((await restored.get(entry.id)).entry.archivedAt);
+  assert.equal((await restored.list()).length, 0);
+  await restored.updateDetails(entry.id, { archivedAt: null });
+  assert.equal((await restored.list()).length, 1);
+  assert.equal((await restored.get(entry.id)).text, original);
+  assert.equal((await restored.get(entry.id)).entry.notes, "Keep this note");
+  await history.close();
+  await restored.close();
+});

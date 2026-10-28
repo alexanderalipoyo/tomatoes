@@ -71,3 +71,23 @@ test("project run details handle unassigned projects and deduplicate within each
   );
   assert.equal(runsForProject([item], [], "Other").length, 0);
 });
+
+test("archived-only projects remain recoverable while active counts and branches exclude archives", () => {
+  const { runsForProject } = require("../../src/shared/project-catalog");
+  const archived = { ...run("old", "Alpha", "old"), archivedAt: 123 };
+  const active = run("new", "Beta", "main");
+  const cards = summarize(
+    [archived, active],
+    [{ ...archived, id: "browser-old" }],
+  );
+  const alpha = cards.find((item) => item.name === "Alpha");
+  assert.equal(alpha.latest, null);
+  assert.deepEqual(alpha.branches, []);
+  assert.equal(alpha.serverCount, 0);
+  assert.equal(alpha.browserCount, 0);
+  assert.equal(alpha.archivedServerCount, 1);
+  assert.equal(alpha.archivedBrowserCount, 1);
+  assert.equal(runsForProject([archived, active], [], "Alpha").length, 0);
+  assert.equal(runsForProject([archived, active], [], "Alpha", true).length, 1);
+  assert.equal(runsForProject([archived], [], "Beta", true).length, 0);
+});

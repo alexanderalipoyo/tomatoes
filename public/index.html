@@ -174,7 +174,27 @@
           <span data-icon="folder"></span><span>Projects</span><span>/</span
           ><strong>tomatoes</strong><span class="private">Local</span>
         </div>
-        <span class="source-label" id="source-label">Loading report…</span>
+        <div class="topbar-actions">
+          <span class="source-label" id="source-label">Loading report…</span>
+          <button
+            class="button topbar-logout"
+            id="topbar-logout"
+            type="button"
+            data-sign-out
+            hidden
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              aria-hidden="true"
+            >
+              <path d="M9 4H4v16h5M14 8l4 4-4 4M8 12h12" />
+            </svg>
+            <span>Logout</span>
+          </button>
+        </div>
       </header>
       <main id="main-content" tabindex="-1">
         <div class="page-heading">
@@ -466,7 +486,9 @@
         <button type="button" id="workspace-menu-profile">
           Manage profile
         </button>
-        <button type="button" id="workspace-menu-sign-out">Sign out</button>
+        <button type="button" id="workspace-menu-sign-out" data-sign-out>
+          Sign out
+        </button>
       </div>
       <footer class="workspace-menu-footer">
         <button type="button" data-workspace-policy="terms">Terms of Use</button

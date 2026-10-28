@@ -63,13 +63,20 @@
         tx.onerror = () => {};
       });
     }
-    async function list(includeDeleted = false) {
+    async function list(
+      includeDeleted = false,
+      includeArchived = includeDeleted,
+    ) {
       const db = await open();
       const tx = db.transaction("entries", "readonly");
       const request = tx.objectStore("entries").getAll();
       return complete(tx, () =>
         request.result
-          .filter((entry) => includeDeleted || !entry.deletedAt)
+          .filter(
+            (entry) =>
+              (includeDeleted || !entry.deletedAt) &&
+              (includeArchived || !entry.archivedAt),
+          )
           .sort(
             (a, b) =>
               b.lastImportedAt - a.lastImportedAt || a.id.localeCompare(b.id),
@@ -152,6 +159,7 @@
           label: previous?.label || "",
           notes: previous?.notes || "",
           deletedAt: null,
+          archivedAt: previous?.archivedAt || null,
           counts: { ...report.counts },
           specs: report.specs.length,
           passRate: report.passRate,

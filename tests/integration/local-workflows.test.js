@@ -1255,3 +1255,105 @@ test("concurrent recovery requests leave a usable inbox link and recovery tools 
     /used, replaced, or revoked/,
   );
 });
+
+test("run archiving is reversible, scoped, permission-checked, and survives reimport", async (t) => {
+  const f = await serviceFixture(t, {
+    teamMode: true,
+    ciToken: "test-archive-ci",
+    ciProject: "web",
+  });
+  const password = "test-password-only";
+  await writeJSON(path.join(f.dataDir, "users.json"), [
+    ...[
+      ["editor", "editor", "web"],
+      ["reader", "viewer", "web"],
+      ["other", "editor", "other"],
+    ].map(([username, role, project]) => ({
+      username,
+      role,
+      projects: [project],
+      ...hashPassword(password),
+    })),
+  ]);
+  const login = async (username) => {
+    const result = await f.request("/api/login", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ username, password }),
+    });
+    return {
+      Origin: f.origin,
+      Cookie: result.headers.get("set-cookie").split(";")[0],
+      "X-CSRF-Token": result.body.csrf,
+    };
+  };
+  const editor = await login("editor"),
+    reader = await login("reader"),
+    other = await login("other");
+  const payload = {
+    report: fixture(),
+    metadata: { project: "web", branch: "main" },
+    name: "archivable.json",
+    reportText: JSON.stringify(fixture(), null, 2),
+  };
+  const uploaded = await f.request("/api/runs", {
+    method: "POST",
+    headers: editor,
+    body: JSON.stringify(payload),
+  });
+  assert.equal(uploaded.status, 201);
+  const id = uploaded.body.run.id,
+    route = `/api/runs/${id}/archive`;
+  const change = (headers, archived) =>
+    f.request(route, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ archived }),
+    });
+  assert.equal((await change(reader, true)).status, 403);
+  assert.equal((await change(other, true)).status, 404);
+  assert.equal(
+    (await change({ ...editor, "X-CSRF-Token": "bad" }, true)).status,
+    403,
+  );
+  assert.equal(
+    (await change({ ...editor, Origin: "https://evil.example" }, true)).status,
+    403,
+  );
+  assert.equal(
+    (await change({ Authorization: "Bearer test-archive-ci" }, true)).status,
+    403,
+  );
+  assert.equal((await change(editor, "yes")).status, 400);
+  assert.equal((await change(editor, true)).status, 200);
+  assert.equal(
+    (await f.request("/api/runs", { headers: editor })).body.runs.length,
+    0,
+  );
+  assert.equal(
+    (await f.request("/api/runs?includeArchived=1", { headers: editor })).body
+      .runs.length,
+    1,
+  );
+  const saved = await f.request(`/api/runs/${id}`, { headers: editor });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.originalText, payload.reportText);
+  await f.request("/api/runs", {
+    method: "POST",
+    headers: editor,
+    body: JSON.stringify(payload),
+  });
+  assert.ok(
+    (await f.request(`/api/runs/${id}`, { headers: editor })).body.run
+      .archivedAt,
+  );
+  assert.equal((await change(editor, false)).status, 200);
+  assert.equal(
+    (await f.request("/api/runs", { headers: editor })).body.runs.length,
+    1,
+  );
+  assert.equal(
+    (await f.request(`/api/runs/${id}`, { headers: editor })).body.originalText,
+    payload.reportText,
+  );
+});

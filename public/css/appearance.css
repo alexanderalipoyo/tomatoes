@@ -1553,3 +1553,151 @@ body.auth-mode > .skip-link {
     font-size: 16px;
   }
 }
+
+/* Project run archive and recovery dialogs. */
+.project-archive-footer {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.project-archive-count {
+  background: var(--theme-surface-raised, #eef3f0);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+#project-runs-dialog,
+#project-run-confirm {
+  background: var(--theme-surface, #fff);
+  color: var(--theme-text, #283641);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-height: 88dvh;
+  overflow-y: auto;
+}
+#project-runs-dialog {
+  width: min(860px, calc(100% - 24px));
+  padding: 28px;
+}
+#project-runs-title {
+  padding-right: 32px;
+  font-size: 20px;
+}
+.project-dialog-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  z-index: 1;
+  background: var(--theme-surface, #fff);
+  border-radius: 6px;
+}
+.project-dialog-close svg {
+  width: 20px;
+  height: 20px;
+}
+.project-run-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+.project-run-source {
+  color: var(--green);
+}
+.project-runs-empty {
+  padding: 30px 12px;
+  text-align: center;
+  color: var(--muted);
+}
+.project-runs-empty h3 {
+  color: var(--theme-text, #283641);
+  font-size: 15px;
+}
+#project-run-confirm {
+  width: min(480px, calc(100% - 24px));
+  padding: 26px;
+}
+#project-run-confirm h2 {
+  font-size: 20px;
+  margin-top: 0;
+}
+#project-run-confirm p {
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+#project-run-confirm footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+.project-action-error {
+  color: var(--theme-danger-text, #aa3447);
+}
+@media (max-width: 640px) {
+  #project-runs-dialog {
+    padding: 18px;
+  }
+  #project-runs-dialog .shared-run {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .project-run-actions {
+    justify-content: flex-start;
+  }
+  #project-run-confirm {
+    padding: 20px;
+  }
+  .project-archive-footer .project-open {
+    flex-basis: 100%;
+  }
+}
+
+/* Keep session actions available at the upper right on all workspace pages. */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-left: auto;
+  min-width: 0;
+}
+.topbar-actions .source-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+.topbar-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.topbar-logout svg {
+  width: 16px;
+  height: 16px;
+}
+.topbar-logout[hidden] {
+  display: none;
+}
+@media (max-width: 640px) {
+  .topbar-actions {
+    gap: 8px;
+  }
+  .topbar-actions .source-label {
+    display: none;
+  }
+  .topbar-logout {
+    min-height: 40px;
+    padding: 8px 10px;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .topbar .mobile-wordmark {
+    font-size: 18px;
+    gap: 6px;
+  }
+}

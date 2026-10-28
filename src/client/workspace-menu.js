@@ -56,38 +56,44 @@
     close();
     location.hash = "profile";
   };
-  document.querySelector("#workspace-menu-sign-out").onclick = async (
-    event,
-  ) => {
-    const button = event.currentTarget;
-    button.disabled = true;
-    try {
-      const status = await teamRequest("/api/team/status");
-      if (!status.enabled || !status.authenticated) {
+  const signOutButtons = document.querySelectorAll("[data-sign-out]");
+  signOutButtons.forEach((button) => {
+    button.onclick = async () => {
+      signOutButtons.forEach((item) => {
+        item.disabled = true;
+        item.setAttribute("aria-busy", "true");
+      });
+      try {
+        const status = await teamRequest("/api/team/status");
+        if (!status.enabled || !status.authenticated) {
+          close();
+          showToast(
+            status.enabled
+              ? "You are already signed out."
+              : "This local workspace does not require sign-in.",
+            "info",
+          );
+          return;
+        }
+        teamState = status;
+        await teamRequest("/api/logout", { method: "POST", body: "{}" });
+        teamState = null;
         close();
-        showToast(
-          status.enabled
-            ? "You are already signed out."
-            : "This local workspace does not require sign-in.",
-          "info",
-        );
-        return;
+        await initializeAuth();
+        await reloadUserPreferences();
+        location.hash = "login";
+        navigate();
+        showToast("Signed out.", "success");
+      } catch (error) {
+        showToast(error.message, "error");
+      } finally {
+        signOutButtons.forEach((item) => {
+          item.disabled = false;
+          item.removeAttribute("aria-busy");
+        });
       }
-      teamState = status;
-      await teamRequest("/api/logout", { method: "POST", body: "{}" });
-      teamState = null;
-      close();
-      await initializeAuth();
-      await reloadUserPreferences();
-      location.hash = "login";
-      navigate();
-      showToast("Signed out.", "success");
-    } catch (error) {
-      showToast(error.message, "error");
-    } finally {
-      button.disabled = false;
-    }
-  };
+    };
+  });
   let policyRequest = null;
   const detail = document.querySelector("#detail");
   detail.addEventListener("close", () => policyRequest?.abort());

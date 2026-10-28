@@ -296,3 +296,9 @@ node scripts/password-recovery.js alextest@gmail.com
 Open that private link and enter a new password of 12–256 characters. Links expire after 15 minutes, can be used once, and are replaced by a newer request. The recovery command checks the current database token before displaying a link, so used or revoked links cannot be retrieved as valid. Password changes invalidate existing sessions. Never share reset links or expose the private data directory. Account lookups return the same browser response whether an email exists or not. Recovery requests and reset attempts are rate-limited.
 
 Run `npm run db:migrate` when upgrading PostgreSQL to install password-recovery storage. The database stores hashed tokens; the private local inbox contains the actual links for the person who controls this computer. Email delivery is not configured in this local recovery mode.
+
+### Archive and recover project runs
+
+From **Manage profile → Projects**, open a project's **Active runs** and choose **Archive run**. Confirm the project, branch, and copy being changed. Recover it from the same project's **Archived runs** with **Restore run** and confirm again. Projects remain visible even when all their runs are archived.
+
+Archiving keeps the report, notes, and attachments. Archived copies leave active report lists; their direct links remain available. Shared server runs require Editor or Admin access in the report's project. Browser imports are separate device-local copies with their own archive state. Backups preserve browser archive status, and reimporting an identical report keeps its archive state until it is restored.

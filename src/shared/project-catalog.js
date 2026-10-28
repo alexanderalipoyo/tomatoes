@@ -2,7 +2,7 @@
   function time(run) {
     return Date.parse(run.start || "") || run.importedAt || run.receivedAt || 0;
   }
-  function runsForProject(serverRuns, browserImports, name) {
+  function runsForProject(serverRuns, browserImports, name, archived = false) {
     const seen = new Set();
     return [
       ["server", serverRuns],
@@ -14,6 +14,7 @@
             const key = source + ":" + run.id;
             if (
               run.deletedAt ||
+              Boolean(run.archivedAt) !== archived ||
               (run.metadata?.project || "Unassigned project") !== name ||
               seen.has(key)
             )
@@ -42,9 +43,17 @@
             serverCount: 0,
             browserCount: 0,
             latest: null,
+            archivedServerCount: 0,
+            archivedBrowserCount: 0,
             branches: new Map(),
           });
         const project = projects.get(name);
+        if (run.archivedAt) {
+          project[
+            source === "server" ? "archivedServerCount" : "archivedBrowserCount"
+          ]++;
+          continue;
+        }
         const key = source === "server" ? "serverCount" : "browserCount";
         const branch = run.metadata?.branch || "";
         if (!project.branches.has(branch))

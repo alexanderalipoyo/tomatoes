@@ -592,3 +592,47 @@ test("PostgreSQL email recovery stores only token hashes and atomically changes 
   );
   assert.equal((await f.store.getUsers())[0].resetHash, null);
 });
+
+test("PostgreSQL run archives preserve original reports and project scope across updates and restore", async (t) => {
+  const f = await fixture(t);
+  const text = JSON.stringify(raw(), null, 2);
+  await f.store.saveRun(record(), raw(), text);
+  assert.equal(
+    await f.store.setRunArchived(record().id, ["other"], Date.now()),
+    null,
+  );
+  const route = `/api/runs/${record().id}/archive`;
+  const archived = await f.request(route, {
+    method: "POST",
+    headers: { Origin: f.origin },
+    body: { archived: true },
+  });
+  assert.equal(archived.status, 200);
+  assert.ok(archived.body.run.archivedAt);
+  await f.store.saveRun(
+    { ...record(), notes: "Updated while archived" },
+    raw(),
+    text,
+  );
+  assert.equal((await f.request("/api/runs")).body.runs.length, 0);
+  const stored = await f.store.getRun(record().id, ["web"]);
+  assert.equal(stored.originalText, text);
+  assert.ok(stored.record.archivedAt);
+  assert.equal(stored.record.notes, "Updated while archived");
+  assert.equal(
+    (await f.request("/api/runs?includeArchived=1")).body.runs.length,
+    1,
+  );
+  assert.equal(
+    (
+      await f.request(route, {
+        method: "POST",
+        headers: { Origin: f.origin },
+        body: { archived: false },
+      })
+    ).status,
+    200,
+  );
+  assert.equal((await f.request("/api/runs")).body.runs.length, 1);
+  assert.equal((await f.store.getRun(record().id, ["web"])).originalText, text);
+});

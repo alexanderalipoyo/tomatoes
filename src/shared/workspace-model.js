@@ -5,6 +5,7 @@
     return entries.filter(
       (entry) =>
         !entry.deletedAt &&
+        !entry.archivedAt &&
         fields.every(
           (key) =>
             !filters[key] ||
@@ -18,6 +19,7 @@
     return entries.filter(
       (entry) =>
         !entry.deletedAt &&
+        !entry.archivedAt &&
         fields.every(
           (key) => (entry.metadata?.[key] || "") === (metadata[key] || ""),
         ),
@@ -141,6 +143,10 @@
         ![entry.importedAt, entry.lastImportedAt].every(
           (n) => Number.isFinite(n) && n > 0 && n <= 8640000000000000,
         ) ||
+        (entry.archivedAt != null &&
+          (!Number.isFinite(entry.archivedAt) ||
+            entry.archivedAt <= 0 ||
+            entry.archivedAt > 8640000000000000)) ||
         (entry.deletedAt != null &&
           (!Number.isFinite(entry.deletedAt) ||
             entry.deletedAt <= 0 ||
@@ -160,6 +166,7 @@
         importedAt: entry.importedAt,
         lastImportedAt: entry.lastImportedAt,
         deletedAt: entry.deletedAt || null,
+        archivedAt: entry.archivedAt || null,
         metadata,
         start: report.start,
         end: report.end,

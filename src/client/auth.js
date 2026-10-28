@@ -37,13 +37,20 @@ async function initializeAuth() {
       error: "Could not connect to Tomatoes. Check the server and try again.",
     };
   }
+  syncLogoutControl();
   document.body.classList.remove("auth-checking");
   return authStatus;
 }
 function authSessionExpired() {
   if (!authStatus?.enabled || authRequiresLogin()) return;
   authStatus = { ...authStatus, authenticated: false };
+  syncLogoutControl();
   renderAuthScreen("Your session has ended. Please sign in again.");
+}
+function syncLogoutControl() {
+  const button = document.querySelector("#topbar-logout");
+  if (button)
+    button.hidden = !(authStatus?.enabled && authStatus.authenticated);
 }
 function hideAuthScreen() {
   document.body.classList.remove("auth-mode");

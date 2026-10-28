@@ -608,15 +608,44 @@ function createTeamService({
         }
         throw apiError(405, "Use GET or PUT for preferences.");
       }
+      const archiveMatch = url.pathname.match(
+        /^\/api\/runs\/([a-f0-9]{64})\/archive$/,
+      );
+      if (archiveMatch) {
+        if (req.method !== "POST")
+          throw apiError(405, "Use POST to archive or restore a run.");
+        if (user.kind === "token")
+          throw apiError(403, "CI tokens cannot archive or restore reports.");
+        canWrite(req, user);
+        const body = await bodyJSON(req, 1024);
+        if (
+          !body ||
+          typeof body.archived !== "boolean" ||
+          Object.keys(body).some((key) => key !== "archived")
+        )
+          throw apiError(400, "Choose whether to archive or restore this run.");
+        const run = await store.setRunArchived(
+          archiveMatch[1],
+          user.projects,
+          body.archived ? now() : null,
+        );
+        if (!run)
+          throw apiError(404, "Report not found in your accessible projects.");
+        send(res, 200, { run });
+        return true;
+      }
       if (req.method === "GET" && url.pathname === "/api/runs") {
         const project = url.searchParams.get("project");
         if (project && !canAccess(user, project))
           throw apiError(403, "This project is outside your access scope.");
         const records = await store.listRuns(user.projects, project);
         send(res, 200, {
+          canArchive: user.kind !== "token" && user.role !== "viewer",
           runs: records
             .filter(
               (record) =>
+                (!record.archivedAt ||
+                  url.searchParams.get("includeArchived") === "1") &&
                 canAccess(user, record.metadata.project) &&
                 (!project || record.metadata.project === project),
             )

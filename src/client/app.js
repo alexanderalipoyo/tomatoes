@@ -773,6 +773,8 @@ async function loadReport(file = currentFile, options = {}) {
     if (options.restore) {
       try {
         historyId = await ImportHistory.lastActive();
+        if (historyId && (await ImportHistory.get(historyId)).entry.archivedAt)
+          historyId = (await ImportHistory.list())[0]?.id || null;
       } catch {
         historyNotice(
           "History is unavailable in this browser. The report can still be used for this session.",

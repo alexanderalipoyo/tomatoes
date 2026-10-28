@@ -32,7 +32,7 @@ function createPostgresStore({
     overwrite = true,
   ) =>
     client.query(
-      `INSERT INTO ${ns}.runs(id,project,received_at,record,report,original_text) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6) ON CONFLICT(id) ${overwrite ? "DO UPDATE SET project=EXCLUDED.project,received_at=EXCLUDED.received_at,record=EXCLUDED.record,report=EXCLUDED.report,original_text=EXCLUDED.original_text" : "DO NOTHING"}`,
+      `INSERT INTO ${ns}.runs(id,project,received_at,record,report,original_text) VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6) ON CONFLICT(id) ${overwrite ? `DO UPDATE SET project=EXCLUDED.project,received_at=EXCLUDED.received_at,record=EXCLUDED.record || jsonb_build_object('archivedAt', ${ns}.runs.record->'archivedAt'),report=EXCLUDED.report,original_text=EXCLUDED.original_text` : "DO NOTHING"}`,
       [
         record.id,
         record.metadata.project,
@@ -160,6 +160,17 @@ function createPostgresStore({
     },
     async addToken(token) {
       await insertToken(pool, token);
+    },
+    async setRunArchived(id, projects, archivedAt) {
+      const result = await pool.query(
+        `UPDATE ${ns}.runs SET record=jsonb_set(record,'{archivedAt}',$3::jsonb) WHERE id=$1 AND ($2::text[] IS NULL OR project=ANY($2::text[])) RETURNING record`,
+        [
+          id,
+          !projects || projects.includes("*") ? null : projects,
+          JSON.stringify(archivedAt),
+        ],
+      );
+      return result.rows[0]?.record || null;
     },
     async listRuns(projects, project) {
       return (

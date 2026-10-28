@@ -69,6 +69,18 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
         await writeJSON(file("tokens"), [...rows, token]);
       });
     },
+    async setRunArchived(id, projects, archivedAt) {
+      return serial(async () => {
+        const rows = await readJSON(file("runs"), []);
+        const index = rows.findIndex(
+          (row) => row.id === id && allowed(projects, row.metadata.project),
+        );
+        if (index < 0) return null;
+        rows[index] = { ...rows[index], archivedAt };
+        await writeJSON(file("runs"), rows);
+        return rows[index];
+      });
+    },
     async listRuns(projects, project) {
       return (await readJSON(file("runs"), []))
         .filter(
@@ -101,8 +113,14 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
           path.join(dataDir, "reports", record.id + ".json"),
           originalText,
         );
+        const previous = rows.find((row) => row.id === record.id);
         await writeJSON(file("runs"), [
-          record,
+          {
+            ...record,
+            archivedAt: previous
+              ? previous.archivedAt || null
+              : record.archivedAt || null,
+          },
           ...rows.filter((row) => row.id !== record.id),
         ]);
       });
