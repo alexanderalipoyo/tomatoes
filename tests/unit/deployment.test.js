@@ -36,6 +36,31 @@ test("production assets resolve client scripts and exclude private reports, cert
   const html = await fs.readFile(path.join(root, "index.html"), "utf8");
   for (const [, url] of html.matchAll(/(?:src|href)="(\/[^"#]+)"/g))
     assert.ok((await fs.stat(path.join(root, url.slice(1)))).isFile(), url);
+  assert.ok(html.includes('name="tomatoes-analytics" content="disabled"'));
+  await build({
+    env: {
+      VERCEL: "1",
+      VERCEL_ENV: "production",
+      VERCEL_OBSERVABILITY_CLIENT_CONFIG: JSON.stringify({
+        analytics: { scriptSrc: "/telemetry/script.js" },
+        secret: "private-value",
+      }),
+    },
+  });
+  const hosted = await fs.readFile(path.join(root, "index.html"), "utf8");
+  const encoded = hosted.match(
+    /name="tomatoes-analytics" content="([^"]+)"/,
+  )[1];
+  const analytics = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  assert.equal(analytics.enabled, true);
+  assert.equal(analytics.client.analytics.scriptSrc, "/telemetry/script.js");
+  assert.ok(!JSON.stringify(analytics).includes("private-value"));
+  await build({ env: { VERCEL: "1", VERCEL_ENV: "preview" } });
+  assert.ok(
+    (await fs.readFile(path.join(root, "index.html"), "utf8")).includes(
+      'name="tomatoes-analytics" content="disabled"',
+    ),
+  );
   await assert.rejects(() => build({ output: PROJECT_ROOT }), /dist directory/);
   const config = JSON.parse(
     await fs.readFile(path.join(PROJECT_ROOT, "vercel.json"), "utf8"),
@@ -181,4 +206,69 @@ test("hosted handlers accept platform-parsed JSON, enforce origins and request l
     new URL("https://deployment.vercel.app/api/login"),
   );
   assert.equal(res.status, 413);
+});
+
+test("deployment verification catches missing scripts and protected previews", async () => {
+  const { checkDeployment } = require("../../scripts/check-deployment");
+  const request = async (url) => {
+    const route = url.pathname;
+    if (route === "/api/team/status")
+      return Response.json({ enabled: true, storage: "postgres" });
+    if (route === "/build-manifest.json")
+      return Response.json({ version: 1, files: [{ path: "js/auth.js" }] });
+    return new Response("asset", {
+      headers: {
+        "content-type": route.endsWith(".js")
+          ? "text/javascript"
+          : route.endsWith(".css")
+            ? "text/css"
+            : "text/html",
+      },
+    });
+  };
+  const healthy = await checkDeployment("https://example.com", { request });
+  assert.deepEqual(healthy.failures, []);
+  const missing = await checkDeployment("https://example.com", {
+    request: (url) =>
+      url.pathname === "/js/auth.js"
+        ? new Response("Not found", { status: 404 })
+        : request(url),
+  });
+  assert.deepEqual(missing.failures, ["/js/auth.js: HTTP 404"]);
+  const protectedPreview = await checkDeployment("https://example.com", {
+    request: async () => new Response(null, { status: 302 }),
+  });
+  assert.ok(
+    protectedPreview.failures.every((failure) =>
+      failure.includes("deployment protection"),
+    ),
+  );
+  const htmlFallback = await checkDeployment("https://example.com", {
+    request: (url) =>
+      url.pathname === "/js/auth.js"
+        ? new Response("login", { headers: { "content-type": "text/html" } })
+        : request(url),
+  });
+  assert.ok(
+    htmlFallback.failures.some((failure) =>
+      failure.includes("expected JavaScript"),
+    ),
+  );
+});
+
+test("startup diagnostics expose setting names and safe hints without secrets", () => {
+  const { startupDiagnostic } = require("../../api/server");
+  const diagnostic = startupDiagnostic(
+    { code: "28P01", message: "secret-password", stack: "private-stack" },
+    { VERCEL: "1", PGPASSWORD: "secret-password" },
+  );
+  assert.equal(diagnostic.code, "28P01");
+  assert.ok(diagnostic.missing.includes("PGHOST"));
+  assert.ok(diagnostic.missing.includes("TOMATOES_STORAGE=postgres"));
+  assert.ok(!JSON.stringify(diagnostic).includes("secret-password"));
+  assert.ok(!JSON.stringify(diagnostic).includes("private-stack"));
+  assert.equal(
+    startupDiagnostic({ code: "private-secret" }, {}).code,
+    "STARTUP_FAILED",
+  );
 });

@@ -27,6 +27,7 @@ for (const name of [
   "profile",
   "users",
   "auth",
+  "web-analytics",
   "projects",
   "integrations",
 ]) {
@@ -63,6 +64,10 @@ add("/assets/tomatoes-logo.svg", "public/assets/tomatoes-logo.svg");
 add(
   "/assets/fonts/NotoSans-Regular.ttf",
   "public/assets/fonts/NotoSans-Regular.ttf",
+);
+add(
+  "/vendor/vercel-analytics.mjs",
+  "node_modules/@vercel/analytics/dist/index.mjs",
 );
 add("/vendor/pdf.mjs", "node_modules/pdfjs-dist/build/pdf.mjs");
 add("/vendor/pdf.worker.mjs", "node_modules/pdfjs-dist/build/pdf.worker.mjs");

@@ -19,13 +19,15 @@
     "db:migrate:production": "node --env-file=.env.production scripts/database.js migrate",
     "build": "node scripts/build.js",
     "build:production": "npm run check && npm test && npm run build",
-    "vercel-build": "npm run build"
+    "vercel-build": "npm run build",
+    "deploy:check": "node scripts/check-deployment.js"
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.6",
     "prettier": "3.9.10"
   },
   "dependencies": {
+    "@vercel/analytics": "2.0.1",
     "jspdf": "4.2.1",
     "pdfjs-dist": "6.4.299",
     "pg": "8.23.1"

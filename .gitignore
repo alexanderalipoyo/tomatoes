@@ -1,28 +1,14 @@
 node_modules/
 .video-tools/
 .tomatoes-data/
+tmp/
 
-tmp/pdfs/
-
-# Private local database credentials
+# Private environment files; safe templates remain versioned.
 .env
 .env.*
 !.env.example
 !.env.vercel.example
-/package.json
-/.gitignore
-/.prettierignore
 
-# Generated production build and Vercel project state
+# Generated production build and local Vercel state.
 dist/
 .vercel/
-/.env.vercel.example
-/.gitignore
-/.vercelignore
-/package.json
-/.gitignore
-/package.json
-package.json
-package.json
-*.json
-package.json

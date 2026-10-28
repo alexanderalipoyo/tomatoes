@@ -22,6 +22,10 @@ Browser import history is stored on your device. Appearance preferences may also
 
 Authorized users may access shared reports according to the installation's access settings. If Slack notifications are enabled, report summaries and links are sent to the configured Slack workspace. CI publishers can upload results using configured credentials. The interface loads web fonts from Google Fonts, which can receive connection information such as your IP address when fonts are requested. Review the policies of services your organization enables.
 
+## Website analytics
+
+Vercel production deployments can use Vercel Web Analytics to measure visits and page names when the workspace operator enables it. This integration records generic routes such as `/app/results`, excludes URL query parameters and recovery tokens, and does not submit report contents or profile fields. Local and preview builds keep analytics disabled. See [Vercel Analytics privacy information](https://vercel.com/docs/analytics/privacy-policy) for details of the hosting provider's processing.
+
 ## Retention and deletion
 
 Your organization should define retention periods for reports, accounts, attachments, and backups. Browser trash may allow recovery until items are permanently removed. Clearing browser data or signing out does not necessarily delete server copies, backups, or browser reports. Ask your workspace administrator to coordinate removal across those locations.

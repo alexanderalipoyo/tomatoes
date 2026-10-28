@@ -345,3 +345,23 @@ Hosted password recovery requires `RESEND_API_KEY` and `TOMATOES_AUTH_EMAIL_FROM
 Vercel functions have a [4.5 MB request and response ceiling](https://vercel.com/docs/functions/limitations). Hosted requests and responses are capped at 4 MB with a clear error; JSON/base64 overhead counts toward that limit. Larger reports can still be viewed as browser imports or handled by the local server, but cannot be published through this Vercel function. Large-file cloud ingestion would require a separate direct object-storage upload flow.
 
 The build configuration targets [Vercel's supported Node.js runtime](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions). To deploy through the CLI after linking and configuring the project, use `npx vercel --prod`. Running the build alone does not publish anything.
+
+### White screen or missing JavaScript on Vercel
+
+If HTML and CSS load but `/js/auth.js`, `/build-manifest.json`, and `/api/team/status` return 404, check the deployed source and output directory. The source `public/` folder does not contain the generated JavaScript or API function. Deploy the repository root, including the current `package.json`, `vercel.json`, `scripts/`, `src/`, and `api/` files. Keep **Root Directory** at the repository root, **Framework Preset** at **Other**, **Build Command** at `npm run vercel-build`, and **Output Directory** at `dist`. Redeploy the updated commit; check that the build log reports the generated public assets. Do not upload only `public/` or `dist/`, since the API also needs to be deployed.
+
+After deployment, verify the production alias:
+
+```powershell
+npm run deploy:check -- https://tomatoes-rho.vercel.app
+```
+
+This checks all client scripts and styles, the build manifest, and PostgreSQL-backed sign-in. A protected preview may redirect to Vercel login; that is reported separately from a missing file. Keep production secrets in Vercel environment variables and never commit private `.env` files.
+
+If assets pass but `/api/team/status` returns **503**, inspect the function's Runtime Logs for `tomatoes_startup_failed`. It logs only safe error codes, missing setting names, and a certificate-presence flag; it does not log passwords, connection strings, or raw errors. Set the Production variables from `.env.vercel.example`, especially `TOMATOES_STORAGE=postgres`, `TOMATOES_TEAM_MODE=1`, all four required `PG*` connection values, and the inline Supabase CA certificate. A Windows `PGSSLROOTCERT` file path cannot be used by a Vercel function. Redeploy after changing environment variables. Do not disable TLS verification to bypass certificate errors.
+
+### Vercel Web Analytics
+
+The app uses `@vercel/analytics` through its plain JavaScript SDK. Enable **Web Analytics** in the Vercel project dashboard and redeploy. The build activates analytics only when `VERCEL=1` and `VERCEL_ENV=production`; local and preview builds keep it disabled. Vercel's public observability client configuration is forwarded to the SDK when provided. No API key is needed in the browser.
+
+Page views use names such as `/app/runs`, `/app/results`, and `/app/projects` so hash navigation appears in Analytics. Report identifiers, URL query parameters, and recovery tokens are excluded. No report contents, profile fields, or custom events are submitted by this integration. Content blockers may prevent analytics requests; dashboard operation does not depend on analytics loading.

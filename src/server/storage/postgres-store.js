@@ -78,8 +78,11 @@ function createPostgresStore({
           error.code === "3F000" ||
           error.message === "missing"
         )
-          throw new Error(
-            "PostgreSQL tables are not initialized. Run npm run db:migrate.",
+          throw Object.assign(
+            new Error(
+              "PostgreSQL tables are not initialized. Run npm run db:migrate.",
+            ),
+            { code: "TOMATOES_SCHEMA" },
           );
         throw error;
       }

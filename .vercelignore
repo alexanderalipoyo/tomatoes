@@ -1,0 +1,9 @@
+.env*
+.tomatoes-data/
+.video-tools/
+.git/
+.vercel/
+dist/
+tmp/
+node_modules/
+tests/

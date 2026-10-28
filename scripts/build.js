@@ -3,7 +3,10 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { PROJECT_ROOT } = require("../src/server/config");
 const { files } = require("../src/server/static-assets");
-async function build({ output = path.join(PROJECT_ROOT, "dist") } = {}) {
+async function build({
+  output = path.join(PROJECT_ROOT, "dist"),
+  env = process.env,
+} = {}) {
   output = path.resolve(output);
   if (output !== path.join(PROJECT_ROOT, "dist"))
     throw new Error("Build output must be the project's dist directory.");
@@ -19,7 +22,40 @@ async function build({ output = path.join(PROJECT_ROOT, "dist") } = {}) {
     if (!target.startsWith(output + path.sep))
       throw new Error("Invalid public asset path.");
     if (written.has(relative)) continue;
-    const bytes = await fs.readFile(source);
+    let bytes = await fs.readFile(source);
+    if (
+      relative === "index.html" &&
+      env.VERCEL === "1" &&
+      env.VERCEL_ENV === "production"
+    ) {
+      let client = {};
+      if (env.VERCEL_OBSERVABILITY_CLIENT_CONFIG) {
+        const supplied =
+          JSON.parse(env.VERCEL_OBSERVABILITY_CLIENT_CONFIG).analytics || {};
+        client.analytics = Object.fromEntries(
+          [
+            "scriptSrc",
+            "eventEndpoint",
+            "viewEndpoint",
+            "sessionEndpoint",
+            "dsn",
+          ]
+            .filter((key) => typeof supplied[key] === "string")
+            .map((key) => [key, supplied[key]]),
+        );
+      }
+      const encoded = Buffer.from(
+        JSON.stringify({ enabled: true, client }),
+      ).toString("base64");
+      bytes = Buffer.from(
+        bytes
+          .toString("utf8")
+          .replace(
+            'name="tomatoes-analytics" content="disabled"',
+            `name="tomatoes-analytics" content="${encoded}"`,
+          ),
+      );
+    }
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, bytes);
     written.add(relative);
