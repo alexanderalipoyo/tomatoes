@@ -61,3 +61,34 @@ test("empty projects appear before their first run and legacy runs keep their pr
   );
   assert.equal(second.id, "foo-bar-2");
 });
+
+test("workspace labels resolve registered display names while keeping stable report IDs", () => {
+  const directory = [
+    { id: "tomatoes", name: "QA - Automation PII Portal", registered: true },
+  ];
+  const brand = Projects.branding("tomatoes", directory);
+  assert.equal(brand.name, "QA - Automation PII Portal");
+  assert.equal(brand.project, "tomatoes");
+  assert.equal(Projects.branding("other", directory).name, "other");
+  const personal = [
+    {
+      project: "tomatoes",
+      name: "My workspace",
+      logo: "logo",
+      website: "https://example.com",
+    },
+  ];
+  assert.deepEqual(Projects.branding("tomatoes", directory, personal), {
+    ...personal[0],
+    name: "QA - Automation PII Portal",
+  });
+  assert.equal(
+    Projects.branding("tomatoes", [], personal).name,
+    "My workspace",
+  );
+  assert.equal(
+    Projects.branding("tomatoes", [{ ...directory[0], name: "Renamed Portal" }])
+      .name,
+    "Renamed Portal",
+  );
+});

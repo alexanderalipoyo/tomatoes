@@ -96,7 +96,20 @@
       registered: true,
     };
   }
-  const api = { validId, validateName, merge, change };
+  function branding(project, directory = [], workspaces = []) {
+    const personal = workspaces.find((item) => item.project === project);
+    const registered = directory.find(
+      (item) => item.id === project && item.registered,
+    );
+    return {
+      project,
+      website: "",
+      logo: "",
+      ...personal,
+      name: registered?.name || personal?.name || project,
+    };
+  }
+  const api = { validId, validateName, merge, change, branding };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ProjectManagement = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

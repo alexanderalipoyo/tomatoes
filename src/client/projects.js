@@ -29,6 +29,8 @@ async function renderProjects(host) {
   }
   if (results[2].status === "fulfilled") {
     directory = results[2].value.projects;
+    workspaceProjects = directory;
+    renderWorkspaceIdentity();
     canManage = results[2].value.canManage;
   } else
     serverError +=
@@ -89,6 +91,9 @@ async function renderProjects(host) {
           ...directory.filter((item) => item.id !== result.project.id),
           result.project,
         ];
+        workspaceProjects = directory;
+        renderWorkspaceIdentity();
+        if (report) renderSummary();
         if (
           view === "projects" &&
           host.isConnected &&

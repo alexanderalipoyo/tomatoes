@@ -91,8 +91,22 @@ const userPreferences = PreferenceClient.create({
     };
   },
 });
+let workspaceProjects = [];
+async function reloadWorkspaceProjects() {
+  try {
+    const payload = await teamRequest("/api/projects", {
+      signal: AbortSignal.timeout(15000),
+    });
+    workspaceProjects = payload.projects;
+  } catch {
+    workspaceProjects = [];
+  }
+}
 async function reloadUserPreferences() {
-  const state = await userPreferences.initialize();
+  const [state] = await Promise.all([
+    userPreferences.initialize(),
+    reloadWorkspaceProjects(),
+  ]);
   appearanceDraft = null;
   userProfileDraft = null;
   workspaceDraft = null;
@@ -211,7 +225,7 @@ function renderSummary() {
   $("#report-footer").textContent =
     `${number(report.counts.total)} tests · ${sourceName}`;
   $("#source-label").textContent = report.metadata?.project
-    ? `${report.metadata.project} / ${sourceName}`
+    ? `${workspaceBranding(report.metadata.project).name} / ${sourceName}`
     : sourceName;
 }
 function renderDashboard() {
@@ -1169,15 +1183,10 @@ function renderAppearanceSettings(alt) {
 let currentWorkspaceProject = "tomatoes";
 let workspaceDraft = null;
 function workspaceBranding(project = currentWorkspaceProject) {
-  return (
-    userPreferences
-      .getState()
-      .preferences.workspaces.find((item) => item.project === project) || {
-      project,
-      name: project,
-      website: "",
-      logo: "",
-    }
+  return ProjectManagement.branding(
+    project,
+    workspaceProjects,
+    userPreferences.getState().preferences.workspaces,
   );
 }
 function workspaceLogoMarkup(project) {
@@ -1208,8 +1217,11 @@ function renderWorkspaceGeneral(host) {
     };
   const draft = workspaceDraft;
   const brand = draft.brand;
+  const registered = workspaceProjects.some(
+    (item) => item.id === brand.project && item.registered,
+  );
   host.innerHTML = `<form class="profile-details workspace-general" id="workspace-general-form"><h2>General</h2><fieldset ${!state.ready || draft.saving ? "disabled" : ""}><legend class="visually-hidden">Workspace branding</legend>
-    <div class="profile-detail-row"><div><label for="workspace-brand-name">Workspace name</label><p>The name displayed throughout Tomatoes. Report project identifiers stay the same.</p></div><input id="workspace-brand-name" name="name" maxlength="80" required value="${esc(brand.name)}"/></div>
+    <div class="profile-detail-row"><div><label for="workspace-brand-name">Workspace name</label><p>${registered ? 'The shared project name. Rename it from <a href="#projects">Projects</a>.' : "The name displayed throughout Tomatoes. Report project identifiers stay the same."}</p></div><input id="workspace-brand-name" name="name" ${registered ? "readonly" : ""} maxlength="80" required value="${esc(brand.name)}"/></div>
     <div class="profile-detail-row"><div><label for="workspace-brand-website">Workspace website</label><p>An optional link for your company or team.</p></div><input id="workspace-brand-website" name="website" type="url" maxlength="500" placeholder="https://example.com" value="${esc(brand.website)}"/></div>
     <div class="profile-detail-row"><div><label for="workspace-brand-logo">Workspace logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Displayed in workspace navigation, project cards, run summaries, and PDF reports.</p></div><div><div class="workspace-logo-preview" id="workspace-logo-preview">${brand.logo ? `<img src="${esc(brand.logo)}" alt="Workspace logo preview"/>` : "<span>No logo uploaded</span>"}</div><input id="workspace-brand-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="workspace-remove-logo">Remove logo</button><p id="workspace-logo-status" role="status"></p></div></div>
     <div class="profile-detail-row"><div><span>Report project</span><p>Branding is saved for this project in your database preferences.</p></div><code>${esc(brand.project)}</code></div></fieldset>
