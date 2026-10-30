@@ -57,6 +57,7 @@ for (const name of [
   "responsive",
   "investigations",
   "team",
+  "auth",
 ]) {
   add(`/css/${name}.css`, `public/css/${name}.css`);
   add(`/${name}.css`, `public/css/${name}.css`);

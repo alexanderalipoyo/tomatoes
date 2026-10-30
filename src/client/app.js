@@ -107,6 +107,10 @@ async function reloadUserPreferences() {
     renderHistory();
     renderResults();
   }
+  // A user may open a workspace view while preferences are still loading.
+  // Refresh that view when the request settles instead of leaving disabled controls.
+  if (isReportIndependentView() && !authRequiresLogin() && !isAuthRoute())
+    navigate();
   return state;
 }
 function preferenceStatusMarkup() {

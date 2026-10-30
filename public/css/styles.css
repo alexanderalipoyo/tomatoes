@@ -2565,3 +2565,42 @@ body.is-rendering {
     transition: none;
   }
 }
+
+/* Shared finishing touches for the React workspace. */
+#main-content .page-heading {
+  gap: 20px;
+}
+#main-content .page-heading h1 {
+  letter-spacing: -1px;
+  line-height: 1.2;
+}
+#main-content .page-heading > div > p {
+  line-height: 1.75;
+  max-width: 640px;
+}
+#main-content :is(.dashboard-widget, .metric, .history-card) {
+  border-radius: 12px;
+}
+#main-content .dashboard-widget {
+  box-shadow: 0 3px 10px #142f2005;
+}
+#main-content :is(.result-link, .widget-link):focus-visible {
+  outline: 2px solid var(--green);
+  border-radius: 3px;
+}
+#main-content .button {
+  min-height: 36px;
+  border-radius: 7px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #main-content .button {
+    transition:
+      background-color 0.15s,
+      border-color 0.15s;
+  }
+  .spec-tile {
+    transition:
+      box-shadow 0.15s,
+      opacity 0.15s;
+  }
+}

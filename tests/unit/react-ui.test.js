@@ -97,7 +97,7 @@ test("React auth submits once while pending and renders server errors as text", 
     );
     assert.equal(state.host.querySelector("fieldset").disabled, false);
     assert.equal(
-      state.host.querySelector("#auth-error").textContent,
+      state.host.querySelector("#auth-error").lastElementChild.textContent,
       "<script>server validation</script>",
     );
     assert.equal(state.host.querySelector("script"), null);
@@ -147,7 +147,7 @@ test("React recovery displays local inbox help and reset confirmation blocks mis
       ),
     );
     assert.equal(
-      reset.host.querySelector("#auth-error").textContent,
+      reset.host.querySelector("#auth-error").lastElementChild.textContent,
       "Passwords do not match.",
     );
   } finally {
@@ -284,6 +284,57 @@ test("React result rows and history cards preserve inspection and recovery callb
     assert.deepEqual(calls.pop(), ["trash", entry.id]);
     assert.equal(state.host.querySelector("script"), null);
     assert.equal(state.host.querySelector("h3").textContent, entry.name);
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("login password visibility preserves the value and never submits the form", async () => {
+  const state = await mount(
+    React.createElement(AuthPage, {
+      route: "login",
+      onSubmit: async () => assert.fail("Visibility toggle submitted the form"),
+    }),
+  );
+  try {
+    const input = state.host.querySelector('[name="password"]');
+    input.value = "temporary-test-value";
+    const toggle = state.host.querySelector('[aria-controls="auth-password"]');
+    assert.equal(input.type, "password");
+    await act(async () => toggle.click());
+    assert.equal(input.type, "text");
+    assert.equal(input.value, "temporary-test-value");
+    assert.equal(toggle.getAttribute("aria-label"), "Hide password");
+    assert.equal(toggle.getAttribute("aria-pressed"), "true");
+    await act(async () => toggle.click());
+    assert.equal(input.type, "password");
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("Caps Lock feedback is announced and cleared when the password loses focus", async () => {
+  const state = await mount(
+    React.createElement(AuthPage, { route: "login", onSubmit: async () => {} }),
+  );
+  try {
+    const input = state.host.querySelector('[name="password"]');
+    const key = new dom.window.KeyboardEvent("keydown", {
+      bubbles: true,
+      key: "A",
+      modifierCapsLock: true,
+    });
+    await act(async () => input.dispatchEvent(key));
+    assert.equal(
+      state.host.querySelector("#auth-password-caps").textContent,
+      "Caps Lock is on.",
+    );
+    await act(async () =>
+      input.dispatchEvent(
+        new dom.window.FocusEvent("focusout", { bubbles: true }),
+      ),
+    );
+    assert.equal(state.host.querySelector("#auth-password-caps"), null);
   } finally {
     await state.cleanup();
   }
