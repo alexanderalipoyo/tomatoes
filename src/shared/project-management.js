@@ -96,7 +96,12 @@
       registered: true,
     };
   }
-  function branding(project, directory = [], workspaces = []) {
+  function branding(
+    project,
+    directory = [],
+    workspaces = [],
+    organization = {},
+  ) {
     const personal = workspaces.find((item) => item.project === project);
     const registered = directory.find(
       (item) => item.id === project && item.registered,
@@ -104,9 +109,9 @@
     return {
       project,
       website: "",
-      logo: "",
       ...personal,
       name: registered?.name || personal?.name || project,
+      logo: organization?.logo || personal?.logo || "",
     };
   }
   function changeInOrganization(

@@ -1849,3 +1849,12 @@ select.project-picker {
   color: var(--theme-accent-text, #28735a);
   background: var(--theme-accent-surface, #e4f2eb);
 }
+
+[data-organization-initials] > .workspace-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 32px;
+  max-height: 32px;
+  object-fit: contain;
+}

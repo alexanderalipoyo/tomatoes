@@ -2103,3 +2103,84 @@ test("organization identity is separate from projects and all-project admins rem
     "Other Organization",
   );
 });
+
+test("organization logos are shared, admin-controlled, scoped and preserved across renames", async (t) => {
+  const { createFileStore } = require("../../src/server/storage/index");
+  const f = await serviceFixture(t, { teamMode: true });
+  const store = createFileStore(f.dataDir);
+  const logo =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8RsAAAAASUVORK5CYII=";
+  await store.saveOrganization("other", "Other Organization", true);
+  const password = "temporary-logo-password";
+  for (const user of [
+    {
+      username: "owner",
+      role: "admin",
+      organizationId: "default",
+      projects: ["*"],
+    },
+    {
+      username: "viewer",
+      role: "viewer",
+      organizationId: "default",
+      projects: ["*"],
+    },
+    {
+      username: "other",
+      role: "admin",
+      organizationId: "other",
+      projects: ["*"],
+    },
+  ])
+    await store.addUser({ ...user, ...hashPassword(password) });
+  async function login(username) {
+    const r = await f.request("/api/login", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ username, password }),
+    });
+    assert.equal(r.status, 200);
+    return {
+      Cookie: r.headers.get("set-cookie").split(";")[0],
+      Origin: f.origin,
+      "X-CSRF-Token": r.body.csrf,
+    };
+  }
+  const owner = await login("owner"),
+    viewer = await login("viewer"),
+    other = await login("other");
+  const save = (body, headers = owner) =>
+    f.request("/api/organization", {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(body),
+    });
+  assert.equal((await save({ logo }, viewer)).status, 403);
+  assert.equal(
+    (await save({ logo }, { Cookie: owner.Cookie, Origin: f.origin })).status,
+    403,
+  );
+  assert.equal(
+    (await save({ logo: "data:image/svg+xml;base64,PHN2Zz4=" })).status,
+    400,
+  );
+  assert.equal((await save({ logo })).body.organization.logo, logo);
+  assert.equal(
+    (await f.request("/api/team/status", { headers: viewer })).body.organization
+      .logo,
+    logo,
+  );
+  assert.equal(
+    (await f.request("/api/organization", { headers: other })).body.organization
+      .logo || "",
+    "",
+  );
+  const renamed = await save({ name: "Renamed Organization" });
+  assert.equal(renamed.body.organization.logo, logo);
+  assert.equal(renamed.body.organization.name, "Renamed Organization");
+  assert.equal((await save({ logo: "" })).body.organization.logo, "");
+  assert.equal(
+    (await store.getOrganization("default")).name,
+    "Renamed Organization",
+  );
+});

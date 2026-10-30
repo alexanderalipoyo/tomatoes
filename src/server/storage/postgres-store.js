@@ -92,18 +92,18 @@ function createPostgresStore({
       return (
         (
           await pool.query(
-            `SELECT id,name,created_at AS "createdAt" FROM ${ns}.organizations WHERE id=$1`,
+            `SELECT id,name,logo,created_at AS "createdAt" FROM ${ns}.organizations WHERE id=$1`,
             [id],
           )
         ).rows[0] || null
       );
     },
-    async saveOrganization(id, name, creating = false) {
+    async saveOrganization(id, name, creating = false, logo = undefined) {
       const clock = Date.now();
       const sql = creating
-        ? `INSERT INTO ${ns}.organizations(id,name,created_at,updated_at) VALUES($1,$2,$3,$3) RETURNING id,name`
-        : `UPDATE ${ns}.organizations SET name=$2,updated_at=$3 WHERE id=$1 RETURNING id,name`;
-      return (await pool.query(sql, [id, name, clock])).rows[0] || null;
+        ? `INSERT INTO ${ns}.organizations(id,name,created_at,updated_at,logo) VALUES($1,$2,$3,$3,COALESCE($4,'')) RETURNING id,name,logo`
+        : `UPDATE ${ns}.organizations SET name=COALESCE($2,name),updated_at=$3,logo=COALESCE($4,logo) WHERE id=$1 RETURNING id,name,logo`;
+      return (await pool.query(sql, [id, name, clock, logo])).rows[0] || null;
     },
     async getProject(id) {
       return (
@@ -158,7 +158,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=8`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=9`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {

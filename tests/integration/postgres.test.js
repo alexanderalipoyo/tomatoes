@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    8,
+    9,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -882,5 +882,23 @@ test("PostgreSQL organizations own projects and constrain account membership", a
       ...hashPassword("temporary-orphan-password"),
     }),
     (error) => error.code === "23503",
+  );
+});
+
+test("PostgreSQL persists organization logos independently of names and other organizations", async (t) => {
+  const { store } = await fixture(t);
+  const logo =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8RsAAAAASUVORK5CYII=";
+  await store.saveOrganization("other", "Other Organization", true);
+  await store.saveOrganization("default", undefined, false, logo);
+  assert.equal((await store.getOrganization("default")).logo, logo);
+  await store.saveOrganization("default", "Renamed Organization");
+  assert.equal((await store.getOrganization("default")).logo, logo);
+  assert.equal((await store.getOrganization("other")).logo, "");
+  await store.saveOrganization("default", undefined, false, "");
+  assert.equal((await store.getOrganization("default")).logo, "");
+  assert.equal(
+    (await store.getOrganization("default")).name,
+    "Renamed Organization",
   );
 });

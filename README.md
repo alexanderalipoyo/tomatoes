@@ -2,12 +2,7 @@
 
 **A test report dashboard for Cypress-generated cloud test results.**
 
-
-
-
 https://github.com/user-attachments/assets/446d9602-f0e8-49e8-a715-b18e015b0390
-
-
 
 Tomatoes turns JSON reports from Cypress test runs into a dashboard for reviewing outcomes, investigating failures, and comparing previous runs. Reports can come from tests executed in a cloud CI environment or on a local machine.
 
@@ -385,7 +380,7 @@ Names are shared through the configured server store. An immutable project ident
 
 Use a project's **Import report** action to preselect it, or choose a project in the import dialog. Branch choices and remembered branch defaults follow the selected project. Empty projects remain visible and ready for their first report. Local file-store mode also supports these features; each project belongs to one organization.
 
-PostgreSQL deployments require schema version **8**: run `npm run db:migrate` locally or `npm run db:migrate:production` for the configured production database before deploying this change. The upgrades add the project registry and explicit organization membership for users. Existing accounts retain their organization membership, and existing run identities and project scopes are preserved.
+PostgreSQL deployments require schema version **9**: run `npm run db:migrate` locally or `npm run db:migrate:production` for the configured production database before deploying this change. The upgrades add the project registry and explicit organization membership for users. Existing accounts retain their organization membership, and existing run identities and project scopes are preserved.
 
 The user editor displays the current organization and only offers its registered or previously assigned projects. Organization membership cannot be changed through the user API. Organizations have their own database identity and name. Each user belongs to one organization; its projects are available according to that user’s project assignments. Rename the current organization from **Settings → General → Organization**. All-project admins are limited to their own organization. Enable `TOMATOES_TEAM_MODE=1` to enforce account restrictions; local mode remains unrestricted for its operator. Project scope changes take effect on subsequent server requests, and browser navigation refreshes access before restoring local reports.
 
@@ -406,3 +401,5 @@ node scripts/team-admin.js add-user second-owner --organization second-org --rol
 ```
 
 The user command prompts for a password privately. Existing projects and users without an explicit organization retain `default` membership. Upgrade PostgreSQL with `npm run db:migrate` or `npm run db:migrate:production` before deploying. Local mode remains a trusted operator mode; use sign-in mode for organization and project isolation. Organization names are shared database records, independently of per-project logo and website preferences.
+
+Organization admins can upload or remove a shared logo in **Settings > General > Organization**. Choose a PNG, JPEG, or WebP image up to 2 MB, review the preview, then select **Update organization**. Tomatoes resizes it to at most 128 pixels per side and saves a bounded PNG in the organization record. The logo appears in desktop/mobile navigation, the organization menu, project cards, run summaries, and PDF reports for that organization's projects. It takes precedence over personal project logos; when removed, reports use their project logo or the Tomatoes logo, and organization navigation uses initials. Viewers can see the shared logo but cannot modify it. Migration 9 adds the logo column without changing existing names or memberships.

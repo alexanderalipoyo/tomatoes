@@ -56,7 +56,7 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
           : null)
       );
     },
-    async saveOrganization(id, name, creating = false) {
+    async saveOrganization(id, name, creating = false, logo = undefined) {
       return serial(async () => {
         const rows = await readJSON(file("organizations"), []);
         if (creating && (id === "default" || rows.some((row) => row.id === id)))
@@ -67,7 +67,8 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
         if (!creating && !previous && id !== "default") return null;
         const next = {
           id,
-          name,
+          name: name ?? previous?.name ?? "Tomatoes organization",
+          logo: logo ?? previous?.logo ?? "",
           createdAt: previous?.createdAt || Date.now(),
           updatedAt: Date.now(),
         };

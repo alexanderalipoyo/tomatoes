@@ -617,14 +617,18 @@ function createTeamService({
         if (!UserManagement.isGlobalAdmin(user, user.organizationId))
           throw apiError(
             403,
-            "Only organization admins can rename the organization.",
+            "Only organization admins can update organization settings.",
           );
         canWrite(req, user);
-        const body = await bodyJSON(req, 4096);
-        const name = require("../shared/project-management").validateName(body);
+        const body = await bodyJSON(req, 128 * 1024);
+        const changes = require("./organization-management").validatePatch(
+          body,
+        );
         const organization = await store.saveOrganization(
           user.organizationId,
-          name,
+          changes.name,
+          false,
+          changes.logo,
         );
         send(res, 200, { organization });
         return true;

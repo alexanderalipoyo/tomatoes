@@ -67,6 +67,21 @@ test("Justine sees organization identity independently of permitted project sele
     dom.window.document.querySelector('[data-view="users"]').hidden,
     true,
   );
+  context.authStatus.organization.logo =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8RsAAAAASUVORK5CYII=";
+  context.renderWorkspaceIdentity();
+  assert.equal(
+    dom.window.document
+      .querySelector("[data-organization-initials] img")
+      .getAttribute("src"),
+    context.authStatus.organization.logo,
+  );
+  context.authStatus.organization.logo = "";
+  context.renderWorkspaceIdentity();
+  assert.equal(
+    dom.window.document.querySelector("[data-organization-initials] img"),
+    null,
+  );
   context.authStatus.organization.name = "Organization Two";
   directory[0].name = "Renamed Project";
   context.renderWorkspaceIdentity();

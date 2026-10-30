@@ -110,6 +110,7 @@ async function reloadUserPreferences() {
   appearanceDraft = null;
   userProfileDraft = null;
   workspaceDraft = null;
+  organizationDraft = null;
   preferences = state.preferences.display;
   Appearance.apply(state.preferences.appearance.colorMode);
   renderWorkspaceIdentity();
@@ -201,7 +202,9 @@ function renderWorkspaceIdentity() {
   document
     .querySelectorAll("[data-organization-initials]")
     .forEach((element) => {
-      element.textContent = organizationInitials;
+      element.innerHTML = authStatus?.organization?.logo
+        ? `<img class="workspace-logo" src="${esc(authStatus.organization.logo)}" alt="${esc(organizationName)} logo"/>`
+        : esc(organizationInitials);
     });
   document.querySelectorAll("[data-project-picker]").forEach((select) => {
     select.innerHTML = workspaceProjects.length
@@ -1089,7 +1092,12 @@ initializeAuth().then(async () => {
 });
 
 window.addEventListener("beforeunload", (event) => {
-  if (hasUnsavedAppearance() || hasUnsavedProfile() || hasUnsavedWorkspace()) {
+  if (
+    hasUnsavedAppearance() ||
+    hasUnsavedProfile() ||
+    hasUnsavedWorkspace() ||
+    hasUnsavedOrganization()
+  ) {
     event.preventDefault();
     event.returnValue = "";
   }
@@ -1267,11 +1275,16 @@ function renderAppearanceSettings(alt) {
 
 let currentWorkspaceProject = "tomatoes";
 let workspaceDraft = null;
-function workspaceBranding(project = currentWorkspaceProject) {
+let organizationDraft = null;
+function workspaceBranding(
+  project = currentWorkspaceProject,
+  includeOrganization = true,
+) {
   return ProjectManagement.branding(
     project,
     workspaceProjects,
     userPreferences.getState().preferences.workspaces,
+    includeOrganization ? authStatus?.organization : {},
   );
 }
 function workspaceLogoMarkup(project) {
@@ -1285,8 +1298,39 @@ function hasUnsavedWorkspace() {
     workspaceDraft &&
     workspaceDraft.profileId === userPreferences.getState().profileId &&
     JSON.stringify(workspaceDraft.brand) !==
-      JSON.stringify(workspaceBranding(workspaceDraft.brand.project)),
+      JSON.stringify(workspaceBranding(workspaceDraft.brand.project, false)),
   );
+}
+function hasUnsavedOrganization() {
+  const current = authStatus?.organization;
+  return Boolean(
+    organizationDraft &&
+    current &&
+    organizationDraft.id === current.id &&
+    (organizationDraft.name !== current.name ||
+      organizationDraft.logo !== (current.logo || "")),
+  );
+}
+async function prepareBrandLogo(imageFile) {
+  if (
+    !["image/png", "image/jpeg", "image/webp"].includes(imageFile.type) ||
+    imageFile.size > 2 * 1024 * 1024
+  )
+    throw new Error("Choose a PNG, JPEG, or WebP image up to 2 MB.");
+  const image = await createImageBitmap(imageFile);
+  try {
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(1, 128 / Math.max(image.width, image.height));
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+    const logo = canvas.toDataURL("image/png");
+    if (logo.length > 100000)
+      throw new Error("This logo is too detailed. Choose a simpler image.");
+    return logo;
+  } finally {
+    image.close();
+  }
 }
 function renderOrganizationSettings(host) {
   const organization = authStatus?.organization;
@@ -1295,30 +1339,110 @@ function renderOrganizationSettings(host) {
     !authStatus.enabled ||
     (authStatus.user?.role === "admin" &&
       authStatus.user.projects.includes("*"));
+  const profileId = userPreferences.getState().profileId;
+  if (
+    !organizationDraft ||
+    organizationDraft.id !== organization.id ||
+    organizationDraft.profileId !== profileId
+  )
+    organizationDraft = {
+      id: organization.id,
+      profileId,
+      name: organization.name,
+      logo: organization.logo || "",
+      saving: false,
+    };
+  const draft = organizationDraft;
   host.insertAdjacentHTML(
     "afterbegin",
-    `<form id="organization-settings-form" class="profile-details organization-general"><h2>Organization</h2><div class="profile-detail-row"><div><label for="organization-name">Organization name</label><p>Your organization contains projects and user memberships.</p></div><input id="organization-name" name="name" maxlength="80" required ${canManage ? "" : "readonly"} value="${esc(organization.name)}"/></div><div class="profile-detail-row"><div>Organization ID<p>Projects and users belong to this organization.</p></div><code>${esc(organization.id)}</code></div>${canManage ? '<div class="profile-form-actions"><button class="button primary">Update organization</button></div>' : ""}</form>`,
+    `<form id="organization-settings-form" class="profile-details organization-general"><h2>Organization</h2><div class="profile-detail-row"><div><label for="organization-name">Organization name</label><p>Your organization contains projects and user memberships.</p></div><input id="organization-name" name="name" maxlength="80" required ${canManage ? "" : "readonly"} value="${esc(draft.name)}"/></div><div class="profile-detail-row"><div><label for="organization-logo">Organization logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Shared across navigation, project cards, run summaries, and PDF reports.</p></div><div><div class="workspace-logo-preview" id="organization-logo-preview"></div>${canManage ? '<input id="organization-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="organization-remove-logo">Remove organization logo</button>' : "<p>Ask an organization admin to update the logo.</p>"}<p id="organization-logo-status" role="status"></p></div></div><div class="profile-detail-row"><div>Organization ID<p>Projects and users belong to this organization.</p></div><code>${esc(organization.id)}</code></div>${canManage ? '<div class="profile-form-actions"><button class="button primary" type="submit">Update organization</button></div>' : ""}</form>`,
   );
   const form = host.querySelector("#organization-settings-form");
+  const preview = form.querySelector("#organization-logo-preview");
+  const paint = () => {
+    preview.innerHTML = draft.logo
+      ? `<img src="${esc(draft.logo)}" alt="Organization logo preview"/>`
+      : "<span>No organization logo uploaded</span>";
+  };
+  paint();
+  if (!canManage) return;
+  const file = form.querySelector("#organization-logo");
+  const remove = form.querySelector("#organization-remove-logo");
+  const save = form.querySelector('[type="submit"]');
+  let reading = false;
+  const update = () => {
+    save.disabled = reading || draft.saving || !hasUnsavedOrganization();
+    file.disabled = reading || draft.saving;
+    remove.disabled = reading || draft.saving || !draft.logo;
+    form.setAttribute("aria-busy", String(reading || draft.saving));
+  };
+  form.oninput = () => {
+    draft.name = form.elements.name.value;
+    update();
+  };
+  remove.onclick = () => {
+    draft.logo = "";
+    paint();
+    update();
+  };
+  file.onchange = async () => {
+    const imageFile = file.files[0];
+    if (!imageFile) return;
+    reading = true;
+    update();
+    const status = form.querySelector("#organization-logo-status");
+    status.textContent = "Preparing logo.";
+    try {
+      const logo = await prepareBrandLogo(imageFile);
+      if (organizationDraft === draft) {
+        draft.logo = logo;
+        paint();
+        status.textContent = "Logo ready. Update organization to save.";
+      }
+    } catch (error) {
+      status.textContent = error.message;
+      showToast(error.message, "error");
+    } finally {
+      reading = false;
+      file.value = "";
+      if (form.isConnected) update();
+    }
+  };
   form.onsubmit = async (event) => {
     event.preventDefault();
-    if (!canManage) return;
+    if (save.disabled) return;
+    draft.saving = true;
     form.inert = true;
+    update();
     try {
       teamState = await teamRequest("/api/team/status");
+      if (teamState.organization?.id !== draft.id)
+        throw new Error(
+          "Your organization changed. Reload settings before saving.",
+        );
       const saved = await teamRequest("/api/organization", {
         method: "PATCH",
-        body: JSON.stringify({ name: form.elements.name.value }),
+        body: JSON.stringify({ name: draft.name, logo: draft.logo }),
       });
       authStatus = { ...authStatus, organization: saved.organization };
+      organizationDraft = null;
       renderWorkspaceIdentity();
+      if (report) renderSummary();
       showToast("Organization updated successfully.", "success");
     } catch (error) {
       showToast(error.message, "error");
     } finally {
+      draft.saving = false;
       form.inert = false;
+      if (
+        host.isConnected &&
+        view === "workspace-settings" &&
+        new URL(location.href).searchParams.get("settingsTab") === "general"
+      )
+        renderWorkspaceGeneral(host);
     }
   };
+  update();
 }
 function renderWorkspaceGeneral(host) {
   const state = userPreferences.getState();
@@ -1329,7 +1453,7 @@ function renderWorkspaceGeneral(host) {
   )
     workspaceDraft = {
       profileId: state.profileId,
-      brand: { ...workspaceBranding() },
+      brand: { ...workspaceBranding(currentWorkspaceProject, false) },
       saving: false,
     };
   const draft = workspaceDraft;
@@ -1340,7 +1464,7 @@ function renderWorkspaceGeneral(host) {
   host.innerHTML = `<form class="profile-details workspace-general" id="workspace-general-form"><h2>Project branding</h2><fieldset ${!state.ready || draft.saving ? "disabled" : ""}><legend class="visually-hidden">Workspace branding</legend>
     <div class="profile-detail-row"><div><label for="workspace-brand-name">Project name</label><p>${registered ? 'The shared project name. Rename it from <a href="#projects">Projects</a>.' : "The name displayed throughout Tomatoes. Report project identifiers stay the same."}</p></div><input id="workspace-brand-name" name="name" ${registered ? "readonly" : ""} maxlength="80" required value="${esc(brand.name)}"/></div>
     <div class="profile-detail-row"><div><label for="workspace-brand-website">Project website</label><p>An optional link for your company or team.</p></div><input id="workspace-brand-website" name="website" type="url" maxlength="500" placeholder="https://example.com" value="${esc(brand.website)}"/></div>
-    <div class="profile-detail-row"><div><label for="workspace-brand-logo">Project logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Displayed in workspace navigation, project cards, run summaries, and PDF reports.</p></div><div><div class="workspace-logo-preview" id="workspace-logo-preview">${brand.logo ? `<img src="${esc(brand.logo)}" alt="Workspace logo preview"/>` : "<span>No logo uploaded</span>"}</div><input id="workspace-brand-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="workspace-remove-logo">Remove logo</button><p id="workspace-logo-status" role="status"></p></div></div>
+    <div class="profile-detail-row"><div><label for="workspace-brand-logo">Project logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Used for reports when your organization has no logo.</p></div><div><div class="workspace-logo-preview" id="workspace-logo-preview">${brand.logo ? `<img src="${esc(brand.logo)}" alt="Workspace logo preview"/>` : "<span>No logo uploaded</span>"}</div><input id="workspace-brand-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="workspace-remove-logo">Remove logo</button><p id="workspace-logo-status" role="status"></p></div></div>
     <div class="profile-detail-row"><div><span>Report project</span><p>Branding is saved for this project in your database preferences.</p></div><code>${esc(brand.project)}</code></div></fieldset>
     <div class="profile-form-actions"><span id="workspace-brand-status" role="status"></span><button type="button" class="button" id="workspace-brand-reset">Reset</button><button class="button primary" type="submit">Save changes</button></div></form>`;
   renderOrganizationSettings(host);
@@ -1384,27 +1508,7 @@ function renderWorkspaceGeneral(host) {
     const status = form.querySelector("#workspace-logo-status");
     status.textContent = "Preparing logo…";
     try {
-      if (
-        !["image/png", "image/jpeg", "image/webp"].includes(imageFile.type) ||
-        imageFile.size > 2 * 1024 * 1024
-      )
-        throw new Error("Choose a PNG, JPEG, or WebP image up to 2 MB.");
-      const image = await createImageBitmap(imageFile);
-      try {
-        const canvas = document.createElement("canvas");
-        const scale = Math.min(1, 128 / Math.max(image.width, image.height));
-        canvas.width = Math.max(1, Math.round(image.width * scale));
-        canvas.height = Math.max(1, Math.round(image.height * scale));
-        canvas
-          .getContext("2d")
-          .drawImage(image, 0, 0, canvas.width, canvas.height);
-        const logo = canvas.toDataURL("image/png");
-        if (logo.length > 100000)
-          throw new Error("This logo is too detailed. Choose a simpler image.");
-        brand.logo = logo;
-      } finally {
-        image.close();
-      }
+      brand.logo = await prepareBrandLogo(imageFile);
       if (host.isConnected && workspaceDraft === draft)
         renderWorkspaceGeneral(host);
     } catch (error) {
