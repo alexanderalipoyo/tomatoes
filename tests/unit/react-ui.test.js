@@ -339,3 +339,63 @@ test("Caps Lock feedback is announced and cleared when the password loses focus"
     await state.cleanup();
   }
 });
+
+test("project editor supports repeated creation and preserves errors without closing", async () => {
+  const { ProjectEditor } = loadComponent("components/ProjectEditor.jsx");
+  const saved = [];
+  let closed = 0;
+  const state = await mount(
+    React.createElement(ProjectEditor, {
+      onSave: async (name) => {
+        if (name === "Duplicate")
+          throw new Error("A project with this name already exists.");
+        saved.push(name);
+        return { name };
+      },
+      onClose: () => closed++,
+    }),
+  );
+  const change = async (value) =>
+    act(async () => {
+      const input = state.host.querySelector('[name="name"]');
+      Object.getOwnPropertyDescriptor(
+        dom.window.HTMLInputElement.prototype,
+        "value",
+      ).set.call(input, value);
+      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+  const submit = async () =>
+    act(async () =>
+      state.host
+        .querySelector("form")
+        .dispatchEvent(
+          new dom.window.Event("submit", { bubbles: true, cancelable: true }),
+        ),
+    );
+  try {
+    await act(async () =>
+      state.host.querySelector('[type="checkbox"]').click(),
+    );
+    await change("First project");
+    await submit();
+    assert.deepEqual(saved, ["First project"]);
+    assert.equal(closed, 0);
+    assert.equal(state.host.querySelector('[name="name"]').value, "");
+    await change("Duplicate");
+    await submit();
+    assert.match(
+      state.host.querySelector('[role="alert"]').textContent,
+      /already exists/,
+    );
+    assert.equal(closed, 0);
+    await change("Second project");
+    await act(async () =>
+      state.host.querySelector('[type="checkbox"]').click(),
+    );
+    await submit();
+    assert.deepEqual(saved, ["First project", "Second project"]);
+    assert.equal(closed, 1);
+  } finally {
+    await state.cleanup();
+  }
+});

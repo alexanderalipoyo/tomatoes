@@ -73,3 +73,9 @@ Browser history stays in IndexedDB. Server copies use the selected server store.
 Place new tests under `tests/unit/` for automatic discovery. Add local integration suites to `scripts/test.js`; database suites run separately to keep normal tests independent of PostgreSQL. The syntax checker discovers JavaScript recursively under `src/`, `scripts/` and `tests/`.
 
 See the [README](../README.md) for setup, report features and publishing examples.
+
+## Project directory
+
+`src/shared/project-management.js` validates shared project names and stable project identifiers. `/api/projects` lists projects visible in the caller's scope. POST creates a project; PATCH `/api/projects/:id` changes its display name. Only global admins can mutate the directory, with origin and CSRF validation; CI tokens are excluded. The registry is shared by the configured installation rather than stored in per-user preferences.
+
+Migration `006-projects.sql` adds the PostgreSQL registry. Both stores merge registry entries with project identifiers discovered from existing server runs. Directory updates serialize duplicate-name checks (a store queue for files, an advisory transaction lock for PostgreSQL). Renaming updates the registry only and leaves all report JSON, identifiers, project scopes, branches and archive metadata intact. The Projects catalog also includes empty registered projects and browser imports. React's project editor handles pending state, errors and repeated creation. `import-projects.js` fills the project picker and refreshes branch options when selection changes.

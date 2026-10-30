@@ -1,3 +1,4 @@
+const Projects = require("../../shared/project-management");
 const { Pool } = require("pg");
 const { databaseConfig } = require("../config");
 const { schemaName, migrateSchema } = require("../database/schema");
@@ -61,15 +62,54 @@ function createPostgresStore({
       `INSERT INTO ${ns}.ci_tokens(hash,project,created_at) VALUES($1,$2,$3) ${skip ? "ON CONFLICT(hash) DO NOTHING" : ""}`,
       [token.hash, token.project, token.createdAt],
     );
+  async function projectRows(client) {
+    const registered = await client.query(
+      `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt" FROM ${ns}.projects`,
+    );
+    const discovered = await client.query(
+      `SELECT DISTINCT project FROM ${ns}.runs`,
+    );
+    return Projects.merge(
+      registered.rows.map((row) => ({
+        ...row,
+        createdAt: Number(row.createdAt),
+        updatedAt: Number(row.updatedAt),
+      })),
+      discovered.rows.map((row) => ({ metadata: { project: row.project } })),
+    );
+  }
   return {
     kind: "postgres",
+    async listProjects(scopes = ["*"]) {
+      return (await projectRows(pool)).filter(
+        (project) => scopes.includes("*") || scopes.includes(project.id),
+      );
+    },
+    async manageProject(body, id, clock = Date.now()) {
+      return transaction(async (client) => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+          "tomatoes-projects:" + schema,
+        ]);
+        const next = Projects.change(
+          await projectRows(client),
+          body,
+          id,
+          clock,
+        );
+        await client.query(
+          `INSERT INTO ${ns}.projects(id,name,created_at,updated_at) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,updated_at=EXCLUDED.updated_at`,
+          [next.id, next.name, next.createdAt, next.updatedAt],
+        );
+        return next;
+      });
+    },
     pool,
     schema,
     transaction,
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=5`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=6`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {

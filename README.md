@@ -375,3 +375,13 @@ The interface now boots through React and React DOM, with JSX compiled by esbuil
 The existing report import, history actions, result filtering and pagination, settings, user administration, project, and integration controllers remain behind `src/client/react/runtime.js`. They load in their existing order after the shell commits and operate on stable feature hosts. `report-bridge.jsx` and the auth adapter connect those controllers to React roots. Keep React-controlled widget contents separate from controller-controlled hosts; do not rewrite their `innerHTML`. This is a compatibility migration, and the remaining feature presenters still use their original rendering code. Shared report models, API routes, PostgreSQL storage, authentication cookies, and Vercel routing remain unchanged.
 
 Edit JSX components and run `npm run build` to rebuild, then reload the page. Generated bundles in `.tomatoes-data/client-build/` and `dist/` are ignored; commit source, `package.json`, and the lockfile. No framework migration to Next.js or a database migration is required.
+
+### Organization projects
+
+On **Projects**, admins with all-project access can create projects before importing any reports and rename existing named projects. Choose **New project**, enter a unique name, and optionally select **Create another after saving** to add several projects in one session. Each named project card has a **Rename** action. Viewers, editors, project-scoped admins and CI tokens cannot create or rename projects; the API enforces these restrictions in addition to hiding the controls.
+
+Names are shared through the configured server store. An immutable project identifier keeps existing report URLs, archived runs, branches, user scopes and CI publishing credentials linked after a rename. Renaming changes the shared project name; it does not modify original report JSON or personal workspace branding. **Unassigned project** represents imports without a project identifier, so it is not a named project that can be renamed.
+
+Use a project's **Import report** action to preselect it, or choose a project in the import dialog. Branch choices and remembered branch defaults follow the selected project. Empty projects remain visible and ready for their first report. Local file-store mode also supports these features; the current installation is the shared organization boundary.
+
+PostgreSQL deployments require schema version **6**: run `npm run db:migrate` locally or `npm run db:migrate:production` for the configured production database before deploying this change. The migration only adds the project registry. Existing run identities and access scopes are preserved.

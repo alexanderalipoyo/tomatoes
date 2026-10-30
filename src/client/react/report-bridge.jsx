@@ -1,3 +1,4 @@
+import { ProjectEditor } from "./components/ProjectEditor";
 import { ResultHeaders, ResultRows } from "./components/ResultRows";
 import { HistoryCards } from "./components/HistoryCards";
 import { createRoot } from "react-dom/client";
@@ -19,7 +20,20 @@ function render(selector, component) {
   }
   flushSync(() => root.render(component));
 }
+let projectEditorKey = 0;
 export const dashboardBridge = {
+  openProjectEditor(props) {
+    const dialog = document.getElementById("project-editor-dialog");
+    render(
+      "#project-editor-content",
+      <ProjectEditor
+        key={++projectEditorKey}
+        {...props}
+        onClose={() => dialog.close()}
+      />,
+    );
+    if (!dialog.open) dialog.showModal();
+  },
   renderResults(props) {
     render("#results-head", <ResultHeaders isTests={props.isTests} />);
     render("#results-body", <ResultRows {...props} />);

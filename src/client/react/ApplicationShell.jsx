@@ -1,3 +1,4 @@
+import { ProjectEditorDialog } from "./components/ProjectEditor";
 import { Sidebar } from "./components/Sidebar.jsx";
 import { Topbar } from "./components/Topbar.jsx";
 import { RunOverview } from "./components/RunOverview.jsx";
@@ -83,6 +84,7 @@ export function ApplicationShell() {
         </button>
         <div id="detail-content"></div>
       </dialog>
+      <ProjectEditorDialog />
       <ImportProgress />
       <ToastHost />
     </>

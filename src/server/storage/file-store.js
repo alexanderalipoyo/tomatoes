@@ -1,3 +1,4 @@
+const Projects = require("../../shared/project-management");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { PROJECT_ROOT } = require("../config");
@@ -31,6 +32,25 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
           { owner, preferences },
         ]);
         return preferences;
+      });
+    },
+    async listProjects(scopes = ["*"]) {
+      const rows = Projects.merge(
+        await readJSON(file("projects"), []),
+        await readJSON(file("runs"), []),
+      );
+      return rows.filter((project) => allowed(scopes, project.id));
+    },
+    async manageProject(body, id, clock = Date.now()) {
+      return serial(async () => {
+        const records = await readJSON(file("projects"), []);
+        const rows = Projects.merge(records, await readJSON(file("runs"), []));
+        const next = Projects.change(rows, body, id, clock);
+        await writeJSON(file("projects"), [
+          ...records.filter((item) => item.id !== next.id),
+          next,
+        ]);
+        return next;
       });
     },
     getUsers: () => readJSON(file("users"), []),

@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    5,
+    6,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -751,4 +751,42 @@ test("sessions, rate limits and attachment bytes persist across independent serv
     body: JSON.stringify({ username: "hosted", password }),
   });
   assert.equal(response.status, 429);
+});
+
+test("PostgreSQL project creation serializes duplicates and renaming preserves archived run IDs and permissions", async (t) => {
+  const { store } = await fixture(t);
+  const responses = await Promise.allSettled([
+    store.manageProject({ name: "Portal" }, null, 1),
+    store.manageProject({ name: "portal" }, null, 1),
+  ]);
+  assert.equal(
+    responses.filter((item) => item.status === "fulfilled").length,
+    1,
+  );
+  assert.equal(
+    responses.find((item) => item.status === "rejected").reason.status,
+    409,
+  );
+  const project = responses.find((item) => item.status === "fulfilled").value;
+  const saved = {
+    ...record(),
+    metadata: { project: project.id },
+    archivedAt: 5,
+  };
+  await store.saveRun(saved, raw(), JSON.stringify(raw()));
+  const renamed = await store.manageProject(
+    { name: "New Portal Name" },
+    project.id,
+    10,
+  );
+  assert.equal(renamed.id, project.id);
+  assert.equal(
+    (await store.getRun(saved.id, [project.id])).record.archivedAt,
+    5,
+  );
+  assert.equal(
+    (await store.listProjects([project.id]))[0].name,
+    "New Portal Name",
+  );
+  assert.equal((await store.listProjects(["unrelated"])).length, 0);
 });

@@ -34,7 +34,10 @@
     const version = ++revision;
     const select = document.querySelector("#import-branch");
     const hint = document.querySelector("#import-branch-hint");
-    const project = report?.metadata?.project || "tomatoes";
+    const project =
+      typeof ImportProjects !== "undefined"
+        ? ImportProjects.current()
+        : report?.metadata?.project || "tomatoes";
     hint.textContent = `Loading previous branches for ${project}...`;
     select.disabled = true;
     document.querySelector("#import-new-branch-field").hidden = true;

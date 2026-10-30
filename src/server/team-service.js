@@ -538,6 +538,45 @@ function createTeamService({
       }
       const user = await principal(req);
       if (
+        url.pathname === "/api/projects" ||
+        url.pathname.startsWith("/api/projects/")
+      ) {
+        if (user.kind === "token")
+          throw apiError(403, "CI tokens cannot manage the project directory.");
+        const canManage = UserManagement.isGlobalAdmin(user);
+        if (req.method === "GET" && url.pathname === "/api/projects") {
+          send(res, 200, {
+            projects: await store.listProjects(user.projects),
+            canManage,
+          });
+          return true;
+        }
+        if (!canManage)
+          throw apiError(
+            403,
+            "Only admins with all-project access can create or rename projects.",
+          );
+        const creating =
+          req.method === "POST" && url.pathname === "/api/projects";
+        const match = url.pathname.match(
+          /^\/api\/projects\/([a-zA-Z0-9][a-zA-Z0-9_.-]{0,79})$/,
+        );
+        if (!creating && !(req.method === "PATCH" && match))
+          throw apiError(
+            405,
+            "Use POST to create a project or PATCH to rename it.",
+          );
+        canWrite(req, user);
+        const body = await bodyJSON(req, 4096);
+        const project = await store.manageProject(
+          body,
+          creating ? null : match[1],
+          now(),
+        );
+        send(res, creating ? 201 : 200, { project });
+        return true;
+      }
+      if (
         url.pathname === "/api/users" ||
         url.pathname.startsWith("/api/users/")
       ) {

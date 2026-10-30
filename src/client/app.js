@@ -676,6 +676,11 @@ async function loadReport(file = currentFile, options = {}) {
       next.metadata = ReportData.normalizeMetadata(saved.entry.metadata);
     if (options.metadataOverride)
       next.metadata = ReportData.normalizeMetadata(options.metadataOverride);
+    if (options.project !== undefined)
+      next.metadata = ReportData.normalizeMetadata({
+        ...next.metadata,
+        project: options.project,
+      });
     if (options.branch !== undefined)
       next.metadata = ReportData.normalizeMetadata({
         ...next.metadata,
@@ -865,8 +870,14 @@ $("#load-bundled").onclick = () => loadReport(null, { openDashboard: true });
 ReportImport.setup({
   document,
   isBusy: () => loading || document.body.classList.contains("is-rendering"),
-  prepareImport: ImportBranches.prepare,
-  getImportOptions: ImportBranches.options,
+  prepareImport: async () => {
+    await ImportProjects.prepare();
+    if ($("#import-dialog").open) await ImportBranches.prepare();
+  },
+  getImportOptions: () => ({
+    ...ImportProjects.options(),
+    ...ImportBranches.options(),
+  }),
   importFile: async (file, options) => {
     const success = await loadReport(file, { recordImport: true, ...options });
     if (success) await ImportBranches.remember(report.metadata);

@@ -6,12 +6,15 @@ async function renderProjects(host) {
   let serverRuns = [],
     browserRuns = [],
     serverError = "",
-    canArchive = false;
+    canArchive = false,
+    directory = [],
+    canManage = false;
   const results = await Promise.allSettled([
     teamRequest("/api/runs?includeArchived=1", {
       signal: AbortSignal.timeout(15000),
     }),
     ImportHistory.list(false, true),
+    teamRequest("/api/projects", { signal: AbortSignal.timeout(15000) }),
   ]);
   if (view !== "projects" || version !== projectsRenderVersion) return;
   if (results[0].status === "fulfilled") {
@@ -24,9 +27,17 @@ async function renderProjects(host) {
     serverError +=
       (serverError ? " " : "") + "Browser archives could not be loaded.";
   }
+  if (results[2].status === "fulfilled") {
+    directory = results[2].value.projects;
+    canManage = results[2].value.canManage;
+  } else
+    serverError +=
+      (serverError ? " " : "") +
+      "The project directory could not be loaded. " +
+      results[2].reason.message;
   document.querySelector("#page-description").textContent =
     `Projects and saved runs available in ${workspaceBranding(currentWorkspaceProject).name}.`;
-  host.innerHTML = `<section class="projects-page" aria-label="Workspace projects"><div class="projects-toolbar"><div class="projects-search">${icon("search")}<input type="search" id="project-search" placeholder="Search projects" aria-label="Search projects"/><span id="project-count" role="status"></span></div></div>${serverError ? `<div class="notice data-warning" role="status">${esc(serverError)}<button class="button" id="projects-retry">Retry</button></div>` : ""}<div class="project-grid" id="project-grid"></div><p class="projects-source-note">Server runs and browser imports are separate copies. Archiving hides a copy from active lists and keeps its report available for recovery in this project.</p></section>`;
+  host.innerHTML = `<section class="projects-page" aria-label="Workspace projects"><div class="projects-toolbar"><div class="projects-search">${icon("search")}<input type="search" id="project-search" placeholder="Search projects" aria-label="Search projects"/><span id="project-count" role="status"></span></div>${canManage ? `<button type="button" class="button primary" id="create-project">${icon("plus")}New project</button>` : ""}</div>${serverError ? `<div class="notice data-warning" role="status">${esc(serverError)}<button class="button" id="projects-retry">Retry</button></div>` : ""}<div class="project-grid" id="project-grid"></div><p class="projects-source-note">Server runs and browser imports are separate copies. Archiving hides a copy from active lists and keeps its report available for recovery in this project.</p></section>`;
   const reportLink = (run) =>
     ReportLinks.build(location.href, {
       ...(run.source === "server"
@@ -45,7 +56,53 @@ async function renderProjects(host) {
     ]
       .filter(Boolean)
       .join(" · ") || "No active runs";
-  const catalog = () => ProjectCatalog.summarize(serverRuns, browserRuns);
+  const catalog = () =>
+    ProjectCatalog.summarize(serverRuns, browserRuns, directory);
+  const displayName = (id) =>
+    directory.find((item) => item.id === id)?.name ||
+    workspaceBranding(id).name;
+  function editProject(project = null) {
+    globalThis.TomatoesReact.openProjectEditor({
+      project: project
+        ? {
+            id: project.name,
+            name: project.displayName || workspaceBranding(project.name).name,
+          }
+        : null,
+      onSave: async (name) => {
+        teamState = await teamRequest("/api/team/status");
+        const existing =
+          project && directory.find((item) => item.id === project.name);
+        const result = await teamRequest(
+          existing
+            ? "/api/projects/" + encodeURIComponent(project.name)
+            : "/api/projects",
+          {
+            method: existing ? "PATCH" : "POST",
+            body: JSON.stringify({
+              name,
+              ...(!existing && project ? { id: project.name } : {}),
+            }),
+          },
+        );
+        directory = [
+          ...directory.filter((item) => item.id !== result.project.id),
+          result.project,
+        ];
+        if (
+          view === "projects" &&
+          host.isConnected &&
+          version === projectsRenderVersion
+        )
+          draw();
+        return result.project;
+      },
+    });
+  }
+  function importToProject(id) {
+    ImportProjects.preselect(id);
+    document.getElementById("import-report").click();
+  }
   function draw() {
     const projects = catalog();
     const query = host
@@ -54,7 +111,7 @@ async function renderProjects(host) {
       .toLowerCase();
     const filtered = projects.filter(
       (project) =>
-        `${project.name} ${workspaceBranding(project.name).name}`
+        `${project.name} ${project.displayName || ""} ${workspaceBranding(project.name).name}`
           .toLowerCase()
           .includes(query) ||
         project.branches.some((branch) =>
@@ -68,8 +125,8 @@ async function renderProjects(host) {
         .map((project, index) => {
           const archived =
             project.archivedServerCount + project.archivedBrowserCount;
-          const brand = `${workspaceLogoMarkup(project.name)}${esc(workspaceBranding(project.name).name)}`;
-          return `<article class="project-card${project.name === currentWorkspaceProject ? " is-current-workspace" : ""}" ${project.name === currentWorkspaceProject ? 'aria-current="true"' : ""}><header><div class="project-card-heading">${project.latest ? `<a class="project-card-title" href="${esc(reportLink(project.latest))}" data-project-report>${brand}</a>` : `<span class="project-card-title">${brand}</span>`}${project.name === currentWorkspaceProject ? '<span class="project-current-label"><span aria-hidden="true">✓</span> Current workspace</span>' : ""}</div><p>${counts(project)}</p><small>${project.latest ? `Latest run ${project.latest.start ? esc(date(project.latest.start)) : "date not provided"}` : "All runs are archived. Restore a run to make it active again."}</small></header><div class="project-branch-list">${project.branches
+          const brand = `${workspaceLogoMarkup(project.name)}${esc(project.displayName || workspaceBranding(project.name).name)}`;
+          return `<article class="project-card${project.name === currentWorkspaceProject ? " is-current-workspace" : ""}" ${project.name === currentWorkspaceProject ? 'aria-current="true"' : ""}><header><div class="project-card-heading">${project.latest ? `<a class="project-card-title" href="${esc(reportLink(project.latest))}" data-project-report>${brand}</a>` : `<span class="project-card-title">${brand}</span>`}${project.name === currentWorkspaceProject ? '<span class="project-current-label"><span aria-hidden="true">✓</span> Current workspace</span>' : ""}${canManage && ProjectManagement.validId(project.name) ? `<button class="button project-rename-button" type="button" data-rename-project="${index}" aria-label="Rename ${esc(project.displayName || project.name)}">Rename</button>` : ""}</div><p>${counts(project)}</p><small>${project.latest ? `Latest run ${project.latest.start ? esc(date(project.latest.start)) : "date not provided"}` : archived ? "All runs are archived. Restore a run to make it active again." : "No reports yet. Import your first report to get started."}</small></header><div class="project-branch-list">${project.branches
             .slice(0, 5)
             .map(
               (branch) =>
@@ -77,10 +134,24 @@ async function renderProjects(host) {
             )
             .join(
               "",
-            )}</div><footer class="project-archive-footer"><button class="button" type="button" data-project-runs="${index}">Active runs</button><button class="button" type="button" data-project-archives="${index}">Archived runs <span class="project-archive-count">${archived}</span></button>${project.latest ? `<a class="project-open" href="${esc(reportLink(project.latest))}" data-project-report>Open latest run →</a>` : ""}</footer></article>`;
+            )}</div><footer class="project-archive-footer">${ProjectManagement.validId(project.name) ? `<button class="button primary" type="button" data-import-project="${esc(project.name)}">Import report</button>` : ""}<button class="button" type="button" data-project-runs="${index}">Active runs</button><button class="button" type="button" data-project-archives="${index}">Archived runs <span class="project-archive-count">${archived}</span></button>${project.latest ? `<a class="project-open" href="${esc(reportLink(project.latest))}" data-project-report>Open latest run →</a>` : ""}</footer></article>`;
         })
         .join("") ||
-      `<div class="history-empty"><h3>${projects.length ? "No matching projects" : "No projects yet"}</h3><p>${projects.length ? "Try another project or branch name." : "Import a report from Latest run to see its project and run results here."}</p></div>`;
+      `<div class="history-empty"><h3>${projects.length ? "No matching projects" : "No projects yet"}</h3><p>${projects.length ? "Try another project or branch name." : canManage ? "Create your first project, then import a report to start exploring." : "Your administrator can create projects for your organization."}</p></div>`;
+    host
+      .querySelectorAll("[data-rename-project]")
+      .forEach(
+        (button) =>
+          (button.onclick = () =>
+            editProject(filtered[Number(button.dataset.renameProject)])),
+      );
+    host
+      .querySelectorAll("[data-import-project]")
+      .forEach(
+        (button) =>
+          (button.onclick = () =>
+            importToProject(button.dataset.importProject)),
+      );
     host
       .querySelectorAll("[data-project-report]")
       .forEach((link) => (link.onclick = openHistoryReportLink));
@@ -116,7 +187,7 @@ async function renderProjects(host) {
       );
       const runs = archived ? archives : active;
       dialog.querySelector("[data-project-dialog-body]").innerHTML =
-        `<h2 id="project-runs-title">Runs in ${esc(workspaceBranding(projectName).name)}</h2><p class="projects-source-note">Server and browser copies are listed separately. Archived reports remain recoverable.</p><div class="workspace-settings-tabs" role="tablist" aria-label="Project run status"><button role="tab" data-run-tab="active" aria-selected="${!archived}" tabindex="${!archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-active-tab">Active runs (${active.length})</button><button role="tab" data-run-tab="archived" aria-selected="${archived}" tabindex="${archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-archived-tab">Archived runs (${archives.length})</button></div><div id="project-run-panel" role="tabpanel" aria-labelledby="project-${archived ? "archived" : "active"}-tab"><div class="project-runs-list">${runs.map((run, index) => `<article class="shared-run"><div>${badge(run.status || "unknown")}<strong>${esc(run.label || run.name)}</strong><p><span class="project-run-source">${run.source === "server" ? "Server run" : "Browser import"}</span> · ${esc(run.metadata?.branch || "Branch not provided")}</p><small>${run.start ? esc(date(run.start)) : "Run date not provided"}${run.archivedAt ? `<br/>Archived ${esc(date(new Date(run.archivedAt).toISOString()))}` : ""}</small></div><div class="project-run-actions"><a class="button" data-open-project-run href="${esc(reportLink(run))}">Open results</a><button class="button ${archived ? "primary" : ""}" type="button" data-archive-run="${index}" ${run.source === "server" && !canArchive ? 'disabled title="Editor or Admin access is required to change shared runs."' : ""}>${archived ? "Restore run" : "Archive run"}</button></div></article>`).join("") || `<div class="project-runs-empty"><h3>${archived ? "No archived runs" : "No active runs"}</h3><p>${archived ? "Runs archived in this project will appear here for recovery." : "Check Archived runs to restore a previous report."}</p></div>`}</div></div>`;
+        `<h2 id="project-runs-title">Runs in ${esc(displayName(projectName))}</h2><p class="projects-source-note">Server and browser copies are listed separately. Archived reports remain recoverable.</p><div class="workspace-settings-tabs" role="tablist" aria-label="Project run status"><button role="tab" data-run-tab="active" aria-selected="${!archived}" tabindex="${!archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-active-tab">Active runs (${active.length})</button><button role="tab" data-run-tab="archived" aria-selected="${archived}" tabindex="${archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-archived-tab">Archived runs (${archives.length})</button></div><div id="project-run-panel" role="tabpanel" aria-labelledby="project-${archived ? "archived" : "active"}-tab"><div class="project-runs-list">${runs.map((run, index) => `<article class="shared-run"><div>${badge(run.status || "unknown")}<strong>${esc(run.label || run.name)}</strong><p><span class="project-run-source">${run.source === "server" ? "Server run" : "Browser import"}</span> · ${esc(run.metadata?.branch || "Branch not provided")}</p><small>${run.start ? esc(date(run.start)) : "Run date not provided"}${run.archivedAt ? `<br/>Archived ${esc(date(new Date(run.archivedAt).toISOString()))}` : ""}</small></div><div class="project-run-actions"><a class="button" data-open-project-run href="${esc(reportLink(run))}">Open results</a><button class="button ${archived ? "primary" : ""}" type="button" data-archive-run="${index}" ${run.source === "server" && !canArchive ? 'disabled title="Editor or Admin access is required to change shared runs."' : ""}>${archived ? "Restore run" : "Archive run"}</button></div></article>`).join("") || `<div class="project-runs-empty"><h3>${archived ? "No archived runs" : "No active runs"}</h3><p>${archived ? "Runs archived in this project will appear here for recovery." : "Check Archived runs to restore a previous report."}</p></div>`}</div></div>`;
       dialog.querySelectorAll("[data-run-tab]").forEach((button) => {
         const select = () => {
           archived = button.dataset.runTab === "archived";
@@ -217,6 +288,8 @@ async function renderProjects(host) {
     render();
     if (!dialog.open) dialog.showModal();
   }
+  const create = host.querySelector("#create-project");
+  if (create) create.onclick = () => editProject();
   host.querySelector("#project-search").oninput = draw;
   const retry = host.querySelector("#projects-retry");
   if (retry) retry.onclick = () => renderProjects(host);

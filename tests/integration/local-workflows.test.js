@@ -1357,3 +1357,163 @@ test("run archiving is reversible, scoped, permission-checked, and survives reim
     payload.reportText,
   );
 });
+
+test("organization admins create and rename durable projects while reports retain stable scope", async (t) => {
+  const service = await serviceFixture(t);
+  const post = (body) =>
+    service.request("/api/projects", {
+      method: "POST",
+      headers: { Origin: service.origin },
+      body: JSON.stringify(body),
+    });
+  const created = await post({ name: "Customer Portal" });
+  assert.equal(created.status, 201);
+  const id = created.body.project.id;
+  assert.equal((await post({ name: "customer portal" })).status, 409);
+  assert.equal((await post({ name: "Mobile app" })).status, 201);
+  assert.equal(
+    (
+      await service.request("/api/projects", {
+        method: "POST",
+        body: JSON.stringify({ name: "No origin" }),
+      })
+    ).status,
+    403,
+  );
+  const uploaded = await service.request("/api/runs", {
+    method: "POST",
+    headers: { Origin: service.origin },
+    body: JSON.stringify({ report: fixture(), metadata: { project: id } }),
+  });
+  assert.equal(uploaded.status, 201);
+  const renamed = await service.request("/api/projects/" + id, {
+    method: "PATCH",
+    headers: { Origin: service.origin },
+    body: JSON.stringify({ name: "Web Platform" }),
+  });
+  assert.equal(renamed.status, 200);
+  assert.equal(renamed.body.project.id, id);
+  const run = await service.request("/api/runs/" + uploaded.body.run.id);
+  assert.equal(run.body.run.metadata.project, id);
+  const { createFileStore } = require("../../src/server/storage");
+  const reopened = createFileStore(service.dataDir);
+  assert.equal(
+    (await reopened.listProjects()).find((row) => row.id === id).name,
+    "Web Platform",
+  );
+  const races = await Promise.all([
+    post({ name: "Race" }),
+    post({ name: "race" }),
+  ]);
+  assert.deepEqual(races.map((response) => response.status).sort(), [201, 409]);
+  assert.equal(
+    (
+      await service.request("/api/projects/missing", {
+        method: "PATCH",
+        headers: { Origin: service.origin },
+        body: JSON.stringify({ name: "Absent" }),
+      })
+    ).status,
+    404,
+  );
+});
+test("project directory enforces admin roles, existing scope, CSRF, and CI separation", async (t) => {
+  const service = await serviceFixture(t, {
+    teamMode: true,
+    ciToken: "projects-test-token",
+    ciProject: "portal",
+  });
+  const user = (username, role, projects) => ({
+    username,
+    fullName: username,
+    role,
+    projects,
+    ...hashPassword("temporary-test-password"),
+  });
+  await writeJSON(path.join(service.dataDir, "users.json"), [
+    user("admin", "admin", ["*"]),
+    user("reader", "viewer", ["portal"]),
+    user("editor", "editor", ["*"]),
+    user("limited", "admin", ["portal"]),
+  ]);
+  async function signIn(username) {
+    const result = await service.request("/api/login", {
+      method: "POST",
+      headers: { Origin: service.origin },
+      body: JSON.stringify({ username, password: "temporary-test-password" }),
+    });
+    assert.equal(result.status, 200);
+    const cookie = result.headers.get("set-cookie").split(";")[0];
+    const status = await service.request("/api/team/status", {
+      headers: { Cookie: cookie },
+    });
+    return {
+      Cookie: cookie,
+      Origin: service.origin,
+      "X-CSRF-Token": status.body.csrf,
+    };
+  }
+  const admin = await signIn("admin");
+  assert.equal(
+    (
+      await service.request("/api/projects", {
+        method: "POST",
+        headers: { Cookie: admin.Cookie, Origin: service.origin },
+        body: JSON.stringify({ name: "No CSRF" }),
+      })
+    ).status,
+    403,
+  );
+  for (const [id, name] of [
+    ["portal", "Customer portal"],
+    ["private", "Private project"],
+  ])
+    assert.equal(
+      (
+        await service.request("/api/projects", {
+          method: "POST",
+          headers: admin,
+          body: JSON.stringify({ id, name }),
+        })
+      ).status,
+      201,
+    );
+  for (const username of ["reader", "editor", "limited"]) {
+    const headers = await signIn(username);
+    assert.equal(
+      (
+        await service.request("/api/projects", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ name: "Forbidden" }),
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await service.request("/api/projects/portal", {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ name: "Forbidden" }),
+        })
+      ).status,
+      403,
+    );
+  }
+  const reader = await signIn("reader"),
+    listing = await service.request("/api/projects", { headers: reader });
+  assert.equal(listing.body.canManage, false);
+  assert.deepEqual(
+    listing.body.projects.map((row) => row.id),
+    ["portal"],
+  );
+  assert.equal(
+    (
+      await service.request("/api/projects", {
+        headers: { Authorization: "Bearer projects-test-token" },
+      })
+    ).status,
+    403,
+  );
+});

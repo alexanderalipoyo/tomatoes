@@ -26,8 +26,20 @@
       )
       .sort((a, b) => time(b) - time(a));
   }
-  function summarize(serverRuns = [], browserImports = []) {
+  function summarize(serverRuns = [], browserImports = [], registered = []) {
     const projects = new Map();
+    for (const project of registered)
+      projects.set(project.id, {
+        name: project.id,
+        displayName: project.registered ? project.name : undefined,
+        registered: project.registered,
+        serverCount: 0,
+        browserCount: 0,
+        latest: null,
+        archivedServerCount: 0,
+        archivedBrowserCount: 0,
+        branches: new Map(),
+      });
     const seen = new Set();
     for (const [source, rows] of [
       ["server", serverRuns],

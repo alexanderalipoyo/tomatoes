@@ -1577,3 +1577,115 @@ body:has(#integration-setup[open]) {
   margin: 12vh auto;
   padding: 2rem;
 }
+
+/* Organization project management. */
+.projects-toolbar {
+  gap: 14px;
+}
+.projects-search {
+  flex: 1;
+}
+#create-project {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.project-card-heading {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.project-card-heading .project-rename-button {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 5px 9px;
+  min-height: 30px;
+}
+.project-card-title {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.project-editor-dialog {
+  width: min(480px, calc(100vw - 28px));
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--theme-text, #283641);
+  background: var(--theme-surface, #fff);
+}
+.project-editor-dialog::backdrop {
+  background: #0d202b88;
+  backdrop-filter: blur(4px);
+}
+.project-editor-form h2 {
+  margin: 10px 0;
+  font-size: 24px;
+  letter-spacing: -0.5px;
+}
+.project-editor-form > p {
+  line-height: 1.8;
+  margin-bottom: 22px;
+}
+.project-editor-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+.project-editor-form label {
+  font-size: 12px;
+  font-weight: 550;
+}
+.project-editor-form input:not([type="checkbox"]) {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+  background: var(--theme-surface-raised, #f8fafb);
+  color: inherit;
+}
+.project-editor-form #project-editor-help {
+  margin: 0;
+  line-height: 1.7;
+  font-size: 11px;
+}
+.project-editor-form .project-create-another {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin-top: 8px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.project-create-another input {
+  accent-color: var(--green);
+  width: 15px;
+  height: 15px;
+}
+.project-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.project-editor-actions button {
+  min-height: 40px;
+}
+@media (max-width: 600px) {
+  .projects-toolbar {
+    align-items: stretch;
+  }
+  #create-project {
+    min-height: 42px;
+  }
+  .project-editor-dialog {
+    padding: 24px 20px;
+  }
+}

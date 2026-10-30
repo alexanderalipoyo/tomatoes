@@ -11,6 +11,8 @@ export const runtimeScripts = [
   "/js/import-history.js",
   "/js/report-import.js",
   "/js/import-branches.js",
+  "/js/project-management.js",
+  "/js/import-projects.js",
   "/js/investigation-model.js",
   "/js/investigations.js",
   "/js/workspace-model.js",
