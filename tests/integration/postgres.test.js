@@ -819,3 +819,22 @@ test("PostgreSQL persists organization membership and discovers assigned project
     ["mobile", "web"],
   );
 });
+
+test("PostgreSQL source downloads read exact bytes with scoped chunk access", async (t) => {
+  const { store } = await fixture(t);
+  const text = JSON.stringify({ ...raw(), label: "🍅 中文" });
+  await store.saveRun(record(), JSON.parse(text), text);
+  assert.equal(
+    (await store.getRunSource(record().id, ["web"])).originalText,
+    text,
+  );
+  assert.equal(await store.getRunSource(record().id, ["private"]), null);
+  const original = Buffer.from(text);
+  const part = await store.getRunSourceChunk(record().id, ["web"], 10, 20);
+  assert.equal(part.totalBytes, original.length);
+  assert.deepEqual(part.bytes, original.subarray(10, 30));
+  assert.equal(
+    await store.getRunSourceChunk(record().id, ["private"], 0, 20),
+    null,
+  );
+});

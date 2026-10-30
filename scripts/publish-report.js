@@ -2,6 +2,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const ReportData = require("../src/shared/report-data");
+const { packUpload } = require("../src/shared/report-transfer-client");
 async function publishReport({
   file,
   metadata = {},
@@ -24,19 +25,22 @@ async function publishReport({
     target.password
   )
     throw new Error("Use an HTTP or HTTPS server URL without credentials.");
+  let body = JSON.stringify({
+    reportText: JSON.stringify(report),
+    metadata: Object.fromEntries(
+      Object.entries(normalized).filter(([, value]) => value !== ""),
+    ),
+    name: path.basename(file),
+  });
+  if (Buffer.byteLength(body) > 4 * 1024 * 1024)
+    body = await packUpload(body, 4 * 1024 * 1024);
   const response = await fetch(target, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: "Bearer " + token,
     },
-    body: JSON.stringify({
-      report,
-      metadata: Object.fromEntries(
-        Object.entries(normalized).filter(([, value]) => value !== ""),
-      ),
-      name: path.basename(file),
-    }),
+    body,
     signal: AbortSignal.timeout(120000),
   });
   const result = await response.json();

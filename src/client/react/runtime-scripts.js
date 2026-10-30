@@ -2,6 +2,7 @@
 export const runtimeScripts = [
   "/js/notifications.js",
   "/js/report-data.js",
+  "/js/report-transfer-client.js",
   "/js/project-access.js",
   "/js/report-links.js",
   "/js/report-navigation.js",

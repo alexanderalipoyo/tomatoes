@@ -84,6 +84,12 @@ test("report links resolve both legacy IDs and branch-aware IDs without matching
       .digest("hex");
   assert.equal(await f.context.serverMatchesImport(saved, id("")), true);
   assert.equal(await f.context.serverMatchesImport(saved, id("main")), true);
+  const compact = { run: saved.run, originalText: saved.originalText };
+  assert.equal(await f.context.serverMatchesImport(compact, id("main")), true);
+  assert.equal(
+    await f.context.serverMatchesImport(compact, id("feature/a")),
+    false,
+  );
   assert.equal(
     await f.context.serverMatchesImport(saved, id("feature/a")),
     false,
@@ -95,4 +101,19 @@ test("signed-out navigation stops before looking up or rendering private reports
   f.context.authRequiresLogin = () => true;
   await f.context.navigateReportLocation();
   assert.deepEqual(f.calls, ["auth"]);
+});
+
+test("failed shared report navigation preserves the server error", async () => {
+  const f = fixture("#runs", "?server=" + "a".repeat(64));
+  const error = new Error("This response exceeds the hosted 4 MB limit.");
+  f.context.loadReport = async (file, options) => {
+    options.onError(error);
+    return false;
+  };
+  let displayed;
+  f.context.showReportLinkError = (value) => {
+    displayed = value;
+  };
+  await f.context.navigateReportLocation();
+  assert.equal(displayed, error);
 });

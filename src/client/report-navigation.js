@@ -23,7 +23,7 @@ async function reportTextHash(text, project = "", branch = "") {
 }
 async function serverMatchesImport(saved, id) {
   const text = saved.originalText || JSON.stringify(saved.report);
-  const raw = saved.report;
+  const raw = saved.report || JSON.parse(text.replace(/^\uFEFF/, ""));
   const originalProject =
     ReportData.normalizeMetadata(
       raw.tomatoes || raw.metadata || raw.meta?.tomatoes || {},
@@ -116,16 +116,21 @@ async function navigateReportLocation() {
     !(route.importId && route.importId === activeHistoryId) &&
     route.key !== loadedReportLinkKey
   ) {
+    let loadError;
     const success = await loadReport(null, {
+      onError: (error) => {
+        loadError = error;
+      },
       historyId: route.importId,
       serverId: route.serverId,
       fromURL: true,
     });
     if (!success)
       showReportLinkError(
-        new Error(
-          "The requested report could not be loaded. It may be missing, in trash, or outside your signed-in account's access.",
-        ),
+        loadError ||
+          new Error(
+            "The requested report could not be loaded. It may be missing, in trash, or outside your signed-in account's access.",
+          ),
       );
   } else if (!report && !route.importId && !route.serverId) {
     await loadReport(null, { restore: true });

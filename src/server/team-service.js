@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { PROJECT_ROOT } = require("./config");
 const ReportData = require("../shared/report-data");
+const ReportTransfer = require("./report-transfer");
 const UserPreferences = require("../shared/user-preferences");
 const { createFileStore } = require("./storage/index");
 const { readJSON, writeJSON } = require("./storage/json-store");
@@ -834,9 +835,8 @@ function createTeamService({
       }
       if (req.method === "POST" && url.pathname === "/api/runs") {
         canWrite(req, user);
-        const body = await bodyJSON(
-          req,
-          ReportData.MAX_REPORT_BYTES * 2 + 65536,
+        const body = await ReportTransfer.unpack(
+          await bodyJSON(req, ReportData.MAX_REPORT_BYTES * 2 + 65536),
         );
         let raw;
         try {
@@ -1086,16 +1086,74 @@ function createTeamService({
         }
         throw apiError(404, "Attachment endpoint not found.");
       }
+      const transferMatch = url.pathname.match(
+        /^\/api\/runs\/([0-9a-f]{64})\/source$/,
+      );
+      if (req.method === "GET" && transferMatch) {
+        const id = transferMatch[1];
+        if (url.searchParams.has("offset")) {
+          const rawOffset = url.searchParams.get("offset");
+          const offset = Number(rawOffset);
+          if (
+            !/^(0|[1-9][0-9]*)$/.test(rawOffset) ||
+            !Number.isSafeInteger(offset) ||
+            offset >= ReportData.MAX_REPORT_BYTES ||
+            offset % ReportTransfer.CHUNK_BYTES !== 0
+          )
+            throw apiError(400, "Invalid report chunk offset.");
+          const part = await store.getRunSourceChunk(
+            id,
+            user.projects,
+            offset,
+            ReportTransfer.CHUNK_BYTES,
+          );
+          if (!part)
+            throw apiError(
+              404,
+              "Report not found in your accessible projects.",
+            );
+          if (offset >= part.totalBytes)
+            throw apiError(416, "Report chunk is outside the file.");
+          send(res, 200, {
+            offset,
+            totalBytes: part.totalBytes,
+            data: part.bytes.toString("base64"),
+          });
+        } else {
+          const saved = await store.getRunSource(id, user.projects);
+          if (!saved)
+            throw apiError(
+              404,
+              "Report not found in your accessible projects.",
+            );
+          send(
+            res,
+            200,
+            await ReportTransfer.transfer(
+              saved,
+              hosted ? maxRequestBytes : 4 * 1024 * 1024,
+            ),
+          );
+        }
+        return true;
+      }
       const match = url.pathname.match(/^\/api\/runs\/([0-9a-f]{64})$/);
       if (req.method === "GET" && match) {
         const saved = await store.getRun(match[1], user.projects);
         if (!saved)
           throw apiError(404, "Report not found in your accessible projects.");
-        send(res, 200, {
+        const payload = {
           run: saved.record,
           report: saved.report,
-          originalText: saved.originalText,
-        });
+          originalText: saved.originalText || JSON.stringify(saved.report),
+        };
+        // Keep the original JSON once when the duplicate would exceed hosting limits.
+        if (
+          hosted &&
+          Buffer.byteLength(JSON.stringify(payload)) > maxRequestBytes
+        )
+          delete payload.report;
+        send(res, 200, payload);
         return true;
       }
       throw apiError(404, "API endpoint not found.");

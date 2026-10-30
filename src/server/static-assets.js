@@ -38,6 +38,7 @@ for (const name of [
 }
 for (const name of [
   "report-data",
+  "report-transfer-client",
   "report-links",
   "project-catalog",
   "project-management",

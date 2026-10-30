@@ -235,6 +235,29 @@ function createPostgresStore({
         )
       ).rows.map((row) => row.record);
     },
+    async getRunSource(id, projects) {
+      const result = await pool.query(
+        `SELECT record, original_text FROM ${ns}.runs WHERE id=$1 AND ($2::text[] IS NULL OR project=ANY($2::text[]))`,
+        [id, !projects || projects.includes("*") ? null : projects],
+      );
+      const row = result.rows[0];
+      return row
+        ? { record: row.record, originalText: row.original_text }
+        : null;
+    },
+    async getRunSourceChunk(id, projects, offset, length) {
+      const result = await pool.query(
+        `SELECT octet_length(original_text) AS total, substring(convert_to(original_text, 'UTF8') FROM $3::int FOR $4::int) AS bytes FROM ${ns}.runs WHERE id=$1 AND ($2::text[] IS NULL OR project=ANY($2::text[]))`,
+        [
+          id,
+          !projects || projects.includes("*") ? null : projects,
+          offset + 1,
+          length,
+        ],
+      );
+      const row = result.rows[0];
+      return row ? { totalBytes: row.total, bytes: row.bytes } : null;
+    },
     async getRun(id, projects) {
       const result = await pool.query(
         `SELECT record,report,original_text FROM ${ns}.runs WHERE id=$1 AND ($2::text[] IS NULL OR project=ANY($2::text[]))`,

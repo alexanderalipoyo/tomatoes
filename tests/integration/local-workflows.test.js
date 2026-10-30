@@ -1648,6 +1648,24 @@ test("organization members receive only selected projects and assignment changes
     (await restricted.request("/api/runs/" + runs.mobile, { headers })).status,
     200,
   );
+  assert.equal(
+    (await restricted.request(`/api/runs/${runs.portal}/source`, { headers }))
+      .status,
+    404,
+  );
+  assert.equal(
+    (
+      await restricted.request(`/api/runs/${runs.portal}/source?offset=0`, {
+        headers,
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (await restricted.request(`/api/runs/${runs.mobile}/source`, { headers }))
+      .status,
+    200,
+  );
   const usersFile = path.join(f.dataDir, "users.json");
   const records = JSON.parse(await fs.readFile(usersFile, "utf8"));
   records.push({
@@ -1748,4 +1766,109 @@ test("bundled report access respects the signed-in user's project scope", async 
     (await fetch(origin + "/results.json", { headers })).status,
     200,
   );
+});
+
+test("hosted shared reports omit duplicate JSON to stay below the download limit", async (t) => {
+  const { createFileStore } = require("../../src/server/storage/index");
+  const f = await serviceFixture(t, { hosted: true });
+  const store = createFileStore(f.dataDir);
+  const raw = fixture();
+  raw.results[0].tests[0].code = "x".repeat(2600000);
+  const text = JSON.stringify(raw);
+  const id = "b".repeat(64);
+  const record = {
+    id,
+    name: "large.json",
+    metadata: { project: "web", branch: "main" },
+    receivedAt: 1,
+  };
+  await store.saveRun(record, raw, text);
+  assert.ok(
+    Buffer.byteLength(
+      JSON.stringify({ run: record, report: raw, originalText: text }),
+    ) >
+      4 * 1024 * 1024,
+  );
+  const downloaded = await f.request("/api/runs/" + id);
+  assert.equal(downloaded.status, 200);
+  assert.equal(downloaded.body.originalText, text);
+  assert.equal(downloaded.body.report, undefined);
+  assert.equal(downloaded.body.run.id, id);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(downloaded.body)) < 4 * 1024 * 1024,
+  );
+  raw.results[0].tests[0].code = "small";
+  await store.saveRun(record, raw, JSON.stringify(raw));
+  assert.deepEqual((await f.request("/api/runs/" + id)).body.report, raw);
+  raw.results[0].tests[0].code = "x".repeat(4300000);
+  await store.saveRun(record, raw, JSON.stringify(raw));
+  const oversized = await f.request("/api/runs/" + id);
+  assert.equal(oversized.status, 413);
+  assert.match(oversized.body.error, /hosted 4 MB/);
+});
+
+test("hosted source endpoint serves large reports and rejects invalid chunk offsets", async (t) => {
+  const { createFileStore } = require("../../src/server/storage/index");
+  const {
+    download,
+    packUpload,
+  } = require("../../src/shared/report-transfer-client");
+  const f = await serviceFixture(t, { hosted: true });
+  const store = createFileStore(f.dataDir);
+  const id = "c".repeat(64);
+  const raw = fixture();
+  raw.results[0].tests[0].code = require("node:crypto")
+    .randomBytes(4 * 1024 * 1024)
+    .toString("base64");
+  const text = JSON.stringify(raw);
+  await store.saveRun(
+    { id, name: "large.json", metadata: { project: "web" } },
+    raw,
+    text,
+  );
+  const manifest = await f.request(`/api/runs/${id}/source`);
+  assert.equal(manifest.status, 200);
+  assert.equal(manifest.body.encoding, "chunked-base64");
+  let requests = 0;
+  const loaded = await download(`/api/runs/${id}`, async (path) => {
+    const response = await f.request(path);
+    requests++;
+    assert.equal(response.status, 200);
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(response.body)) < 4 * 1024 * 1024,
+    );
+    return response.body;
+  });
+  assert.equal(loaded.originalText, text);
+  assert.ok(requests > 2);
+  for (const offset of ["1", "-1", "abc", "999999999999999999999"]) {
+    assert.equal(
+      (await f.request(`/api/runs/${id}/source?offset=${offset}`)).status,
+      400,
+    );
+  }
+  assert.equal(
+    (await f.request(`/api/runs/${"d".repeat(64)}/source?offset=0`)).status,
+    404,
+  );
+  const compressible = fixture();
+  compressible.results[0].tests[0].code = "x".repeat(6000000);
+  const packed = await packUpload(
+    JSON.stringify({
+      reportText: JSON.stringify(compressible),
+      metadata: { project: "web" },
+    }),
+    4 * 1024 * 1024,
+  );
+  const uploaded = await f.request("/api/runs", {
+    method: "POST",
+    headers: { Origin: f.origin },
+    body: packed,
+  });
+  assert.equal(uploaded.status, 201);
+  const reopened = await download(
+    "/api/runs/" + uploaded.body.run.id,
+    async (path) => (await f.request(path)).body,
+  );
+  assert.equal(reopened.originalText, JSON.stringify(compressible));
 });

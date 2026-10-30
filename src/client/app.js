@@ -598,7 +598,12 @@ async function loadReport(file = currentFile, options = {}) {
           getLocal: (id) => ImportHistory.get(id),
           getServer: (id) =>
             teamRequest("/api/runs/" + id, {
-              signal: AbortSignal.timeout(30000),
+              onDownloadProgress: (loaded, total) =>
+                paintProgress(
+                  Math.round((4 * loaded) / total),
+                  "Downloading saved report",
+                ),
+              signal: AbortSignal.timeout(120000),
             }),
           verifyServer: serverMatchesImport,
         },
@@ -805,6 +810,7 @@ async function loadReport(file = currentFile, options = {}) {
       showToast("Report imported successfully.", "success");
   } catch (error) {
     failed = true;
+    options.onError?.(error);
     showToast(`Report import failed: ${error.message}`, "error");
     if (report !== previous.report) {
       ({ report, currentFile, activeHistoryId, sourceName, page, grouping } =

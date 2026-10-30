@@ -120,6 +120,29 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
         )
         .sort((a, b) => b.receivedAt - a.receivedAt);
     },
+    async getRunSource(id, projects) {
+      if (!/^[a-f0-9]{64}$/.test(id)) return null;
+      const record = (await readJSON(file("runs"), [])).find(
+        (row) => row.id === id && allowed(projects, row.metadata.project),
+      );
+      if (!record) return null;
+      return {
+        record,
+        originalText: await fs.readFile(
+          path.join(dataDir, "reports", id + ".json"),
+          "utf8",
+        ),
+      };
+    },
+    async getRunSourceChunk(id, projects, offset, length) {
+      const saved = await this.getRunSource(id, projects);
+      if (!saved) return null;
+      const source = Buffer.from(saved.originalText);
+      return {
+        totalBytes: source.length,
+        bytes: source.subarray(offset, offset + length),
+      };
+    },
     async getRun(id, projects) {
       if (!/^[a-f0-9]{64}$/.test(id)) return null;
       const record = (await readJSON(file("runs"), [])).find(

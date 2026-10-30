@@ -4,13 +4,37 @@ let teamProject = "";
 async function teamRequest(route, options = {}) {
   const limit =
     typeof authStatus !== "undefined" ? authStatus?.maxRequestBytes : null;
+  const { onDownloadProgress, ...requestOptions } = options;
+  options = requestOptions;
+  if (
+    (!options.method || options.method === "GET") &&
+    /^\/api\/runs\/[a-f0-9]{64}$/.test(route)
+  ) {
+    return ReportTransferClient.download(
+      route,
+      (path) => teamRequest(path, options),
+      onDownloadProgress,
+    );
+  }
+  if (
+    limit &&
+    route === "/api/runs" &&
+    options.method === "POST" &&
+    typeof options.body === "string" &&
+    new TextEncoder().encode(options.body).length > limit
+  ) {
+    options = {
+      ...options,
+      body: await ReportTransferClient.packUpload(options.body, limit),
+    };
+  }
   if (
     limit &&
     typeof options.body === "string" &&
     new TextEncoder().encode(options.body).length > limit
   )
     throw new Error(
-      "This upload exceeds the hosted 4 MB request limit. The browser copy remains available; use a smaller report or the local Tomatoes server to publish it.",
+      "This report still exceeds the hosted upload limit after compression. Its browser copy remains available; reduce embedded artifacts or publish from a local Tomatoes server.",
     );
   const headers = {
     "Content-Type": "application/json",
