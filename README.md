@@ -2,17 +2,18 @@
 
 **A test report dashboard for Cypress-generated cloud test results.**
 
+
+
+
+https://github.com/user-attachments/assets/446d9602-f0e8-49e8-a715-b18e015b0390
+
+
+
 Tomatoes turns JSON reports from Cypress test runs into a dashboard for reviewing outcomes, investigating failures, and comparing previous runs. Reports can come from tests executed in a cloud CI environment or on a local machine.
 
 Tomatoes is an independent application with its own branding. It is not the Cypress Cloud product. Cypress is the tool that executes the tests; Tomatoes reads the resulting **Mochawesome-compatible JSON report** and presents the results.
 
 The application runs locally. Imports and evidence are available in your browser; **Settings > Sharing & access** uses PostgreSQL or the local file store for persistent server copies. With PostgreSQL enabled, new file imports and attachments are also saved to the server when your account has access. It does not require a Cypress Cloud account, recording key, or API connection.
-
-## See Tomatoes in action
-
-[![Watch the Tomatoes animated promo](docs/media/tomatoes-promo-poster.png)](docs/media/tomatoes-promo.mp4)
-
-[Watch or download the 28-second animated promo](docs/media/tomatoes-promo.mp4), featuring the dashboard, insights, and responsive layouts with an original soundtrack.
 
 **Created by Alex Ali.**
 
