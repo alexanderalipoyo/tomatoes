@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    7,
+    8,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -802,6 +802,7 @@ test("PostgreSQL persists organization membership and discovers assigned project
     organizationId: "default",
     ...hashPassword("temporary-member-password"),
   }));
+  await store.saveOrganization("other", "Other organization", true);
   await store.manageUser("outsider", () => ({
     username: "outsider",
     role: "viewer",
@@ -836,5 +837,50 @@ test("PostgreSQL source downloads read exact bytes with scoped chunk access", as
   assert.equal(
     await store.getRunSourceChunk(record().id, ["private"], 0, 20),
     null,
+  );
+});
+
+test("PostgreSQL organizations own projects and constrain account membership", async (t) => {
+  const { store } = await fixture(t);
+  await store.saveOrganization("other", "Other organization", true);
+  const first = await store.manageProject(
+    { name: "Portal" },
+    null,
+    1,
+    "default",
+  );
+  const second = await store.manageProject(
+    { name: "Portal" },
+    null,
+    1,
+    "other",
+  );
+  assert.notEqual(first.id, second.id);
+  assert.equal(second.organizationId, "other");
+  assert.deepEqual(
+    (await store.listProjects(["*"], "default")).map((p) => p.id),
+    [first.id],
+  );
+  assert.deepEqual(
+    (await store.listProjects(["*"], "other")).map((p) => p.id),
+    [second.id],
+  );
+  await assert.rejects(
+    store.manageProject({ name: "Forbidden" }, first.id, 2, "other"),
+    (error) => error.status === 404,
+  );
+  await assert.rejects(
+    store.manageProject({ name: "Orphan" }, null, 3, "missing"),
+    (error) => error.code === "23503",
+  );
+  await assert.rejects(
+    store.addUser({
+      username: "orphan",
+      role: "viewer",
+      projects: ["*"],
+      organizationId: "missing",
+      ...hashPassword("temporary-orphan-password"),
+    }),
+    (error) => error.code === "23503",
   );
 });

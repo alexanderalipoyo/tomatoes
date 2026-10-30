@@ -106,3 +106,28 @@ test("browser lists, direct reads, attachments and backups respect changing proj
   assert.equal((await history.snapshot()).entries.length, 0);
   await history.close();
 });
+
+test("browser all-project access is limited to the current organization's project directory", () => {
+  const status = {
+    enabled: true,
+    authenticated: true,
+    organization: { id: "other" },
+    user: { organizationId: "other", projects: ["*"] },
+    accessibleProjects: [{ id: "portal-b", organizationId: "other" }],
+  };
+  assert.equal(
+    Access.allowed({ metadata: { project: "portal-b" } }, status),
+    true,
+  );
+  assert.equal(
+    Access.allowed({ metadata: { project: "portal-a" } }, status),
+    false,
+  );
+  assert.equal(
+    Access.allowed(
+      { metadata: { project: "portal-b" } },
+      { ...status, accessibleProjects: [] },
+    ),
+    false,
+  );
+});

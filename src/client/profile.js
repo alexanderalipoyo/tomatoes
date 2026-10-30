@@ -44,6 +44,7 @@ function renderUserProfile(host) {
       </fieldset>
       <div class="profile-form-actions"><p id="profile-feedback" role="status">${hasUnsavedProfile() ? "Unsaved changes" : state.ready ? "" : esc(state.error)}</p><button class="button" type="button" id="profile-reset">Reset</button><button class="button primary" type="submit" ${state.ready ? "" : "disabled"}>Save changes</button></div>
     </form>
+    <section class="settings-card account-project-access"><h2>Organization and project access</h2><p><strong>${esc(authStatus?.organization?.name || "Current organization")}</strong></p><p>Role: ${esc(state.user?.role || "Local administrator")}</p><p>Your account can access ${authStatus?.user?.projects?.includes("*") ? "all projects in this organization" : "the projects listed below"}.</p><ul>${workspaceProjects.map((project) => `<li>${esc(project.name)} <small>(${esc(project.id)})</small></li>`).join("") || "<li>No assigned projects.</li>"}</ul></section>
     ${preferenceStatusMarkup()}
   </div>`;
   const form = document.querySelector("#profile-form");

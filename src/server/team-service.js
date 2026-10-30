@@ -47,7 +47,6 @@ function createTeamService({
   slackNotifier = null,
   hosted = false,
   recoverySender = null,
-  organizationName = "Tomatoes workspace",
   store = createFileStore(dataDir),
 } = {}) {
   const sessions = new Map(),
@@ -131,17 +130,26 @@ function createTeamService({
     }
     const users = await store.getUsers();
     const user = users.find((user) => user.username === saved.username);
-    if (
-      !user ||
-      user.disabled ||
-      !UserManagement.belongsToOrganization(user) ||
-      saved.passwordHash !== user.hash
-    ) {
+    if (!user || user.disabled || saved.passwordHash !== user.hash) {
       await deleteSession(key);
       return null;
     }
+    const organization = await store.getOrganization(
+      user.organizationId || "default",
+    );
+    if (!organization) {
+      await deleteSession(key);
+      return null;
+    }
+    const accessibleProjects = await store.listProjects(
+      user.projects,
+      organization.id,
+    );
     return {
       ...saved,
+      organization,
+      accessibleProjects,
+      projectScopes: accessibleProjects.map((project) => project.id),
       key,
       username: user.username,
       fullName: user.fullName || user.username,
@@ -163,15 +171,30 @@ function createTeamService({
           ? { project: ciProject }
           : null);
       if (!token) throw apiError(401, "Invalid CI token.");
-      return { role: "ci", projects: [token.project], kind: "token" };
+      const project = await store.getProject(token.project);
+      return {
+        role: "ci",
+        projects: [token.project],
+        projectScopes: [token.project],
+        organizationId: project?.organizationId || "default",
+        kind: "token",
+      };
     }
-    if (!teamMode) return { role: "admin", projects: ["*"], kind: "local" };
+    if (!teamMode)
+      return {
+        role: "admin",
+        projects: ["*"],
+        projectScopes: ["*"],
+        organizationId: "default",
+        kind: "local",
+      };
     const user = await session(req);
     if (!user) throw apiError(401, "Sign in to access the local team store.");
     return { ...user, kind: "session" };
   }
   function canAccess(user, project) {
-    return user.projects.includes("*") || user.projects.includes(project);
+    const scopes = user.projectScopes || user.projects;
+    return scopes.includes("*") || scopes.includes(project);
   }
   function canWrite(req, user) {
     if (user.role === "viewer")
@@ -255,10 +278,12 @@ function createTeamService({
         const tokens = await store.getTokens();
         send(res, 200, {
           enabled: teamMode,
-          organization: {
-            id: UserManagement.ORGANIZATION_ID,
-            name: organizationName,
-          },
+          organization:
+            user?.organization ||
+            (!teamMode ? await store.getOrganization("default") : null),
+          accessibleProjects:
+            user?.accessibleProjects ||
+            (!teamMode ? await store.listProjects(["*"], "default") : []),
           authenticated: Boolean(user),
           user: user
             ? {
@@ -326,12 +351,14 @@ function createTeamService({
         const matches = users.filter(
           (item) =>
             !item.disabled &&
-            UserManagement.belongsToOrganization(item) &&
             (item.username === identifier ||
               (item.email && item.email.toLowerCase() === identifier)),
         );
         const user = matches.length === 1 ? matches[0] : null;
-        if (!verifyPassword(body?.password, user)) {
+        if (
+          !verifyPassword(body?.password, user) ||
+          !(await store.getOrganization(user.organizationId || "default"))
+        ) {
           const record =
             previous && previous.until > now()
               ? previous
@@ -433,12 +460,13 @@ function createTeamService({
             !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
           )
             throw apiError(400, "Enter a valid account email address.");
-          const matches = (await store.getUsers()).filter(
-            (user) =>
-              !user.disabled &&
-              UserManagement.belongsToOrganization(user) &&
-              user.email?.toLowerCase() === email,
+          const candidates = (await store.getUsers()).filter(
+            (user) => !user.disabled && user.email?.toLowerCase() === email,
           );
+          const matches = [];
+          for (const user of candidates)
+            if (await store.getOrganization(user.organizationId || "default"))
+              matches.push(user);
           if (matches.length === 1) {
             const target = matches[0];
             const token = crypto.randomBytes(32).toString("base64url");
@@ -452,7 +480,10 @@ function createTeamService({
                     (item) => item.username === target.username,
                   );
                   if (
-                    !UserManagement.belongsToOrganization(user) ||
+                    !UserManagement.belongsToOrganization(
+                      user,
+                      target.organizationId || "default",
+                    ) ||
                     user.disabled ||
                     user.email?.toLowerCase() !== email
                   )
@@ -507,11 +538,12 @@ function createTeamService({
         }
         const digest = hashToken(body.token);
         const target = (await store.getUsers()).find(
-          (user) =>
-            UserManagement.belongsToOrganization(user) &&
-            user.resetHash === digest,
+          (user) => user.resetHash === digest,
         );
-        if (!target)
+        if (
+          !target ||
+          !(await store.getOrganization(target.organizationId || "default"))
+        )
           throw apiError(
             400,
             "This reset link is invalid or expired. Request a new one.",
@@ -519,7 +551,10 @@ function createTeamService({
         await store.manageUser(target.username, (rows) => {
           const user = rows.find((item) => item.username === target.username);
           if (
-            !UserManagement.belongsToOrganization(user) ||
+            !UserManagement.belongsToOrganization(
+              user,
+              target.organizationId || "default",
+            ) ||
             user.disabled ||
             user.resetHash !== digest ||
             Number(user.resetExpires) <= now()
@@ -563,16 +598,54 @@ function createTeamService({
         return true;
       }
       const user = await principal(req);
+      if (url.pathname === "/api/organization") {
+        if (user.kind === "token")
+          throw apiError(403, "CI tokens cannot manage organizations.");
+        if (req.method === "GET") {
+          send(res, 200, {
+            organization: await store.getOrganization(user.organizationId),
+            projects: await store.listProjects(
+              user.projects,
+              user.organizationId,
+            ),
+            canManage: UserManagement.isGlobalAdmin(user, user.organizationId),
+          });
+          return true;
+        }
+        if (req.method !== "PATCH")
+          throw apiError(405, "Use GET or PATCH for the current organization.");
+        if (!UserManagement.isGlobalAdmin(user, user.organizationId))
+          throw apiError(
+            403,
+            "Only organization admins can rename the organization.",
+          );
+        canWrite(req, user);
+        const body = await bodyJSON(req, 4096);
+        const name = require("../shared/project-management").validateName(body);
+        const organization = await store.saveOrganization(
+          user.organizationId,
+          name,
+        );
+        send(res, 200, { organization });
+        return true;
+      }
       if (
         url.pathname === "/api/projects" ||
         url.pathname.startsWith("/api/projects/")
       ) {
         if (user.kind === "token")
           throw apiError(403, "CI tokens cannot manage the project directory.");
-        const canManage = UserManagement.isGlobalAdmin(user);
+        const canManage = UserManagement.isGlobalAdmin(
+          user,
+          user.organizationId,
+        );
         if (req.method === "GET" && url.pathname === "/api/projects") {
           send(res, 200, {
-            projects: await store.listProjects(user.projects),
+            projects: await store.listProjects(
+              user.projects,
+              user.organizationId,
+            ),
+            organization: await store.getOrganization(user.organizationId),
             canManage,
           });
           return true;
@@ -598,6 +671,7 @@ function createTeamService({
           body,
           creating ? null : match[1],
           now(),
+          user.organizationId,
         );
         send(res, creating ? 201 : 200, { project });
         return true;
@@ -606,7 +680,10 @@ function createTeamService({
         url.pathname === "/api/users" ||
         url.pathname.startsWith("/api/users/")
       ) {
-        if (user.kind === "token" || !UserManagement.isGlobalAdmin(user))
+        if (
+          user.kind === "token" ||
+          !UserManagement.isGlobalAdmin(user, user.organizationId)
+        )
           throw apiError(
             403,
             "Only admins with all-project access can manage users.",
@@ -614,13 +691,12 @@ function createTeamService({
         if (req.method === "GET" && url.pathname === "/api/users") {
           send(res, 200, {
             users: (await store.getUsers())
-              .filter(UserManagement.belongsToOrganization)
+              .filter((row) =>
+                UserManagement.belongsToOrganization(row, user.organizationId),
+              )
               .map(UserManagement.publicUser),
-            organization: {
-              id: UserManagement.ORGANIZATION_ID,
-              name: organizationName,
-            },
-            projects: await store.listProjects(["*"]),
+            organization: await store.getOrganization(user.organizationId),
+            projects: await store.listProjects(["*"], user.organizationId),
             roles: UserManagement.roles,
             currentUsername: user.username || null,
             localMode: !teamMode,
@@ -643,7 +719,7 @@ function createTeamService({
         const body =
           req.method === "DELETE" ? null : await bodyJSON(req, 16384);
         const changes = body
-          ? UserManagement.validateUser(body, creating)
+          ? UserManagement.validateUser(body, creating, user.organizationId)
           : null;
         if (
           changes &&
@@ -655,7 +731,9 @@ function createTeamService({
         const target = creating ? changes.username : username;
         const credentials = creating ? hashPassword(body.password) : null;
         const availableProjects = new Set(
-          (await store.listProjects(["*"])).map((project) => project.id),
+          (await store.listProjects(["*"], user.organizationId)).map(
+            (project) => project.id,
+          ),
         );
         if (
           changes &&
@@ -672,7 +750,7 @@ function createTeamService({
             !rows.some(
               (row) =>
                 row.username === user.username &&
-                UserManagement.isGlobalAdmin(row),
+                UserManagement.isGlobalAdmin(row, user.organizationId),
             )
           )
             throw apiError(
@@ -682,7 +760,11 @@ function createTeamService({
           const previous = rows.find((row) => row.username === target);
           if (
             !creating &&
-            (!previous || !UserManagement.belongsToOrganization(previous))
+            (!previous ||
+              !UserManagement.belongsToOrganization(
+                previous,
+                user.organizationId,
+              ))
           )
             throw apiError(404, "User not found.");
           if (
@@ -720,11 +802,12 @@ function createTeamService({
             );
           if (
             previous &&
-            UserManagement.isGlobalAdmin(previous) &&
-            !UserManagement.isGlobalAdmin(next) &&
+            UserManagement.isGlobalAdmin(previous, user.organizationId) &&
+            !UserManagement.isGlobalAdmin(next, user.organizationId) &&
             !rows.some(
               (row) =>
-                row.username !== target && UserManagement.isGlobalAdmin(row),
+                row.username !== target &&
+                UserManagement.isGlobalAdmin(row, user.organizationId),
             )
           )
             throw apiError(
@@ -806,7 +889,7 @@ function createTeamService({
           throw apiError(400, "Choose whether to archive or restore this run.");
         const run = await store.setRunArchived(
           archiveMatch[1],
-          user.projects,
+          user.projectScopes,
           body.archived ? now() : null,
         );
         if (!run)
@@ -818,7 +901,7 @@ function createTeamService({
         const project = url.searchParams.get("project");
         if (project && !canAccess(user, project))
           throw apiError(403, "This project is outside your access scope.");
-        const records = await store.listRuns(user.projects, project);
+        const records = await store.listRuns(user.projectScopes, project);
         send(res, 200, {
           canArchive: user.kind !== "token" && user.role !== "viewer",
           runs: records
@@ -940,7 +1023,7 @@ function createTeamService({
           )
         )
           throw apiError(400, "Use a valid import event identifier.");
-        const saved = await store.getRun(slackMatch[1], user.projects);
+        const saved = await store.getRun(slackMatch[1], user.projectScopes);
         if (!saved)
           throw apiError(404, "Report not found in your accessible projects.");
         if (!slackNotifier?.enabled) {
@@ -968,7 +1051,7 @@ function createTeamService({
         /^\/api\/runs\/([0-9a-f]{64})\/evidence(?:\/([0-9a-f]{64}))?$/,
       );
       if (evidenceMatch) {
-        const saved = await store.getRun(evidenceMatch[1], user.projects);
+        const saved = await store.getRun(evidenceMatch[1], user.projectScopes);
         if (!saved)
           throw apiError(404, "Report not found in your accessible projects.");
         if (req.method === "GET" && !evidenceMatch[2]) {
@@ -1103,7 +1186,7 @@ function createTeamService({
             throw apiError(400, "Invalid report chunk offset.");
           const part = await store.getRunSourceChunk(
             id,
-            user.projects,
+            user.projectScopes,
             offset,
             ReportTransfer.CHUNK_BYTES,
           );
@@ -1120,7 +1203,7 @@ function createTeamService({
             data: part.bytes.toString("base64"),
           });
         } else {
-          const saved = await store.getRunSource(id, user.projects);
+          const saved = await store.getRunSource(id, user.projectScopes);
           if (!saved)
             throw apiError(
               404,
@@ -1139,7 +1222,7 @@ function createTeamService({
       }
       const match = url.pathname.match(/^\/api\/runs\/([0-9a-f]{64})$/);
       if (req.method === "GET" && match) {
-        const saved = await store.getRun(match[1], user.projects);
+        const saved = await store.getRun(match[1], user.projectScopes);
         if (!saved)
           throw apiError(404, "Report not found in your accessible projects.");
         const payload = {

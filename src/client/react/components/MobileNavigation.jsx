@@ -27,10 +27,21 @@ export function MobileNavigation() {
         aria-controls="workspace-menu"
         aria-expanded="false"
       >
-        <span data-workspace-logo></span>
-        <span data-workspace-name>{"Tomatoes workspace"}</span>
+        <span data-organization-initials></span>
+        <span data-organization-name>{"Organization"}</span>
         <small data-workspace-user>{"Alex Ali"}</small>
       </button>
+      <label className="side-label" htmlFor="mobile-project-picker">
+        Project
+      </label>
+      <select
+        id="mobile-project-picker"
+        className="project-picker"
+        data-project-picker
+        aria-label="Current project on mobile"
+      >
+        <option value="">Select a project</option>
+      </select>
       <nav aria-label="Mobile project navigation">
         <a href="#runs" data-view="runs">
           <span data-icon="runs"></span>

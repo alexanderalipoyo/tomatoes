@@ -1872,3 +1872,234 @@ test("hosted source endpoint serves large reports and rejects invalid chunk offs
   );
   assert.equal(reopened.originalText, JSON.stringify(compressible));
 });
+
+test("organization identity is separate from projects and all-project admins remain tenant-scoped", async (t) => {
+  const { createFileStore } = require("../../src/server/storage/index");
+  const f = await serviceFixture(t, { teamMode: true });
+  const store = createFileStore(f.dataDir);
+  await store.saveOrganization("default", "Breach Secure Now");
+  await store.saveOrganization("other", "Other Organization", true);
+  const portal = await store.manageProject(
+    { name: "QA - Automation PII Portal", id: "portal-a" },
+    null,
+    1,
+    "default",
+  );
+  const other = await store.manageProject(
+    { name: "QA - Automation PII Portal", id: "portal-b" },
+    null,
+    1,
+    "other",
+  );
+  const password = "temporary-organization-password";
+  for (const user of [
+    {
+      username: "justine",
+      fullName: "Justine Lopez",
+      role: "viewer",
+      organizationId: "default",
+      projects: [portal.id],
+    },
+    {
+      username: "owner-a",
+      role: "admin",
+      organizationId: "default",
+      projects: ["*"],
+    },
+    {
+      username: "owner-b",
+      role: "admin",
+      organizationId: "other",
+      projects: ["*"],
+    },
+    {
+      username: "forged",
+      role: "viewer",
+      organizationId: "other",
+      projects: [portal.id],
+    },
+  ])
+    await store.addUser({ ...user, ...hashPassword(password) });
+  const ids = ["a".repeat(64), "b".repeat(64)];
+  for (const [index, project] of [portal, other].entries())
+    await store.saveRun(
+      {
+        id: ids[index],
+        name: "report.json",
+        metadata: { project: project.id },
+        receivedAt: index + 1,
+      },
+      fixture(),
+    );
+  async function login(username) {
+    const response = await f.request("/api/login", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ username, password }),
+    });
+    assert.equal(response.status, 200);
+    return {
+      Cookie: response.headers.get("set-cookie").split(";")[0],
+      Origin: f.origin,
+      "X-CSRF-Token": response.body.csrf,
+    };
+  }
+  const justine = await login("justine");
+  const status = (await f.request("/api/team/status", { headers: justine }))
+    .body;
+  assert.equal(status.user.fullName, "Justine Lopez");
+  assert.equal(status.organization.name, "Breach Secure Now");
+  assert.equal(status.organization.id, "default");
+  assert.deepEqual(
+    status.accessibleProjects.map((project) => project.id),
+    [portal.id],
+  );
+  assert.equal(status.accessibleProjects[0].organizationId, "default");
+  assert.equal(
+    (await f.request(`/api/runs/${ids[0]}/source`, { headers: justine }))
+      .status,
+    200,
+  );
+  assert.equal(
+    (
+      await f.request(`/api/runs/${ids[1]}/source?offset=0`, {
+        headers: justine,
+      })
+    ).status,
+    404,
+  );
+  const ownerA = await login("owner-a");
+  const ownerB = await login("owner-b");
+  const bStatus = (await f.request("/api/team/status", { headers: ownerB }))
+    .body;
+  assert.equal(bStatus.organization.id, "other");
+  assert.deepEqual(
+    (await f.request("/api/projects", { headers: ownerB })).body.projects.map(
+      (project) => project.id,
+    ),
+    [other.id],
+  );
+  assert.deepEqual(
+    (await f.request("/api/runs", { headers: ownerB })).body.runs.map(
+      (run) => run.id,
+    ),
+    [ids[1]],
+  );
+  assert.equal(
+    (await f.request(`/api/runs/${ids[0]}`, { headers: ownerB })).status,
+    404,
+  );
+  assert.equal(
+    (
+      await f.request(`/api/runs/${ids[0]}/archive`, {
+        method: "POST",
+        headers: ownerB,
+        body: JSON.stringify({ archived: true }),
+      })
+    ).status,
+    404,
+  );
+  assert.deepEqual(
+    (await f.request("/api/users", { headers: ownerB })).body.users
+      .map((user) => user.username)
+      .sort(),
+    ["forged", "owner-b"],
+  );
+  assert.equal(
+    (
+      await f.request("/api/users/justine", {
+        method: "DELETE",
+        headers: ownerB,
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await f.request("/api/projects/" + portal.id, {
+        method: "PATCH",
+        headers: ownerB,
+        body: JSON.stringify({ name: "Forbidden rename" }),
+      })
+    ).status,
+    404,
+  );
+  const body = {
+    username: "new-member",
+    fullName: "New Member",
+    email: "",
+    role: "viewer",
+    disabled: false,
+    organizationId: "other",
+    projects: [portal.id],
+    password,
+  };
+  assert.equal(
+    (
+      await f.request("/api/users", {
+        method: "POST",
+        headers: ownerB,
+        body: JSON.stringify(body),
+      })
+    ).status,
+    400,
+  );
+  body.projects = [other.id];
+  assert.equal(
+    (
+      await f.request("/api/users", {
+        method: "POST",
+        headers: ownerB,
+        body: JSON.stringify(body),
+      })
+    ).status,
+    201,
+  );
+  body.username = "wrong-org";
+  body.organizationId = "default";
+  assert.equal(
+    (
+      await f.request("/api/users", {
+        method: "POST",
+        headers: ownerB,
+        body: JSON.stringify(body),
+      })
+    ).status,
+    400,
+  );
+  const forged = await login("forged");
+  assert.deepEqual(
+    (await f.request("/api/runs", { headers: forged })).body.runs,
+    [],
+  );
+  assert.equal(
+    (
+      await f.request("/api/organization", {
+        method: "PATCH",
+        headers: justine,
+        body: JSON.stringify({ name: "Forbidden" }),
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await f.request("/api/organization", {
+        method: "PATCH",
+        headers: ownerA,
+        body: JSON.stringify({ name: "Updated Organization" }),
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await f.request("/api/team/status", { headers: justine })).body
+      .organization.name,
+    "Updated Organization",
+  );
+  assert.equal(
+    (await f.request("/api/team/status", { headers: ownerB })).body.organization
+      .name,
+    "Other Organization",
+  );
+});

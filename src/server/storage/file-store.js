@@ -15,8 +15,8 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
     return task;
   };
   async function projectRows() {
-    const users = (await readJSON(file("users"), [])).filter(
-      UserManagement.belongsToOrganization,
+    const users = (await readJSON(file("users"), [])).filter((user) =>
+      UserManagement.belongsToOrganization(user),
     );
     const assigned = users.flatMap((user) =>
       user.projects.map((project) => ({ metadata: { project } })),
@@ -47,15 +47,69 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
         return preferences;
       });
     },
-    async listProjects(scopes = ["*"]) {
-      const rows = await projectRows();
-      return rows.filter((project) => allowed(scopes, project.id));
+    async getOrganization(id = "default") {
+      const rows = await readJSON(file("organizations"), []);
+      return (
+        rows.find((row) => row.id === id) ||
+        (id === "default"
+          ? { id, name: "Tomatoes organization", createdAt: 0 }
+          : null)
+      );
     },
-    async manageProject(body, id, clock = Date.now()) {
+    async saveOrganization(id, name, creating = false) {
+      return serial(async () => {
+        const rows = await readJSON(file("organizations"), []);
+        if (creating && (id === "default" || rows.some((row) => row.id === id)))
+          throw Object.assign(new Error("Organization already exists."), {
+            status: 409,
+          });
+        const previous = rows.find((row) => row.id === id);
+        if (!creating && !previous && id !== "default") return null;
+        const next = {
+          id,
+          name,
+          createdAt: previous?.createdAt || Date.now(),
+          updatedAt: Date.now(),
+        };
+        await writeJSON(file("organizations"), [
+          ...rows.filter((row) => row.id !== id),
+          next,
+        ]);
+        return next;
+      });
+    },
+    async getProject(id) {
+      return (await projectRows()).find((project) => project.id === id) || null;
+    },
+    async listProjects(scopes = ["*"], organizationId = "default") {
+      const rows = await projectRows();
+      return rows
+        .filter(
+          (project) =>
+            (project.organizationId || "default") === organizationId &&
+            allowed(scopes, project.id),
+        )
+        .map((project) => ({
+          ...project,
+          organizationId: project.organizationId || "default",
+        }));
+    },
+    async manageProject(
+      body,
+      id,
+      clock = Date.now(),
+      organizationId = "default",
+    ) {
       return serial(async () => {
         const records = await readJSON(file("projects"), []);
         const rows = await projectRows();
-        const next = Projects.change(rows, body, id, clock);
+        const next = Projects.changeInOrganization(
+          rows,
+          body,
+          id,
+          clock,
+          organizationId,
+        );
         await writeJSON(file("projects"), [
           ...records.filter((item) => item.id !== next.id),
           next,

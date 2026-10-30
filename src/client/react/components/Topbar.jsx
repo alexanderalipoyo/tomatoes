@@ -20,13 +20,13 @@ export function Topbar() {
       </button>
       <a className="mobile-wordmark" href="#runs" aria-label="Tomatoes home">
         <img src="/assets/tomatoes-logo.svg" width="28" height="28" alt="" />
-        <strong>{"tomatoes"}</strong>
+        <strong data-workspace-name>{"Select a project"}</strong>
       </a>
       <div className="breadcrumbs">
         <span data-icon="folder"></span>
-        <span>{"Projects"}</span>
+        <span data-organization-name>{"Organization"}</span>
         <span>{"/"}</span>
-        <strong>{"tomatoes"}</strong>
+        <strong data-workspace-name>{"Select a project"}</strong>
         <span className="private">{"Local"}</span>
       </div>
       <div className="topbar-actions">

@@ -23,16 +23,26 @@ export function Sidebar() {
         aria-controls="workspace-menu"
         aria-expanded="false"
       >
-        <span className="org-avatar" data-workspace-logo>
+        <span className="org-avatar" data-organization-initials>
           <img src="/assets/tomatoes-logo.svg" width="24" height="24" alt="" />
         </span>
         <span className="workspace-identity-text">
-          <span data-workspace-name>{"Tomatoes workspace"}</span>
+          <span data-organization-name>{"Organization"}</span>
           <small data-workspace-user>{"Alex Ali"}</small>
         </span>
       </button>
       <div className="side-label">{"PROJECT"}</div>
-      <div className="project-picker">{"Test reporting"}</div>
+      <label className="visually-hidden" htmlFor="workspace-project-picker">
+        Current project
+      </label>
+      <select
+        className="project-picker"
+        id="workspace-project-picker"
+        data-project-picker
+        aria-label="Current project"
+      >
+        <option value="">Select a project</option>
+      </select>
       <nav aria-label="Project navigation">
         <a href="#runs" data-view="runs" className="active">
           <span data-icon="runs"></span>

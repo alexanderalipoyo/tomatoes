@@ -66,7 +66,7 @@ function createPostgresStore({
     );
   async function projectRows(client) {
     const registered = await client.query(
-      `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt" FROM ${ns}.projects`,
+      `SELECT id,name,organization_id AS "organizationId",created_at AS "createdAt",updated_at AS "updatedAt" FROM ${ns}.projects`,
     );
     const discovered = await client.query(
       `SELECT DISTINCT project FROM ${ns}.runs`,
@@ -88,25 +88,66 @@ function createPostgresStore({
   }
   return {
     kind: "postgres",
-    async listProjects(scopes = ["*"]) {
-      return (await projectRows(pool)).filter(
-        (project) => scopes.includes("*") || scopes.includes(project.id),
+    async getOrganization(id = "default") {
+      return (
+        (
+          await pool.query(
+            `SELECT id,name,created_at AS "createdAt" FROM ${ns}.organizations WHERE id=$1`,
+            [id],
+          )
+        ).rows[0] || null
       );
     },
-    async manageProject(body, id, clock = Date.now()) {
+    async saveOrganization(id, name, creating = false) {
+      const clock = Date.now();
+      const sql = creating
+        ? `INSERT INTO ${ns}.organizations(id,name,created_at,updated_at) VALUES($1,$2,$3,$3) RETURNING id,name`
+        : `UPDATE ${ns}.organizations SET name=$2,updated_at=$3 WHERE id=$1 RETURNING id,name`;
+      return (await pool.query(sql, [id, name, clock])).rows[0] || null;
+    },
+    async getProject(id) {
+      return (
+        (await projectRows(pool)).find((project) => project.id === id) || null
+      );
+    },
+    async listProjects(scopes = ["*"], organizationId = "default") {
+      return (await projectRows(pool))
+        .filter(
+          (project) =>
+            (project.organizationId || "default") === organizationId &&
+            (scopes.includes("*") || scopes.includes(project.id)),
+        )
+        .map((project) => ({
+          ...project,
+          organizationId: project.organizationId || "default",
+        }));
+    },
+    async manageProject(
+      body,
+      id,
+      clock = Date.now(),
+      organizationId = "default",
+    ) {
       return transaction(async (client) => {
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
           "tomatoes-projects:" + schema,
         ]);
-        const next = Projects.change(
+        const next = Projects.changeInOrganization(
           await projectRows(client),
           body,
           id,
           clock,
+          organizationId,
         );
         await client.query(
-          `INSERT INTO ${ns}.projects(id,name,created_at,updated_at) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,updated_at=EXCLUDED.updated_at`,
-          [next.id, next.name, next.createdAt, next.updatedAt],
+          `INSERT INTO ${ns}.projects(id,name,created_at,updated_at,organization_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,updated_at=EXCLUDED.updated_at`,
+          [
+            next.id,
+            next.name,
+            next.createdAt,
+            next.updatedAt,
+            next.organizationId,
+          ],
         );
         return next;
       });
@@ -117,7 +158,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=7`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=8`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {

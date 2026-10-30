@@ -117,3 +117,23 @@ test("failed shared report navigation preserves the server error", async () => {
   await f.context.navigateReportLocation();
   assert.equal(displayed, error);
 });
+
+test("new signed-in users see their organization projects instead of a bundled sample", async () => {
+  const f = fixture("#runs", "");
+  f.context.authStatus = {
+    enabled: true,
+    authenticated: true,
+    accessibleProjects: [{ id: "portal" }],
+  };
+  f.context.initializeAuth = async () => {};
+  f.context.ImportHistory = { list: async () => [] };
+  f.context.URL = URL;
+  f.context.history = {
+    replaceState: (a, b, url) => {
+      f.context.location.hash = url.hash;
+    },
+  };
+  await f.context.navigateReportLocation();
+  assert.equal(f.context.location.hash, "#projects");
+  assert.deepEqual(f.calls, ["navigate"]);
+});

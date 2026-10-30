@@ -39,7 +39,6 @@ function createApplication({
   const team = createTeamService({
     store,
     hosted,
-    organizationName: env.TOMATOES_ORGANIZATION_NAME || "Tomatoes workspace",
     teamMode: env.TOMATOES_TEAM_MODE === "1",
     publicOrigin: origin,
     additionalOrigins,
@@ -92,11 +91,16 @@ function createApplication({
       res.end("Unable to read file");
       return;
     }
-    if (dataUser && !dataUser.projects.includes("*")) {
+    if (
+      dataUser &&
+      !(dataUser.projectScopes || dataUser.projects).includes("*")
+    ) {
       const sampleProject =
         ReportData.normalizeReport(JSON.parse(data.toString("utf8"))).metadata
           .project || "tomatoes";
-      if (!dataUser.projects.includes(sampleProject)) {
+      if (
+        !(dataUser.projectScopes || dataUser.projects).includes(sampleProject)
+      ) {
         res.writeHead(403, {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",

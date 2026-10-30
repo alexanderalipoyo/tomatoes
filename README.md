@@ -382,10 +382,26 @@ On **Projects**, admins with all-project access can create projects before impor
 
 Names are shared through the configured server store. An immutable project identifier keeps existing report URLs, archived runs, branches, user scopes and CI publishing credentials linked after a rename. Renaming changes the shared project name; it does not modify original report JSON or personal workspace branding. **Unassigned project** represents imports without a project identifier, so it is not a named project that can be renamed.
 
-Use a project's **Import report** action to preselect it, or choose a project in the import dialog. Branch choices and remembered branch defaults follow the selected project. Empty projects remain visible and ready for their first report. Local file-store mode also supports these features; the current installation is the shared organization boundary.
+Use a project's **Import report** action to preselect it, or choose a project in the import dialog. Branch choices and remembered branch defaults follow the selected project. Empty projects remain visible and ready for their first report. Local file-store mode also supports these features; each project belongs to one organization.
 
-PostgreSQL deployments require schema version **7**: run `npm run db:migrate` locally or `npm run db:migrate:production` for the configured production database before deploying this change. The upgrades add the project registry and explicit organization membership for users. Existing accounts are assigned to the current installation’s organization, and existing run identities and project scopes are preserved.
+PostgreSQL deployments require schema version **8**: run `npm run db:migrate` locally or `npm run db:migrate:production` for the configured production database before deploying this change. The upgrades add the project registry and explicit organization membership for users. Existing accounts retain their organization membership, and existing run identities and project scopes are preserved.
 
-The user editor displays the current organization and only offers its registered or previously assigned projects. Organization membership cannot be changed through the user API. Each configured installation/store currently represents one organization; this does not enable multi-organization tenancy. Set `TOMATOES_ORGANIZATION_NAME` to customize its displayed name. Enable `TOMATOES_TEAM_MODE=1` to enforce account restrictions; local mode remains unrestricted for its operator. Project scope changes take effect on subsequent server requests, and browser navigation refreshes access before restoring local reports.
+The user editor displays the current organization and only offers its registered or previously assigned projects. Organization membership cannot be changed through the user API. Organizations have their own database identity and name. Each user belongs to one organization; its projects are available according to that user’s project assignments. Rename the current organization from **Settings → General → Organization**. All-project admins are limited to their own organization. Enable `TOMATOES_TEAM_MODE=1` to enforce account restrictions; local mode remains unrestricted for its operator. Project scope changes take effect on subsequent server requests, and browser navigation refreshes access before restoring local reports.
 
 The registered project name is used in workspace navigation, report headers, and PDF branding. It takes priority over older personal workspace names; logos and websites remain user preferences. Rename a shared project from **Projects → Rename**. Its stable identifier (for example, `tomatoes`) remains unchanged in report metadata, permissions, and publishing commands.
+
+### Organization and project hierarchy
+
+Organization and project names are editable database values, resolved from the signed-in account and its permitted project records. Names such as Breach Secure Now and QA - Automation PII Portal are examples of current records. Renaming either keeps its stable ID and relationships intact. Additional organizations can have different names and their own projects.
+
+The organization selector shows the signed-in user’s organization (for example, **Breach Secure Now**) and their full name. The separate project selector lists only permitted projects in that organization (for example, **QA - Automation PII Portal**). **Projects** lists those projects and their runs; **My profile** shows organization membership, role, and project access. Users with a fresh browser start on Projects instead of a bundled sample report. Admins add users to the current organization and assign one or more of its projects. `All projects` means all projects in that organization. A project has exactly one owning organization and globally unique stable ID. Project names can repeat in different organizations. Membership is single-organization per account; an account cannot switch to an organization it does not belong to.
+
+Operators can provision additional organizations and their first administrator from a trusted terminal:
+
+```powershell
+node scripts/team-admin.js create-organization second-org --name "Second Organization"
+node scripts/team-admin.js create-project second-portal --organization second-org --name "Portal"
+node scripts/team-admin.js add-user second-owner --organization second-org --role admin --projects "*"
+```
+
+The user command prompts for a password privately. Existing projects and users without an explicit organization retain `default` membership. Upgrade PostgreSQL with `npm run db:migrate` or `npm run db:migrate:production` before deploying. Local mode remains a trusted operator mode; use sign-in mode for organization and project isolation. Organization names are shared database records, independently of per-project logo and website preferences.

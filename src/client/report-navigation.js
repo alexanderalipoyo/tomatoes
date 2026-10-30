@@ -133,6 +133,18 @@ async function navigateReportLocation() {
           ),
       );
   } else if (!report && !route.importId && !route.serverId) {
+    if (
+      typeof authStatus !== "undefined" &&
+      authStatus?.enabled &&
+      authStatus.authenticated &&
+      !(await ImportHistory.list()).length
+    ) {
+      const url = new URL(location.href);
+      url.hash = "projects";
+      history.replaceState(null, "", url);
+      navigate();
+      return;
+    }
     await loadReport(null, { restore: true });
   } else navigate();
 }

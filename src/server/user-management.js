@@ -1,6 +1,6 @@
 const ORGANIZATION_ID = "default";
-const belongsToOrganization = (user) =>
-  Boolean(user) && (user.organizationId || ORGANIZATION_ID) === ORGANIZATION_ID;
+const belongsToOrganization = (user, organizationId = ORGANIZATION_ID) =>
+  Boolean(user) && (user.organizationId || ORGANIZATION_ID) === organizationId;
 const roles = [
   {
     id: "viewer",
@@ -21,7 +21,11 @@ const roles = [
       "Editor permissions. Admins with all-project access can manage user accounts and permissions.",
   },
 ];
-function validateUser(value, creating = false) {
+function validateUser(
+  value,
+  creating = false,
+  organizationId = ORGANIZATION_ID,
+) {
   const fail = (message) => {
     throw Object.assign(new Error(message), { status: 400 });
   };
@@ -46,7 +50,7 @@ function validateUser(value, creating = false) {
     fail("Use only the supported user fields.");
   if (
     value.organizationId !== undefined &&
-    value.organizationId !== ORGANIZATION_ID
+    value.organizationId !== organizationId
   )
     fail("Users must belong to the current organization.");
   if (
@@ -96,7 +100,7 @@ function validateUser(value, creating = false) {
   )
     fail("Passwords must be 12–256 characters.");
   return {
-    organizationId: ORGANIZATION_ID,
+    organizationId,
     username: value.username,
     fullName: value.fullName.trim(),
     email: value.email.trim(),
@@ -105,11 +109,11 @@ function validateUser(value, creating = false) {
     disabled: value.disabled,
   };
 }
-const isGlobalAdmin = (user) =>
+const isGlobalAdmin = (user, organizationId = ORGANIZATION_ID) =>
   user.role === "admin" &&
   user.projects.includes("*") &&
   !user.disabled &&
-  belongsToOrganization(user);
+  belongsToOrganization(user, organizationId);
 const publicUser = (user) => ({
   organizationId: user.organizationId || ORGANIZATION_ID,
   username: user.username,

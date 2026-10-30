@@ -40,6 +40,11 @@ async function initializeAuth() {
       error: "Could not connect to Tomatoes. Check the server and try again.",
     };
   }
+  if (
+    typeof workspaceProjects !== "undefined" &&
+    Array.isArray(authStatus.accessibleProjects)
+  )
+    workspaceProjects = authStatus.accessibleProjects;
   if (typeof invalidateOutOfScopeReports === "function")
     invalidateOutOfScopeReports();
   syncLogoutControl();

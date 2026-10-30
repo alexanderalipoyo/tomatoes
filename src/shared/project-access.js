@@ -8,6 +8,13 @@
       (status.organization?.id || "default")
     )
       return false;
+    if (Array.isArray(status.accessibleProjects))
+      return status.accessibleProjects.some(
+        (project) =>
+          project.id === (entry?.metadata?.project || "tomatoes") &&
+          (!project.organizationId ||
+            project.organizationId === status.organization?.id),
+      );
     const projects = status.user.projects || [];
     return (
       projects.includes("*") ||

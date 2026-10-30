@@ -13,7 +13,26 @@ async function main() {
   const store = createConfiguredStore();
   try {
     await store.ready();
-    if (command === "add-user") {
+    if (command === "create-organization") {
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,79}$/.test(subject || ""))
+        throw new Error("Provide a valid organization identifier.");
+      const name = require("../src/shared/project-management").validateName({
+        name: option("name") || subject,
+      });
+      await store.saveOrganization(subject, name, true);
+      console.log("Created organization " + subject + ".");
+    } else if (command === "create-project") {
+      const organizationId = option("organization") || "default";
+      if (!(await store.getOrganization(organizationId)))
+        throw new Error("Organization not found.");
+      await store.manageProject(
+        { id: subject, name: option("name") || subject },
+        null,
+        Date.now(),
+        organizationId,
+      );
+      console.log("Created project in organization " + organizationId + ".");
+    } else if (command === "add-user") {
       const username = String(subject || "").toLowerCase();
       if (!/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(username))
         throw new Error(
@@ -35,6 +54,16 @@ async function main() {
         )
       )
         throw new Error("Provide valid project identifiers.");
+      const organizationId = option("organization") || "default";
+      if (!(await store.getOrganization(organizationId)))
+        throw new Error("Organization not found.");
+      if (organizationId !== "default" && !projects.includes("*")) {
+        const available = await store.listProjects(["*"], organizationId);
+        if (
+          projects.some((id) => !available.some((project) => project.id === id))
+        )
+          throw new Error("Choose projects in the selected organization.");
+      }
       let password = process.env.TOMATOES_NEW_PASSWORD;
       if (!password) {
         if (!process.stdin.isTTY)
@@ -60,6 +89,7 @@ async function main() {
         process.stdout.write("\n");
       }
       await store.addUser({
+        organizationId,
         username,
         role,
         projects,
@@ -81,7 +111,7 @@ async function main() {
       console.log(token);
     } else
       throw new Error(
-        "Usage: node scripts/team-admin.js add-user USER --projects PROJECTS [--role editor|viewer|admin]\n       node scripts/team-admin.js create-ci-token PROJECT",
+        "Usage: node scripts/team-admin.js add-user USER --projects PROJECTS [--role editor|viewer|admin] [--organization ORG]\n       node scripts/team-admin.js create-organization ORG --name NAME\n       node scripts/team-admin.js create-project PROJECT --organization ORG --name NAME\n       node scripts/team-admin.js create-ci-token PROJECT",
       );
   } finally {
     await store.close();

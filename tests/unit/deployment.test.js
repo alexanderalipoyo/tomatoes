@@ -154,6 +154,10 @@ test("hosted handlers accept platform-parsed JSON, enforce origins and request l
     store: {
       kind: "postgres",
       getUsers: async () => [record],
+      getOrganization: async () => ({
+        id: "default",
+        name: "Test organization",
+      }),
       getTokens: async () => [],
     },
     teamMode: true,

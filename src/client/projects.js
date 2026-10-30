@@ -38,7 +38,7 @@ async function renderProjects(host) {
       "The project directory could not be loaded. " +
       results[2].reason.message;
   document.querySelector("#page-description").textContent =
-    `Projects and saved runs available in ${workspaceBranding(currentWorkspaceProject).name}.`;
+    `Projects in ${authStatus?.organization?.name || "your organization"}. ${workspaceProjects.length} accessible ${workspaceProjects.length === 1 ? "project" : "projects"}.`;
   host.innerHTML = `<section class="projects-page" aria-label="Workspace projects"><div class="projects-toolbar"><div class="projects-search">${icon("search")}<input type="search" id="project-search" placeholder="Search projects" aria-label="Search projects"/><span id="project-count" role="status"></span></div>${canManage ? `<button type="button" class="button primary" id="create-project">${icon("plus")}New project</button>` : ""}</div>${serverError ? `<div class="notice data-warning" role="status">${esc(serverError)}<button class="button" id="projects-retry">Retry</button></div>` : ""}<div class="project-grid" id="project-grid"></div><p class="projects-source-note">Server runs and browser imports are separate copies. Archiving hides a copy from active lists and keeps its report available for recovery in this project.</p></section>`;
   const reportLink = (run) =>
     ReportLinks.build(location.href, {

@@ -230,6 +230,7 @@
   min-width: 0;
 }
 [data-workspace-name],
+[data-organization-name],
 [data-workspace-user] {
   display: block;
   overflow: hidden;
@@ -498,10 +499,6 @@ button.mobile-workspace-identity {
 }
 
 /* Workspace account layout, adapted to Tomatoes surfaces and color modes. */
-.workspace-context .sidebar > .side-label,
-.workspace-context .sidebar > .project-picker {
-  display: none;
-}
 .workspace-context .heading-actions {
   display: none;
 }
@@ -1822,4 +1819,33 @@ body:has(#integration-setup[open]) {
 }
 .project-access-picker:disabled {
   opacity: 0.75;
+}
+
+select.project-picker {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 28px 9px 10px;
+  margin-bottom: 18px;
+  color: var(--theme-text, #283641);
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  text-overflow: ellipsis;
+  font: inherit;
+  font-size: 12px;
+}
+.organization-general {
+  margin-bottom: 20px;
+}
+.account-project-access {
+  margin-top: 20px;
+}
+.account-project-access li {
+  margin-block: 8px;
+}
+
+.org-avatar[data-organization-initials] {
+  color: var(--theme-accent-text, #28735a);
+  background: var(--theme-accent-surface, #e4f2eb);
 }

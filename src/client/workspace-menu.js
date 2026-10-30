@@ -44,12 +44,14 @@
   window.addEventListener("hashchange", close);
   document.querySelector("#workspace-menu-current").onclick = close;
   menu.querySelectorAll("[data-workspace-menu-link]").forEach((link) => {
-    link.onclick = () => {
+    link.onclick = (event) => {
+      event.preventDefault();
       close();
-      showToast(
-        "Manage project workspaces through Settings > Sharing & access. Organization creation is not available yet.",
-        "info",
-      );
+      const url = new URL(location.href);
+      url.searchParams.set("settingsTab", "general");
+      url.hash = "workspace-settings";
+      history.pushState(null, "", url);
+      void navigateReportLocation();
     };
   });
   document.querySelector("#workspace-menu-profile").onclick = () => {

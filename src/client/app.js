@@ -171,10 +171,54 @@ function renderWorkspaceIdentity() {
       ? report?.metadata?.project
       : "");
   const user = userPreferences.getState().user;
-  currentWorkspaceProject = selectedProject || "tomatoes";
+  const preferredProject = new URL(location.href).searchParams.get("project");
+  currentWorkspaceProject =
+    selectedProject ||
+    (workspaceProjects.some((item) => item.id === preferredProject)
+      ? preferredProject
+      : workspaceProjects[0]?.id) ||
+    (authStatus?.enabled ? "" : "tomatoes");
+  const organizationName = authStatus?.organization?.name || "Organization";
+  document.querySelectorAll('nav a[data-view="users"]').forEach((link) => {
+    link.hidden = Boolean(
+      authStatus?.enabled &&
+      !(
+        authStatus.user?.role === "admin" &&
+        authStatus.user.projects.includes("*")
+      ),
+    );
+  });
+  document.querySelectorAll("[data-organization-name]").forEach((element) => {
+    element.textContent = organizationName;
+    element.title = organizationName;
+  });
+  const organizationInitials = organizationName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => Array.from(word)[0])
+    .join("")
+    .toUpperCase();
+  document
+    .querySelectorAll("[data-organization-initials]")
+    .forEach((element) => {
+      element.textContent = organizationInitials;
+    });
+  document.querySelectorAll("[data-project-picker]").forEach((select) => {
+    select.innerHTML = workspaceProjects.length
+      ? workspaceProjects
+          .map(
+            (project) =>
+              `<option value="${esc(project.id)}">${esc(project.name)}</option>`,
+          )
+          .join("")
+      : '<option value="">No assigned projects</option>';
+    select.value = currentWorkspaceProject;
+    select.disabled = !workspaceProjects.length;
+    select.onchange = () => void openWorkspaceProject(select.value);
+  });
   const branding = workspaceBranding(currentWorkspaceProject);
   const workspaceName =
-    branding.name || selectedProject || "Tomatoes workspace";
+    branding.name || selectedProject || "No assigned project";
   // Temporary display name until account profiles provide full names.
   const profile = userPreferences.getState().preferences.profile;
   const fullName =
@@ -206,6 +250,34 @@ function renderWorkspaceIdentity() {
     element.textContent = fullName;
     element.title = fullName;
   });
+}
+async function openWorkspaceProject(id) {
+  if (loading || !workspaceProjects.some((project) => project.id === id))
+    return;
+  try {
+    const payload = await teamRequest(
+      "/api/runs?project=" + encodeURIComponent(id),
+      { signal: AbortSignal.timeout(15000) },
+    );
+    const url = new URL(location.href);
+    ["import", "server", "spec"].forEach((key) => url.searchParams.delete(key));
+    url.searchParams.set("project", id);
+    if (payload.runs.length) {
+      url.searchParams.set("server", payload.runs[0].id);
+      url.hash = "runs";
+    } else {
+      report = null;
+      currentFile = null;
+      activeHistoryId = null;
+      url.hash = "projects";
+    }
+    failedReportLinkKey = null;
+    history.pushState(null, "", url);
+    await navigateReportLocation();
+  } catch (error) {
+    showToast(error.message, "error");
+    renderWorkspaceIdentity();
+  }
 }
 function renderSummary() {
   renderWorkspaceIdentity();
@@ -319,6 +391,19 @@ function navigate(force = false) {
   hideAuthScreen();
   if (loading && force !== true) return;
   view = location.hash.slice(1) || "runs";
+  if (
+    view === "users" &&
+    authStatus?.enabled &&
+    !(
+      authStatus.user?.role === "admin" &&
+      authStatus.user.projects.includes("*")
+    )
+  ) {
+    view = "projects";
+    const url = new URL(location.href);
+    url.hash = "projects";
+    history.replaceState(null, "", url);
+  }
   if (view === "team") {
     const url = new URL(location.href);
     url.hash = "workspace-settings";
@@ -1203,6 +1288,38 @@ function hasUnsavedWorkspace() {
       JSON.stringify(workspaceBranding(workspaceDraft.brand.project)),
   );
 }
+function renderOrganizationSettings(host) {
+  const organization = authStatus?.organization;
+  if (!organization) return;
+  const canManage =
+    !authStatus.enabled ||
+    (authStatus.user?.role === "admin" &&
+      authStatus.user.projects.includes("*"));
+  host.insertAdjacentHTML(
+    "afterbegin",
+    `<form id="organization-settings-form" class="profile-details organization-general"><h2>Organization</h2><div class="profile-detail-row"><div><label for="organization-name">Organization name</label><p>Your organization contains projects and user memberships.</p></div><input id="organization-name" name="name" maxlength="80" required ${canManage ? "" : "readonly"} value="${esc(organization.name)}"/></div><div class="profile-detail-row"><div>Organization ID<p>Projects and users belong to this organization.</p></div><code>${esc(organization.id)}</code></div>${canManage ? '<div class="profile-form-actions"><button class="button primary">Update organization</button></div>' : ""}</form>`,
+  );
+  const form = host.querySelector("#organization-settings-form");
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (!canManage) return;
+    form.inert = true;
+    try {
+      teamState = await teamRequest("/api/team/status");
+      const saved = await teamRequest("/api/organization", {
+        method: "PATCH",
+        body: JSON.stringify({ name: form.elements.name.value }),
+      });
+      authStatus = { ...authStatus, organization: saved.organization };
+      renderWorkspaceIdentity();
+      showToast("Organization updated successfully.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      form.inert = false;
+    }
+  };
+}
 function renderWorkspaceGeneral(host) {
   const state = userPreferences.getState();
   if (
@@ -1220,13 +1337,14 @@ function renderWorkspaceGeneral(host) {
   const registered = workspaceProjects.some(
     (item) => item.id === brand.project && item.registered,
   );
-  host.innerHTML = `<form class="profile-details workspace-general" id="workspace-general-form"><h2>General</h2><fieldset ${!state.ready || draft.saving ? "disabled" : ""}><legend class="visually-hidden">Workspace branding</legend>
-    <div class="profile-detail-row"><div><label for="workspace-brand-name">Workspace name</label><p>${registered ? 'The shared project name. Rename it from <a href="#projects">Projects</a>.' : "The name displayed throughout Tomatoes. Report project identifiers stay the same."}</p></div><input id="workspace-brand-name" name="name" ${registered ? "readonly" : ""} maxlength="80" required value="${esc(brand.name)}"/></div>
-    <div class="profile-detail-row"><div><label for="workspace-brand-website">Workspace website</label><p>An optional link for your company or team.</p></div><input id="workspace-brand-website" name="website" type="url" maxlength="500" placeholder="https://example.com" value="${esc(brand.website)}"/></div>
-    <div class="profile-detail-row"><div><label for="workspace-brand-logo">Workspace logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Displayed in workspace navigation, project cards, run summaries, and PDF reports.</p></div><div><div class="workspace-logo-preview" id="workspace-logo-preview">${brand.logo ? `<img src="${esc(brand.logo)}" alt="Workspace logo preview"/>` : "<span>No logo uploaded</span>"}</div><input id="workspace-brand-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="workspace-remove-logo">Remove logo</button><p id="workspace-logo-status" role="status"></p></div></div>
+  host.innerHTML = `<form class="profile-details workspace-general" id="workspace-general-form"><h2>Project branding</h2><fieldset ${!state.ready || draft.saving ? "disabled" : ""}><legend class="visually-hidden">Workspace branding</legend>
+    <div class="profile-detail-row"><div><label for="workspace-brand-name">Project name</label><p>${registered ? 'The shared project name. Rename it from <a href="#projects">Projects</a>.' : "The name displayed throughout Tomatoes. Report project identifiers stay the same."}</p></div><input id="workspace-brand-name" name="name" ${registered ? "readonly" : ""} maxlength="80" required value="${esc(brand.name)}"/></div>
+    <div class="profile-detail-row"><div><label for="workspace-brand-website">Project website</label><p>An optional link for your company or team.</p></div><input id="workspace-brand-website" name="website" type="url" maxlength="500" placeholder="https://example.com" value="${esc(brand.website)}"/></div>
+    <div class="profile-detail-row"><div><label for="workspace-brand-logo">Project logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Displayed in workspace navigation, project cards, run summaries, and PDF reports.</p></div><div><div class="workspace-logo-preview" id="workspace-logo-preview">${brand.logo ? `<img src="${esc(brand.logo)}" alt="Workspace logo preview"/>` : "<span>No logo uploaded</span>"}</div><input id="workspace-brand-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="workspace-remove-logo">Remove logo</button><p id="workspace-logo-status" role="status"></p></div></div>
     <div class="profile-detail-row"><div><span>Report project</span><p>Branding is saved for this project in your database preferences.</p></div><code>${esc(brand.project)}</code></div></fieldset>
     <div class="profile-form-actions"><span id="workspace-brand-status" role="status"></span><button type="button" class="button" id="workspace-brand-reset">Reset</button><button class="button primary" type="submit">Save changes</button></div></form>`;
-  const form = host.querySelector("form");
+  renderOrganizationSettings(host);
+  const form = host.querySelector("#workspace-general-form");
   const save = form.querySelector('[type="submit"]');
   const reset = form.querySelector("#workspace-brand-reset");
   const file = form.querySelector('[type="file"]');

@@ -9,14 +9,14 @@ export function WorkspaceMenu() {
       <header className="workspace-menu-header">
         <span
           className="workspace-menu-avatar"
-          data-workspace-initials
+          data-organization-initials
           aria-hidden="true"
         >
           {"TW"}
         </span>
         <div className="workspace-menu-heading">
-          <strong id="workspace-menu-title" data-workspace-name>
-            {"Tomatoes workspace"}
+          <strong id="workspace-menu-title" data-organization-name>
+            {"Organization"}
           </strong>
           <span data-workspace-user>{"Alex Ali"}</span>
         </div>
@@ -39,16 +39,16 @@ export function WorkspaceMenu() {
           type="button"
           className="workspace-menu-organization"
           id="workspace-menu-current"
-          aria-label="Current workspace"
+          aria-label="Current organization"
         >
           <span
             className="workspace-menu-avatar small"
-            data-workspace-initials
+            data-organization-initials
             aria-hidden="true"
           >
             {"TW"}
           </span>
-          <strong data-workspace-name>{"Tomatoes workspace"}</strong>
+          <strong data-organization-name>{"Organization"}</strong>
           <svg
             className="workspace-menu-selected"
             viewBox="0 0 20 20"
@@ -60,13 +60,13 @@ export function WorkspaceMenu() {
         </button>
         <a
           className="workspace-menu-create"
-          href="#team"
+          href="?settingsTab=general#workspace-settings"
           data-workspace-menu-link
         >
           <span className="workspace-menu-plus" aria-hidden="true">
             {"+"}
           </span>
-          {"Create new organization..."}
+          {"Organization settings"}
         </a>
       </div>
       <div className="workspace-menu-account">

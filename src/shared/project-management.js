@@ -109,7 +109,35 @@
       name: registered?.name || personal?.name || project,
     };
   }
-  const api = { validId, validateName, merge, change, branding };
+  function changeInOrganization(
+    rows,
+    body,
+    id,
+    clock,
+    organizationId = "default",
+  ) {
+    const scoped = rows.filter(
+      (row) => (row.organizationId || "default") === organizationId,
+    );
+    const next = change(scoped, body, id, clock);
+    if (!id && rows.some((row) => row.id === next.id)) {
+      if (body.id) fail(409, "This project identifier is already in use.");
+      const base = (organizationId + "-" + next.id).slice(0, 70);
+      next.id = base;
+      let suffix = 2;
+      while (rows.some((row) => row.id === next.id))
+        next.id = base + "-" + suffix++;
+    }
+    return { ...next, organizationId };
+  }
+  const api = {
+    validId,
+    validateName,
+    merge,
+    change,
+    branding,
+    changeInOrganization,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ProjectManagement = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
