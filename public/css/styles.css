@@ -2604,3 +2604,17 @@ body.is-rendering {
       opacity 0.15s;
   }
 }
+
+.creator-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.creator-link:hover {
+  opacity: 0.8;
+}
+.creator-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 2px;
+}

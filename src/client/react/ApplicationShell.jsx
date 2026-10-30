@@ -66,6 +66,17 @@ export function ApplicationShell() {
           <ImportHistory />
           <footer>
             <span>{"Local Mochawesome report"}</span>
+            <span>
+              Made by{" "}
+              <a
+                className="creator-link"
+                href="https://github.com/alexanderalipoyo"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Alex Ali
+              </a>
+            </span>
             <span id="report-footer">{"Awaiting results"}</span>
           </footer>
         </main>

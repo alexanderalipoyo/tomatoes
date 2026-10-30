@@ -345,7 +345,17 @@ export function AuthPage({ route, message, delivery, onSubmit }) {
         <p className="auth-panel-footer">
           <span className="auth-footer-dot" />
           Your reports. Your workspace.
-          <span className="auth-footer-credit">Made by Alex Ali</span>
+          <span className="auth-footer-credit">
+            Made by{" "}
+            <a
+              className="creator-link"
+              href="https://github.com/alexanderalipoyo"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Alex Ali
+            </a>
+          </span>
         </p>
       </div>
     </div>
