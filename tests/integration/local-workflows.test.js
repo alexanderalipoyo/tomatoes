@@ -2184,3 +2184,107 @@ test("organization logos are shared, admin-controlled, scoped and preserved acro
     "Renamed Organization",
   );
 });
+
+test("report list pagination stays bounded, stable and scoped with archives and branch pages", async (t) => {
+  const f = await serviceFixture(t, { teamMode: true });
+  await writeJSON(path.join(f.dataDir, "users.json"), [
+    {
+      username: "reader",
+      role: "viewer",
+      projects: ["web"],
+      organizationId: "default",
+      ...hashPassword("temporary-pagination-password"),
+    },
+  ]);
+  const rows = Array.from({ length: 123 }, (_, index) => ({
+    id: (index + 1).toString(16).padStart(64, "0"),
+    name: "report.json",
+    status: "passed",
+    receivedAt: 1000 + Math.floor(index / 4),
+    metadata: {
+      project: "web",
+      branch: "branch-" + String(index).padStart(3, "0"),
+    },
+    counts: { total: 1, passed: 1, failed: 0, pending: 0, skipped: 0 },
+    notes: "x".repeat(2000),
+    archivedAt: index % 7 === 0 ? 10 : null,
+  }));
+  await writeJSON(path.join(f.dataDir, "runs.json"), [
+    ...rows,
+    {
+      ...rows[0],
+      id: "f".repeat(64),
+      metadata: { project: "secret", branch: "private" },
+      receivedAt: 9999,
+    },
+  ]);
+  const login = await f.request("/api/login", {
+    method: "POST",
+    headers: { Origin: f.origin },
+    body: JSON.stringify({
+      username: "reader",
+      password: "temporary-pagination-password",
+    }),
+  });
+  const headers = { Cookie: login.headers.get("set-cookie").split(";")[0] };
+  const first = await f.request("/api/runs", { headers });
+  assert.equal(first.body.runs.length, 50);
+  assert.equal(first.body.hasMore, true);
+  assert.ok(Buffer.byteLength(JSON.stringify(first.body)) < 4 * 1024 * 1024);
+  const expected = rows
+    .filter((row) => !row.archivedAt)
+    .sort((a, b) => b.receivedAt - a.receivedAt || (a.id < b.id ? 1 : -1))
+    .map((row) => row.id);
+  const ids = [];
+  let cursor = null;
+  do {
+    const response = await f.request(
+      "/api/runs?limit=17" + (cursor ? "&cursor=" + cursor : ""),
+      { headers },
+    );
+    assert.equal(response.status, 200);
+    assert.ok(response.body.runs.length <= 17);
+    ids.push(...response.body.runs.map((row) => row.id));
+    cursor = response.body.nextCursor;
+  } while (cursor);
+  assert.deepEqual(ids, expected);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const query of [
+    "limit=0",
+    "limit=101",
+    "limit=no",
+    "cursor=bad!",
+    "includeArchived=1&cursor=" + first.body.nextCursor,
+  ])
+    assert.equal(
+      (await f.request("/api/runs?" + query, { headers })).status,
+      400,
+    );
+  assert.equal(
+    (await f.request("/api/runs?project=secret", { headers })).status,
+    403,
+  );
+  const archived = await f.request("/api/runs?includeArchived=1&limit=100", {
+    headers,
+  });
+  assert.equal(archived.body.runs.length, 100);
+  const rest = await f.request(
+    "/api/runs?includeArchived=1&limit=100&cursor=" + archived.body.nextCursor,
+    { headers },
+  );
+  assert.equal(rest.body.runs.length, 23);
+  assert.equal(rest.body.nextCursor, null);
+  const branches = await f.request("/api/projects/web/branches", { headers });
+  assert.equal(branches.body.branches.length, 100);
+  const older = await f.request(
+    "/api/projects/web/branches?cursor=" +
+      encodeURIComponent(branches.body.nextCursor),
+    { headers },
+  );
+  assert.equal(older.body.branches.length, 23);
+  assert.equal(older.body.nextCursor, null);
+  assert.equal(
+    (await f.request("/api/projects/secret/branches", { headers })).status,
+    403,
+  );
+});

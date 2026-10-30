@@ -1858,3 +1858,16 @@ select.project-picker {
   max-height: 32px;
   object-fit: contain;
 }
+
+.report-page-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+.report-page-controls p {
+  color: var(--theme-muted, #657784);
+  font-size: 12px;
+}

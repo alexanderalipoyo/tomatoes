@@ -265,6 +265,31 @@ function createPostgresStore({
       );
       return result.rows[0]?.record || null;
     },
+    async listRunsPage(projects, { project, includeArchived, limit, cursor }) {
+      const result = await pool.query(
+        `SELECT record FROM ${ns}.runs WHERE ($1::text[] IS NULL OR project=ANY($1::text[])) AND ($2::text IS NULL OR project=$2) AND ($3::bigint IS NULL OR (received_at,id)<($3::bigint,$4::text)) AND ($5::boolean OR COALESCE(record->>'archivedAt','0') IN ('0','')) ORDER BY received_at DESC,id DESC LIMIT $6`,
+        [
+          !projects || projects.includes("*") ? null : projects,
+          project || null,
+          cursor?.receivedAt ?? null,
+          cursor?.id ?? null,
+          includeArchived,
+          limit + 1,
+        ],
+      );
+      return result.rows.map((row) => row.record);
+    },
+    async listBranchesPage(projects, project, cursor = null) {
+      const result = await pool.query(
+        `SELECT DISTINCT btrim(record#>>'{metadata,branch}') AS branch FROM ${ns}.runs WHERE project=$1 AND ($2::text[] IS NULL OR project=ANY($2::text[])) AND length(btrim(record#>>'{metadata,branch}')) BETWEEN 1 AND 160 AND NOT (record#>>'{metadata,branch}' ~ '[[:cntrl:]]') AND ($3::text IS NULL OR btrim(record#>>'{metadata,branch}')>$3) ORDER BY branch LIMIT 101`,
+        [
+          project,
+          !projects || projects.includes("*") ? null : projects,
+          cursor,
+        ],
+      );
+      return result.rows.map((row) => row.branch);
+    },
     async listRuns(projects, project) {
       return (
         await pool.query(

@@ -137,3 +137,91 @@ test("new signed-in users see their organization projects instead of a bundled s
   assert.equal(f.context.location.hash, "#projects");
   assert.deepEqual(f.calls, ["navigate"]);
 });
+
+test("unavailable browser storage still navigates authenticated users to shared projects", async () => {
+  const f = fixture("#runs", "");
+  Object.assign(f.context, {
+    authStatus: { enabled: true, authenticated: true },
+    initializeAuth: async () => {},
+    ImportHistory: {
+      list: async () => {
+        throw new Error("Storage blocked");
+      },
+    },
+    URL,
+    history: {
+      replaceState: (a, b, url) => {
+        f.context.location.hash = url.hash;
+      },
+    },
+  });
+  let notice;
+  f.context.historyNotice = (message) => {
+    notice = message;
+  };
+  await f.context.navigateReportLocation();
+  assert.equal(f.context.location.hash, "#projects");
+  assert.deepEqual(f.calls, ["navigate"]);
+  assert.match(notice, /still open shared reports/);
+});
+
+test("pinned server reports bypass local-history listing when browser storage is unavailable", async () => {
+  const f = fixture("#runs", "?server=" + "b".repeat(64));
+  f.context.ImportHistory = {
+    list: async () => {
+      throw new Error("Storage blocked");
+    },
+  };
+  await f.context.navigateReportLocation();
+  assert.equal(f.calls[0].serverId, "b".repeat(64));
+  assert.equal(f.calls[0].fromURL, true);
+});
+
+test("copying an older report link resolves its server identity without listing all runs", async () => {
+  const { webcrypto, createHash } = require("node:crypto");
+  const ReportData = require("../../src/shared/report-data");
+  const raw = { tomatoes: { project: "web", branch: "main" } };
+  const text = JSON.stringify(raw);
+  const id = createHash("sha256")
+    .update(ReportData.reportIdentityText(text, "web", "main"))
+    .digest("hex");
+  const f = fixture("#history", "");
+  let copied;
+  const routes = [];
+  Object.assign(f.context, {
+    crypto: webcrypto,
+    TextEncoder,
+    AbortSignal,
+    ReportData,
+    workspaceProjects: [{ id: "web" }],
+    ImportHistory: {
+      get: async () => ({
+        entry: { id, metadata: { project: "web", branch: "main" } },
+        text,
+      }),
+    },
+    navigator: {
+      clipboard: {
+        writeText: async (value) => {
+          copied = value;
+        },
+      },
+    },
+    showToast: () => {},
+    teamRequest: async (route) => {
+      routes.push(route);
+      assert.equal(route, "/api/runs/" + id);
+      return {
+        run: { id, metadata: { project: "web", branch: "main" } },
+        originalText: text,
+      };
+    },
+  });
+  await f.context.copyHistoryReportLink(id, {
+    disabled: false,
+    isConnected: true,
+  });
+  assert.equal(new URL(copied).searchParams.get("server"), id);
+  assert.equal(new URL(copied).searchParams.get("import"), id);
+  assert.equal(routes.length, 1);
+});

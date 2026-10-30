@@ -166,6 +166,50 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
         return rows[index];
       });
     },
+    async listRunsPage(projects, { project, includeArchived, limit, cursor }) {
+      const rows = await readJSON(file("runs"), []);
+      return rows
+        .filter(
+          (row) =>
+            allowed(projects, row.metadata.project) &&
+            (!project || row.metadata.project === project) &&
+            (includeArchived || !row.archivedAt) &&
+            (!cursor ||
+              (row.receivedAt || 0) < cursor.receivedAt ||
+              ((row.receivedAt || 0) === cursor.receivedAt &&
+                row.id < cursor.id)),
+        )
+        .sort(
+          (a, b) =>
+            (b.receivedAt || 0) - (a.receivedAt || 0) ||
+            (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+        )
+        .slice(0, limit + 1);
+    },
+    async listBranchesPage(projects, project, cursor = null) {
+      const rows = await readJSON(file("runs"), []);
+      return [
+        ...new Set(
+          rows
+            .filter(
+              (row) =>
+                row.metadata.project === project && allowed(projects, project),
+            )
+            .map((row) => row.metadata.branch)
+            .filter(
+              (branch) =>
+                typeof branch === "string" &&
+                branch.trim() &&
+                branch.length <= 160 &&
+                !/[\x00-\x1f\x7f]/.test(branch),
+            )
+            .map((branch) => branch.trim()),
+        ),
+      ]
+        .sort()
+        .filter((branch) => cursor === null || branch > cursor)
+        .slice(0, 101);
+    },
     async listRuns(projects, project) {
       return (await readJSON(file("runs"), []))
         .filter(

@@ -116,7 +116,7 @@ test("branch selection is mandatory, waits for project selection, and preserves 
     },
     teamRequest: async () => {
       requests++;
-      return { runs: [{ metadata: { project: "portal", branch: "main" } }] };
+      return { branches: ["main"], nextCursor: null };
     },
   };
   vm.runInNewContext(

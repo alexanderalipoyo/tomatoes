@@ -902,3 +902,65 @@ test("PostgreSQL persists organization logos independently of names and other or
     "Renamed Organization",
   );
 });
+
+test("PostgreSQL paginates reports with stable timestamp ties and filters before limiting", async (t) => {
+  const { store } = await fixture(t);
+  const rows = [];
+  for (let index = 0; index < 8; index++) {
+    const row = {
+      ...record((index + 1).toString(16).padStart(64, "0")),
+      receivedAt: 1000 + Math.floor(index / 3),
+      metadata: { project: "web", branch: "branch-" + index },
+      archivedAt: index === 3 ? 10 : null,
+    };
+    rows.push(row);
+    await store.saveRun(row, raw());
+  }
+  await store.saveRun(
+    {
+      ...record("f".repeat(64)),
+      receivedAt: 9999,
+      metadata: { project: "secret", branch: "private" },
+    },
+    raw(),
+  );
+  const ids = [];
+  let cursor = null;
+  do {
+    const rows = await store.listRunsPage(["web"], {
+      project: null,
+      includeArchived: false,
+      limit: 2,
+      cursor,
+    });
+    assert.ok(rows.length <= 3);
+    const page = rows.slice(0, 2);
+    ids.push(...page.map((row) => row.id));
+    cursor = rows.length > 2 ? page.at(-1) : null;
+  } while (cursor);
+  const expected = rows
+    .filter((row) => !row.archivedAt)
+    .sort((a, b) => b.receivedAt - a.receivedAt || (a.id < b.id ? 1 : -1))
+    .map((row) => row.id);
+  assert.deepEqual(ids, expected);
+  assert.equal(
+    (
+      await store.listRunsPage(["web"], {
+        project: "secret",
+        includeArchived: true,
+        limit: 2,
+        cursor: null,
+      })
+    ).length,
+    0,
+  );
+  assert.deepEqual(
+    await store.listBranchesPage(["web"], "web"),
+    rows.map((row) => row.metadata.branch),
+  );
+  assert.deepEqual(await store.listBranchesPage(["web"], "web", "branch-5"), [
+    "branch-6",
+    "branch-7",
+  ]);
+  assert.deepEqual(await store.listBranchesPage(["web"], "secret"), []);
+});

@@ -8,7 +8,9 @@ async function renderProjects(host) {
     serverError = "",
     canArchive = false,
     directory = [],
-    canManage = false;
+    canManage = false,
+    nextCursor = null,
+    loadingMore = false;
   const results = await Promise.allSettled([
     teamRequest("/api/runs?includeArchived=1", {
       signal: AbortSignal.timeout(15000),
@@ -19,6 +21,7 @@ async function renderProjects(host) {
   if (view !== "projects" || version !== projectsRenderVersion) return;
   if (results[0].status === "fulfilled") {
     serverRuns = results[0].value.runs;
+    nextCursor = results[0].value.nextCursor || null;
     canArchive = results[0].value.canArchive;
   } else serverError = results[0].reason.message;
   if (results[1].status === "fulfilled") browserRuns = results[1].value;
@@ -39,7 +42,7 @@ async function renderProjects(host) {
       results[2].reason.message;
   document.querySelector("#page-description").textContent =
     `Projects in ${authStatus?.organization?.name || "your organization"}. ${workspaceProjects.length} accessible ${workspaceProjects.length === 1 ? "project" : "projects"}.`;
-  host.innerHTML = `<section class="projects-page" aria-label="Workspace projects"><div class="projects-toolbar"><div class="projects-search">${icon("search")}<input type="search" id="project-search" placeholder="Search projects" aria-label="Search projects"/><span id="project-count" role="status"></span></div>${canManage ? `<button type="button" class="button primary" id="create-project">${icon("plus")}New project</button>` : ""}</div>${serverError ? `<div class="notice data-warning" role="status">${esc(serverError)}<button class="button" id="projects-retry">Retry</button></div>` : ""}<div class="project-grid" id="project-grid"></div><p class="projects-source-note">Server runs and browser imports are separate copies. Archiving hides a copy from active lists and keeps its report available for recovery in this project.</p></section>`;
+  host.innerHTML = `<section class="projects-page" aria-label="Workspace projects"><div class="projects-toolbar"><div class="projects-search">${icon("search")}<input type="search" id="project-search" placeholder="Search projects" aria-label="Search projects"/><span id="project-count" role="status"></span></div>${canManage ? `<button type="button" class="button primary" id="create-project">${icon("plus")}New project</button>` : ""}</div>${serverError ? `<div class="notice data-warning" role="status">${esc(serverError)}<button class="button" id="projects-retry">Retry</button></div>` : ""}<div class="project-grid" id="project-grid"></div><div class="report-page-controls"><p id="projects-page-status" role="status"></p><button type="button" class="button" id="projects-load-more">Load older shared reports</button></div><p class="projects-source-note">Server runs and browser imports are separate copies. Archiving hides a copy from active lists and keeps its report available for recovery in this project.</p></section>`;
   const reportLink = (run) =>
     ReportLinks.build(location.href, {
       ...(run.source === "server"
@@ -50,7 +53,7 @@ async function renderProjects(host) {
   const counts = (project) =>
     [
       project.serverCount
-        ? `${number(project.serverCount)} server ${project.serverCount === 1 ? "run" : "runs"}`
+        ? `${number(project.serverCount)} ${nextCursor ? "loaded " : ""}server ${project.serverCount === 1 ? "run" : "runs"}`
         : "",
       project.browserCount
         ? `${number(project.browserCount)} browser ${project.browserCount === 1 ? "import" : "imports"}`
@@ -58,6 +61,53 @@ async function renderProjects(host) {
     ]
       .filter(Boolean)
       .join(" · ") || "No active runs";
+  async function loadMoreRuns(afterLoad = null) {
+    if (!nextCursor || loadingMore) return;
+    loadingMore = true;
+    drawPageControls();
+    try {
+      const payload = await teamRequest(
+        "/api/runs?includeArchived=1&cursor=" + encodeURIComponent(nextCursor),
+        { signal: AbortSignal.timeout(15000) },
+      );
+      if (view !== "projects" || version !== projectsRenderVersion) return;
+      const seen = new Set(serverRuns.map((run) => run.id));
+      serverRuns.push(...payload.runs.filter((run) => !seen.has(run.id)));
+      nextCursor = payload.nextCursor || null;
+      canArchive = payload.canArchive;
+      draw();
+      if (afterLoad) afterLoad();
+    } catch (error) {
+      showToast("Could not load older reports: " + error.message, "error");
+    } finally {
+      loadingMore = false;
+      if (host.isConnected && version === projectsRenderVersion)
+        drawPageControls();
+    }
+  }
+  function drawPageControls() {
+    const button = host.querySelector("#projects-load-more");
+    if (!button) return;
+    button.hidden = !nextCursor;
+    button.disabled = loadingMore;
+    button.textContent = loadingMore
+      ? "Loading older reports..."
+      : "Load older shared reports";
+    host.querySelector("#projects-page-status").textContent =
+      serverRuns.length +
+      " shared reports loaded." +
+      (nextCursor
+        ? " Counts cover loaded reports; older reports are available."
+        : "");
+    const modalButton = document.querySelector("#project-runs-more");
+    if (modalButton) {
+      modalButton.disabled = loadingMore;
+      modalButton.textContent = loadingMore
+        ? "Loading older reports..."
+        : "Load older shared reports";
+    }
+  }
+  host.querySelector("#projects-load-more").onclick = () => void loadMoreRuns();
   const catalog = () =>
     ProjectCatalog.summarize(serverRuns, browserRuns, directory);
   const displayName = (id) =>
@@ -109,6 +159,7 @@ async function renderProjects(host) {
     document.getElementById("import-report").click();
   }
   function draw() {
+    drawPageControls();
     const projects = catalog();
     const query = host
       .querySelector("#project-search")
@@ -131,7 +182,7 @@ async function renderProjects(host) {
           const archived =
             project.archivedServerCount + project.archivedBrowserCount;
           const brand = `${workspaceLogoMarkup(project.name)}${esc(project.displayName || workspaceBranding(project.name).name)}`;
-          return `<article class="project-card${project.name === currentWorkspaceProject ? " is-current-workspace" : ""}" ${project.name === currentWorkspaceProject ? 'aria-current="true"' : ""}><header><div class="project-card-heading">${project.latest ? `<a class="project-card-title" href="${esc(reportLink(project.latest))}" data-project-report>${brand}</a>` : `<span class="project-card-title">${brand}</span>`}${project.name === currentWorkspaceProject ? '<span class="project-current-label"><span aria-hidden="true">✓</span> Current workspace</span>' : ""}${canManage && ProjectManagement.validId(project.name) ? `<button class="button project-rename-button" type="button" data-rename-project="${index}" aria-label="Rename ${esc(project.displayName || project.name)}">Rename</button>` : ""}</div><p>${counts(project)}</p><small>${project.latest ? `Latest run ${project.latest.start ? esc(date(project.latest.start)) : "date not provided"}` : archived ? "All runs are archived. Restore a run to make it active again." : "No reports yet. Import your first report to get started."}</small></header><div class="project-branch-list">${project.branches
+          return `<article class="project-card${project.name === currentWorkspaceProject ? " is-current-workspace" : ""}" ${project.name === currentWorkspaceProject ? 'aria-current="true"' : ""}><header><div class="project-card-heading">${project.latest ? `<a class="project-card-title" href="${esc(reportLink(project.latest))}" data-project-report>${brand}</a>` : `<span class="project-card-title">${brand}</span>`}${project.name === currentWorkspaceProject ? '<span class="project-current-label"><span aria-hidden="true">✓</span> Current workspace</span>' : ""}${canManage && ProjectManagement.validId(project.name) ? `<button class="button project-rename-button" type="button" data-rename-project="${index}" aria-label="Rename ${esc(project.displayName || project.name)}">Rename</button>` : ""}</div><p>${counts(project)}</p><small>${project.latest ? `Latest run ${project.latest.start ? esc(date(project.latest.start)) : "date not provided"}` : archived ? (nextCursor ? "Loaded runs are archived. Older reports may be available below." : "All runs are archived. Restore a run to make it active again.") : nextCursor ? "Older reports may be available. Load older shared reports below." : "No reports yet. Import your first report to get started."}</small></header><div class="project-branch-list">${project.branches
             .slice(0, 5)
             .map(
               (branch) =>
@@ -192,7 +243,9 @@ async function renderProjects(host) {
       );
       const runs = archived ? archives : active;
       dialog.querySelector("[data-project-dialog-body]").innerHTML =
-        `<h2 id="project-runs-title">Runs in ${esc(displayName(projectName))}</h2><p class="projects-source-note">Server and browser copies are listed separately. Archived reports remain recoverable.</p><div class="workspace-settings-tabs" role="tablist" aria-label="Project run status"><button role="tab" data-run-tab="active" aria-selected="${!archived}" tabindex="${!archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-active-tab">Active runs (${active.length})</button><button role="tab" data-run-tab="archived" aria-selected="${archived}" tabindex="${archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-archived-tab">Archived runs (${archives.length})</button></div><div id="project-run-panel" role="tabpanel" aria-labelledby="project-${archived ? "archived" : "active"}-tab"><div class="project-runs-list">${runs.map((run, index) => `<article class="shared-run"><div>${badge(run.status || "unknown")}<strong>${esc(run.label || run.name)}</strong><p><span class="project-run-source">${run.source === "server" ? "Server run" : "Browser import"}</span> · ${esc(run.metadata?.branch || "Branch not provided")}</p><small>${run.start ? esc(date(run.start)) : "Run date not provided"}${run.archivedAt ? `<br/>Archived ${esc(date(new Date(run.archivedAt).toISOString()))}` : ""}</small></div><div class="project-run-actions"><a class="button" data-open-project-run href="${esc(reportLink(run))}">Open results</a><button class="button ${archived ? "primary" : ""}" type="button" data-archive-run="${index}" ${run.source === "server" && !canArchive ? 'disabled title="Editor or Admin access is required to change shared runs."' : ""}>${archived ? "Restore run" : "Archive run"}</button></div></article>`).join("") || `<div class="project-runs-empty"><h3>${archived ? "No archived runs" : "No active runs"}</h3><p>${archived ? "Runs archived in this project will appear here for recovery." : "Check Archived runs to restore a previous report."}</p></div>`}</div></div>`;
+        `<h2 id="project-runs-title">Runs in ${esc(displayName(projectName))}</h2><p class="projects-source-note">Server and browser copies are listed separately. Archived reports remain recoverable.</p>${nextCursor ? '<p class="notice">Counts cover loaded shared reports. Load older reports to see more runs.</p><button type="button" class="button" id="project-runs-more">Load older shared reports</button>' : ""}<div class="workspace-settings-tabs" role="tablist" aria-label="Project run status"><button role="tab" data-run-tab="active" aria-selected="${!archived}" tabindex="${!archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-active-tab">Active runs (${active.length})</button><button role="tab" data-run-tab="archived" aria-selected="${archived}" tabindex="${archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-archived-tab">Archived runs (${archives.length})</button></div><div id="project-run-panel" role="tabpanel" aria-labelledby="project-${archived ? "archived" : "active"}-tab"><div class="project-runs-list">${runs.map((run, index) => `<article class="shared-run"><div>${badge(run.status || "unknown")}<strong>${esc(run.label || run.name)}</strong><p><span class="project-run-source">${run.source === "server" ? "Server run" : "Browser import"}</span> · ${esc(run.metadata?.branch || "Branch not provided")}</p><small>${run.start ? esc(date(run.start)) : "Run date not provided"}${run.archivedAt ? `<br/>Archived ${esc(date(new Date(run.archivedAt).toISOString()))}` : ""}</small></div><div class="project-run-actions"><a class="button" data-open-project-run href="${esc(reportLink(run))}">Open results</a><button class="button ${archived ? "primary" : ""}" type="button" data-archive-run="${index}" ${run.source === "server" && !canArchive ? 'disabled title="Editor or Admin access is required to change shared runs."' : ""}>${archived ? "Restore run" : "Archive run"}</button></div></article>`).join("") || `<div class="project-runs-empty"><h3>${archived ? "No archived runs" : "No active runs"}</h3><p>${archived ? "Runs archived in this project will appear here for recovery." : "Check Archived runs to restore a previous report."}</p></div>`}</div></div>`;
+      const more = dialog.querySelector("#project-runs-more");
+      if (more) more.onclick = () => void loadMoreRuns(render);
       dialog.querySelectorAll("[data-run-tab]").forEach((button) => {
         const select = () => {
           archived = button.dataset.runTab === "archived";

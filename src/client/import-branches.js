@@ -64,14 +64,28 @@
     const cancel = () => controller.abort();
     dialog.addEventListener("close", cancel, { once: true });
     try {
-      server = (
-        await teamRequest("/api/runs?project=" + encodeURIComponent(project), {
+      let cursor = null;
+      const seen = new Set();
+      do {
+        const url =
+          "/api/projects/" +
+          encodeURIComponent(project) +
+          "/branches" +
+          (cursor ? "?cursor=" + encodeURIComponent(cursor) : "");
+        const page = await teamRequest(url, {
           signal: AbortSignal.any([
             controller.signal,
             AbortSignal.timeout(10000),
           ]),
-        })
-      ).runs;
+        });
+        server.push(
+          ...page.branches.map((branch) => ({ metadata: { project, branch } })),
+        );
+        cursor = page.nextCursor || null;
+        if (cursor && seen.has(cursor))
+          throw new Error("Branch pagination did not advance.");
+        if (cursor) seen.add(cursor);
+      } while (cursor);
     } catch {
       unavailable = true;
     } finally {

@@ -133,11 +133,21 @@ async function navigateReportLocation() {
           ),
       );
   } else if (!report && !route.importId && !route.serverId) {
+    let hasBrowserHistory = false;
+    try {
+      hasBrowserHistory = Boolean((await ImportHistory.list()).length);
+    } catch {
+      if (typeof historyNotice === "function")
+        historyNotice(
+          "Browser history is unavailable. You can still open shared reports from Projects.",
+          "warning",
+        );
+    }
     if (
       typeof authStatus !== "undefined" &&
       authStatus?.enabled &&
       authStatus.authenticated &&
-      !(await ImportHistory.list()).length
+      !hasBrowserHistory
     ) {
       const url = new URL(location.href);
       url.hash = "projects";
@@ -170,16 +180,13 @@ async function copyHistoryReportLink(id, button) {
     let serverId = reportServerLinks.get(id);
     if (!serverId) {
       try {
-        const listing = await teamRequest("/api/runs", {
-          signal: AbortSignal.timeout(15000),
-        });
         const compact = JSON.stringify(
           JSON.parse(saved.text.replace(/^\uFEFF/, "")),
         );
         const projects = [
           ...new Set([
             saved.entry.metadata?.project || "tomatoes",
-            ...listing.runs.map((run) => run.metadata.project),
+            ...workspaceProjects.map((project) => project.id),
           ]),
         ];
         for (const project of projects) {
@@ -191,24 +198,26 @@ async function copyHistoryReportLink(id, button) {
             ),
             reportTextHash(compact, project),
           ]);
-          const candidate = candidates.find((id) =>
-            listing.runs.some(
-              (run) =>
-                run.id === id &&
-                (run.metadata.branch || "") ===
-                  (saved.entry.metadata?.branch || ""),
-            ),
-          );
-          if (!candidate) continue;
-          if (!listing.runs.some((run) => run.id === candidate)) continue;
-          const server = await teamRequest("/api/runs/" + candidate, {
-            signal: AbortSignal.timeout(15000),
-          });
-          if (await serverMatchesImport(server, id)) {
-            serverId = candidate;
-            reportServerLinks.set(id, serverId);
-            break;
+          for (const candidate of [...new Set(candidates)]) {
+            try {
+              const server = await teamRequest("/api/runs/" + candidate, {
+                signal: AbortSignal.timeout(15000),
+              });
+              if (
+                (server.run.metadata.branch || "") !==
+                (saved.entry.metadata?.branch || "")
+              )
+                continue;
+              if (await serverMatchesImport(server, id)) {
+                serverId = candidate;
+                reportServerLinks.set(id, serverId);
+                break;
+              }
+            } catch {
+              /* A missing candidate does not prevent trying its legacy identity. */
+            }
           }
+          if (serverId) break;
         }
       } catch {
         /* Browser-only imports still have stable links. */

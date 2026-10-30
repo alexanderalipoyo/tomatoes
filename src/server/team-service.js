@@ -633,6 +633,31 @@ function createTeamService({
         send(res, 200, { organization });
         return true;
       }
+      const branchesMatch = url.pathname.match(
+        /^\/api\/projects\/([a-zA-Z0-9][a-zA-Z0-9_.-]{0,79})\/branches$/,
+      );
+      if (req.method === "GET" && branchesMatch) {
+        const project = branchesMatch[1];
+        if (!canAccess(user, project))
+          throw apiError(403, "This project is outside your access scope.");
+        const cursor = url.searchParams.get("cursor");
+        if (
+          cursor !== null &&
+          (!cursor || cursor.length > 160 || /[\x00-\x1f\x7f]/.test(cursor))
+        )
+          throw apiError(400, "Invalid branch page.");
+        const rows = await store.listBranchesPage(
+          user.projectScopes,
+          project,
+          cursor,
+        );
+        const branches = rows.slice(0, 100);
+        send(res, 200, {
+          branches,
+          nextCursor: rows.length > 100 ? branches[branches.length - 1] : null,
+        });
+        return true;
+      }
       if (
         url.pathname === "/api/projects" ||
         url.pathname.startsWith("/api/projects/")
@@ -905,18 +930,18 @@ function createTeamService({
         const project = url.searchParams.get("project");
         if (project && !canAccess(user, project))
           throw apiError(403, "This project is outside your access scope.");
-        const records = await store.listRuns(user.projectScopes, project);
+        const Pagination = require("./run-pagination");
+        const page = Pagination.read(url, user.organizationId);
+        const records = await store.listRunsPage(user.projectScopes, page);
+        const runs = records.slice(0, page.limit);
+        const hasMore = records.length > page.limit;
         send(res, 200, {
           canArchive: user.kind !== "token" && user.role !== "viewer",
-          runs: records
-            .filter(
-              (record) =>
-                (!record.archivedAt ||
-                  url.searchParams.get("includeArchived") === "1") &&
-                canAccess(user, record.metadata.project) &&
-                (!project || record.metadata.project === project),
-            )
-            .sort((a, b) => b.receivedAt - a.receivedAt),
+          runs,
+          hasMore,
+          nextCursor: hasMore
+            ? Pagination.next(runs[runs.length - 1], page, user.organizationId)
+            : null,
         });
         return true;
       }
