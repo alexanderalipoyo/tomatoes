@@ -43,9 +43,10 @@ test("project import choices use saved names but submit stable keys and refresh 
   select.value = "legacy";
   await select.onchange();
   assert.equal(branches, 1);
-  select.value = "__report__";
-  assert.equal(Object.keys(api.options()).length, 0);
-  assert.equal(api.current(), "original");
+  select.value = "";
+  assert.throws(() => api.options(), /Select a project/);
+  assert.equal(api.current(), "");
+  select.value = "portal";
   context.document.querySelector("#import-branch").disabled = true;
   assert.throws(() => api.options(), /finish loading/);
 });

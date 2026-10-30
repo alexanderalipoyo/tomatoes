@@ -208,3 +208,31 @@ test("loading previous branches blocks file imports until branch options are rea
   f.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
   assert.equal(f.imports.length, 1);
 });
+
+test("mandatory import fields block both the file picker and dropped files", () => {
+  let valid = false;
+  const f = fixture(async () => {}, {
+    getImportOptions: () => {
+      if (!valid) throw new Error("Select a project and branch.");
+      return { project: "portal", branch: "main" };
+    },
+  });
+  let pickerOpened = 0;
+  f.elements["report-file"].click = () => {
+    pickerOpened++;
+  };
+  f.elements["import-report"].click();
+  f.elements["browse-report"].click();
+  assert.equal(pickerOpened, 0);
+  assert.match(
+    f.elements["import-selection-error"].textContent,
+    /Select a project and branch/,
+  );
+  f.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
+  assert.equal(f.imports.length, 0);
+  assert.equal(f.elements["import-dialog"].open, true);
+  valid = true;
+  f.elements["browse-report"].click();
+  assert.equal(pickerOpened, 1);
+  assert.equal(f.elements["import-selection-error"].hidden, true);
+});

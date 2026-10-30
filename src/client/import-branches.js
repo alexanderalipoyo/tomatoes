@@ -38,6 +38,22 @@
       typeof ImportProjects !== "undefined"
         ? ImportProjects.current()
         : report?.metadata?.project || "tomatoes";
+    if (!project) {
+      select.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Select a project first";
+      select.append(placeholder);
+      select.disabled = true;
+      document.querySelector("#import-new-branch-field").hidden = true;
+      const input = document.querySelector("#import-new-branch");
+      if (input) {
+        input.value = "";
+        input.required = false;
+      }
+      hint.textContent = "Select a project, then choose or create a branch.";
+      return;
+    }
     hint.textContent = `Loading previous branches for ${project}...`;
     select.disabled = true;
     document.querySelector("#import-new-branch-field").hidden = true;
@@ -81,12 +97,11 @@
       item.textContent = label;
       return item;
     }
-    select.append(option("__report__", "Use branch from report"));
+    select.append(option("", "Select a branch"));
     for (const branch of result.branches)
       select.append(option("branch:" + branch, branch));
     select.append(option("__new__", "Create a new branch..."));
-    select.value =
-      result.selected === null ? "__report__" : "branch:" + result.selected;
+    select.value = result.selected === null ? "" : "branch:" + result.selected;
     select.disabled = false;
     const input = document.querySelector("#import-new-branch");
     input.value = "";
@@ -100,16 +115,27 @@
     hint.textContent = `${result.branches.length} existing ${result.branches.length === 1 ? "branch" : "branches"} in ${project}. Choose a branch before selecting your file.${unavailable ? " Server branches could not be loaded; showing browser history." : ""}`;
   }
   function options() {
-    const selected = document.querySelector("#import-branch").value;
-    if (selected === "__report__") return {};
+    const select = document.querySelector("#import-branch");
+    if (select.disabled)
+      throw new Error("Wait for branch options to finish loading.");
+    const selected = select.value;
+    if (selected !== "__new__" && !selected.startsWith("branch:")) {
+      select.focus?.();
+      throw new Error(
+        "Select a branch or create a new branch before importing a report.",
+      );
+    }
     const branch =
       selected === "__new__"
         ? document.querySelector("#import-new-branch").value.trim()
         : selected.slice("branch:".length);
-    if (!branch || branch.length > 160 || /[\x00-\x1f\x7f]/.test(branch))
+    if (!branch || branch.length > 160 || /[\x00-\x1f\x7f]/.test(branch)) {
+      if (selected === "__new__")
+        document.querySelector("#import-new-branch").focus?.();
       throw new Error(
         "Enter a branch name of 1 to 160 characters before selecting a report.",
       );
+    }
     return { branch };
   }
   async function remember(metadata) {

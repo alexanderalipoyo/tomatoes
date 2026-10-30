@@ -3,9 +3,7 @@
     version = 0;
   const current = () => {
     const value = document.querySelector("#import-project")?.value;
-    return value && value !== "__report__"
-      ? value
-      : report?.metadata?.project || "tomatoes";
+    return ProjectManagement.validId(value) ? value : "";
   };
   async function prepare() {
     const generation = ++version,
@@ -54,13 +52,12 @@
       node.textContent = text;
       return node;
     };
-    select.append(option("__report__", "Use project from report"));
+    select.append(option("", "Select a project"));
     for (const [id, name] of [...projects].sort((a, b) =>
       a[1].localeCompare(b[1]),
     ))
       select.append(option(id, name));
-    select.value =
-      preferred && projects.has(preferred) ? preferred : "__report__";
+    select.value = preferred && projects.has(preferred) ? preferred : "";
     select.disabled = false;
     hint.textContent = failed
       ? "Project directory is unavailable. Showing projects from browser imports."
@@ -77,11 +74,14 @@
   }
   function options() {
     const select = document.querySelector("#import-project");
-    if (select.disabled || document.querySelector("#import-branch").disabled)
-      throw new Error("Wait for project and branch options to finish loading.");
-    if (select.value === "__report__") return {};
-    if (!ProjectManagement.validId(select.value))
-      throw new Error("Select a valid project before importing.");
+    if (select.disabled)
+      throw new Error("Wait for project options to finish loading.");
+    if (!ProjectManagement.validId(select.value)) {
+      select.focus?.();
+      throw new Error("Select a project before importing a report.");
+    }
+    if (document.querySelector("#import-branch").disabled)
+      throw new Error("Wait for branch options to finish loading.");
     return { project: select.value };
   }
   const api = {

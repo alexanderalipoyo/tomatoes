@@ -25,6 +25,18 @@
       error.hidden = true;
       error.textContent = "";
     }
+    function validateOptions() {
+      try {
+        return getImportOptions();
+      } catch (issue) {
+        error.hidden = false;
+        error.textContent = issue.message;
+        return null;
+      }
+    }
+    ["import-project", "import-branch", "import-new-branch"].forEach((id) =>
+      get(id)?.addEventListener("input", clearError),
+    );
     async function selectFiles(files) {
       resetDrag();
       if (busy()) return;
@@ -35,14 +47,8 @@
         error.hidden = false;
         return;
       }
-      let options;
-      try {
-        options = getImportOptions();
-      } catch (issue) {
-        error.hidden = false;
-        error.textContent = issue.message;
-        return;
-      }
+      const options = validateOptions();
+      if (options === null) return;
       clearError();
       importing = true;
       dialog.close();
@@ -75,7 +81,10 @@
     get("close-import").addEventListener("click", () => dialog.close());
     dialog.addEventListener("close", resetDrag);
     get("browse-report").addEventListener("click", () => {
-      if (!busy()) input.click();
+      if (!busy() && validateOptions() !== null) {
+        clearError();
+        input.click();
+      }
     });
     input.addEventListener("change", () => {
       if (input.files.length) void selectFiles(input.files);

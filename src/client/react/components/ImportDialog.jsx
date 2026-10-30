@@ -24,16 +24,24 @@ export function ImportDialog() {
         hidden
       />
       <div className="import-branch-fields import-project-fields">
-        <label htmlFor="import-project">Project</label>
-        <select id="import-project" aria-describedby="import-project-hint">
-          <option value="__report__">Use project from report</option>
+        <label htmlFor="import-project">Project (required)</label>
+        <select
+          id="import-project"
+          required
+          aria-describedby="import-project-hint"
+        >
+          <option value="">Select a project</option>
         </select>
         <p id="import-project-hint">Choose a project for this import.</p>
       </div>
       <div className="import-branch-fields">
-        <label htmlFor="import-branch">{"Branch"}</label>
-        <select id="import-branch" aria-describedby="import-branch-hint">
-          <option value="__report__">{"Use branch from report"}</option>
+        <label htmlFor="import-branch">{"Branch (required)"}</label>
+        <select
+          id="import-branch"
+          required
+          aria-describedby="import-branch-hint"
+        >
+          <option value="">{"Select a branch"}</option>
           <option value="__new__">{"Create a new branch..."}</option>
         </select>
         <div id="import-new-branch-field" hidden>
