@@ -1,3 +1,4 @@
+import { ProjectAccessPicker } from "./components/ProjectAccessPicker";
 import { ProjectEditor } from "./components/ProjectEditor";
 import { ResultHeaders, ResultRows } from "./components/ResultRows";
 import { HistoryCards } from "./components/HistoryCards";
@@ -22,6 +23,21 @@ function render(selector, component) {
 }
 let projectEditorKey = 0;
 export const dashboardBridge = {
+  clearReportContent() {
+    for (const selector of [
+      "#run-summary",
+      "#metrics",
+      "#dashboard-widgets",
+      "#data-warnings",
+      "#results-head",
+      "#results-body",
+      "#history-list",
+    ])
+      render(selector, null);
+  },
+  renderProjectAccess(props) {
+    render("#user-project-access", <ProjectAccessPicker {...props} />);
+  },
   openProjectEditor(props) {
     const dialog = document.getElementById("project-editor-dialog");
     render(

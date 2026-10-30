@@ -1,3 +1,4 @@
+const UserManagement = require("../user-management");
 const Projects = require("../../shared/project-management");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -13,6 +14,18 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
     queue = task;
     return task;
   };
+  async function projectRows() {
+    const users = (await readJSON(file("users"), [])).filter(
+      UserManagement.belongsToOrganization,
+    );
+    const assigned = users.flatMap((user) =>
+      user.projects.map((project) => ({ metadata: { project } })),
+    );
+    return Projects.merge(await readJSON(file("projects"), []), [
+      ...(await readJSON(file("runs"), [])),
+      ...assigned,
+    ]);
+  }
   return {
     kind: "files",
     ready: async () => {},
@@ -35,16 +48,13 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
       });
     },
     async listProjects(scopes = ["*"]) {
-      const rows = Projects.merge(
-        await readJSON(file("projects"), []),
-        await readJSON(file("runs"), []),
-      );
+      const rows = await projectRows();
       return rows.filter((project) => allowed(scopes, project.id));
     },
     async manageProject(body, id, clock = Date.now()) {
       return serial(async () => {
         const records = await readJSON(file("projects"), []);
-        const rows = Projects.merge(records, await readJSON(file("runs"), []));
+        const rows = await projectRows();
         const next = Projects.change(rows, body, id, clock);
         await writeJSON(file("projects"), [
           ...records.filter((item) => item.id !== next.id),

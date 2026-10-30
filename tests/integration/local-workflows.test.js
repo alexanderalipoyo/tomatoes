@@ -850,6 +850,12 @@ test("identical report JSON on different branches retains independent browser an
 
 test("user CRUD retains accounts for restoration, protects the last admin, and never exposes credentials", async (t) => {
   const f = await serviceFixture(t);
+  for (const id of ["web", "api"])
+    await f.request("/api/projects", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ id, name: id }),
+    });
   const body = (username, role = "viewer", projects = ["web"]) => ({
     username,
     fullName: "Example User",
@@ -1467,17 +1473,22 @@ test("project directory enforces admin roles, existing scope, CSRF, and CI separ
   for (const [id, name] of [
     ["portal", "Customer portal"],
     ["private", "Private project"],
-  ])
+  ]) {
+    const existing = id === "portal";
     assert.equal(
       (
-        await service.request("/api/projects", {
-          method: "POST",
-          headers: admin,
-          body: JSON.stringify({ id, name }),
-        })
+        await service.request(
+          existing ? "/api/projects/portal" : "/api/projects",
+          {
+            method: existing ? "PATCH" : "POST",
+            headers: admin,
+            body: JSON.stringify(existing ? { name } : { id, name }),
+          },
+        )
       ).status,
-      201,
+      existing ? 200 : 201,
     );
+  }
   for (const username of ["reader", "editor", "limited"]) {
     const headers = await signIn(username);
     assert.equal(
@@ -1515,5 +1526,226 @@ test("project directory enforces admin roles, existing scope, CSRF, and CI separ
       })
     ).status,
     403,
+  );
+});
+
+test("organization members receive only selected projects and assignment changes affect live sessions", async (t) => {
+  const f = await serviceFixture(t);
+  const write = (route, body, method = "POST") =>
+    f.request(route, {
+      method,
+      headers: { Origin: f.origin },
+      body: JSON.stringify(body),
+    });
+  for (const id of ["portal", "mobile", "secret"])
+    assert.equal((await write("/api/projects", { id, name: id })).status, 201);
+  const account = {
+    username: "member",
+    fullName: "Member",
+    email: "member@example.com",
+    role: "editor",
+    projects: ["portal", "mobile"],
+    disabled: false,
+    password: "temporary-member-password",
+  };
+  const created = await write("/api/users", account);
+  assert.equal(created.status, 201);
+  assert.equal(created.body.user.organizationId, "default");
+  assert.equal(
+    (
+      await write("/api/users", {
+        ...account,
+        username: "bad",
+        email: "bad@example.com",
+        projects: ["outside"],
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await write("/api/users", {
+        ...account,
+        username: "other",
+        email: "other@example.com",
+        organizationId: "another-organization",
+      })
+    ).status,
+    400,
+  );
+  const runs = {};
+  for (const project of ["portal", "mobile", "secret"])
+    runs[project] = (
+      await write("/api/runs", { report: fixture(), metadata: { project } })
+    ).body.run.id;
+  const restricted = await serviceFixture(t, {
+    teamMode: true,
+    dataDir: f.dataDir,
+  });
+  const login = await restricted.request("/api/login", {
+    method: "POST",
+    headers: { Origin: restricted.origin },
+    body: JSON.stringify({ username: "member", password: account.password }),
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const headers = { Cookie: cookie };
+  const status = await restricted.request("/api/team/status", { headers });
+  assert.equal(status.body.user.organizationId, status.body.organization.id);
+  const directory = await restricted.request("/api/projects", { headers });
+  assert.deepEqual(directory.body.projects.map((item) => item.id).sort(), [
+    "mobile",
+    "portal",
+  ]);
+  assert.equal(
+    (await restricted.request("/api/runs/" + runs.portal, { headers })).status,
+    200,
+  );
+  assert.equal(
+    (await restricted.request("/api/runs/" + runs.secret, { headers })).status,
+    404,
+  );
+  assert.equal(
+    (await restricted.request("/api/runs?project=secret", { headers })).status,
+    403,
+  );
+  assert.equal(
+    (await restricted.request("/api/runs", { headers })).body.runs.length,
+    2,
+  );
+  assert.equal(
+    (
+      await restricted.request("/api/runs", {
+        method: "POST",
+        headers: {
+          ...headers,
+          Origin: restricted.origin,
+          "X-CSRF-Token": status.body.csrf,
+        },
+        body: JSON.stringify({
+          report: fixture(),
+          metadata: { project: "secret" },
+        }),
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await write(
+        "/api/users/member",
+        { ...created.body.user, projects: ["mobile"] },
+        "PUT",
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await restricted.request("/api/runs/" + runs.portal, { headers })).status,
+    404,
+  );
+  assert.equal(
+    (await restricted.request("/api/runs/" + runs.mobile, { headers })).status,
+    200,
+  );
+  const usersFile = path.join(f.dataDir, "users.json");
+  const records = JSON.parse(await fs.readFile(usersFile, "utf8"));
+  records.push({
+    username: "outsider",
+    fullName: "Other Organization",
+    email: "outsider@example.com",
+    role: "admin",
+    projects: ["*"],
+    organizationId: "other",
+    ...hashPassword("temporary-outsider-password"),
+  });
+  await writeJSON(usersFile, records);
+  assert.equal(
+    (
+      await restricted.request("/api/login", {
+        method: "POST",
+        headers: { Origin: restricted.origin },
+        body: JSON.stringify({
+          username: "outsider",
+          password: "temporary-outsider-password",
+        }),
+      })
+    ).status,
+    401,
+  );
+  assert.ok(
+    !(await f.request("/api/users")).body.users.some(
+      (item) => item.username === "outsider",
+    ),
+  );
+  assert.equal(
+    (
+      await write(
+        "/api/users/outsider",
+        { ...created.body.user, username: "outsider", projects: ["*"] },
+        "PUT",
+      )
+    ).status,
+    404,
+  );
+});
+
+test("bundled report access respects the signed-in user's project scope", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "tomatoes-test-"));
+  const { createFileStore } = require("../../src/server/storage/index");
+  const { createApplication } = require("../../src/server/app");
+  const store = createFileStore(dataDir);
+  const password = "temporary-sample-password";
+  await store.manageUser("sample-viewer", () => ({
+    username: "sample-viewer",
+    role: "viewer",
+    projects: ["unrelated"],
+    organizationId: "default",
+    ...hashPassword(password),
+  }));
+  const app = createApplication({
+    store,
+    env: {
+      NODE_ENV: "test",
+      TOMATOES_TEAM_MODE: "1",
+      TOMATOES_DATA_DIR: dataDir,
+    },
+  });
+  const server = http.createServer(app.handler);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    await store.close();
+    const resolved = path.resolve(dataDir);
+    if (
+      !resolved.startsWith(path.resolve(os.tmpdir()) + path.sep) ||
+      !path.basename(resolved).startsWith("tomatoes-test-")
+    )
+      throw new Error("Unsafe test cleanup path");
+    await fs.rm(resolved, { recursive: true, force: true });
+  });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const login = await fetch(origin + "/api/login", {
+    method: "POST",
+    headers: { Origin: origin, "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "sample-viewer", password }),
+  });
+  assert.equal(login.status, 200);
+  const headers = { Cookie: login.headers.get("set-cookie").split(";")[0] };
+  assert.equal(
+    (await fetch(origin + "/results.json", { headers })).status,
+    403,
+  );
+  const bundled = ReportData.normalizeReport(
+    require("../../examples/reports/results.json"),
+  );
+  await store.manageUser("sample-viewer", (rows) => ({
+    ...rows.find((user) => user.username === "sample-viewer"),
+    projects: [bundled.metadata.project || "tomatoes"],
+  }));
+  assert.equal(
+    (await fetch(origin + "/results.json", { headers })).status,
+    200,
   );
 });

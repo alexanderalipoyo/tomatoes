@@ -7,8 +7,17 @@
     indexedDB = root.indexedDB,
     crypto = root.crypto,
     name = "tomatoes-import-history",
+    canAccess = null,
   } = {}) {
     let connection;
+    const permitted = (entry) => !canAccess || canAccess(entry);
+    function assertAccess(entry) {
+      if (!permitted(entry))
+        throw new Error("This report is outside your assigned projects.");
+    }
+    async function guard(id) {
+      if (canAccess && id) await get(id);
+    }
     function open() {
       if (!indexedDB)
         return Promise.reject(new Error("Browser storage is unavailable."));
@@ -74,6 +83,7 @@
         request.result
           .filter(
             (entry) =>
+              permitted(entry) &&
               (includeDeleted || !entry.deletedAt) &&
               (includeArchived || !entry.archivedAt),
           )
@@ -97,6 +107,7 @@
         throw new Error(
           "This import is no longer available in browser storage.",
         );
+      assertAccess(saved.entry);
       return saved;
     }
     async function lastActive() {
@@ -106,6 +117,7 @@
       return complete(tx, () => request.result || null);
     }
     async function markActive(id) {
+      await guard(id);
       const db = await open();
       const tx = db.transaction("preferences", "readwrite");
       tx.objectStore("preferences").put(id, "active");
@@ -118,6 +130,7 @@
       source = "imported",
       touch = true,
     }) {
+      assertAccess({ metadata: report.metadata });
       const digest = await crypto.subtle.digest(
         "SHA-256",
         new TextEncoder().encode(
@@ -172,6 +185,8 @@
     }
 
     async function updateMetadata(id, metadata) {
+      await guard(id);
+      assertAccess({ metadata });
       const db = await open();
       const tx = db.transaction("entries", "readwrite");
       const store = tx.objectStore("entries");
@@ -188,6 +203,7 @@
       return complete(tx, () => updated);
     }
     async function updateDetails(id, changes) {
+      await guard(id);
       const db = await open();
       const tx = db.transaction("entries", "readwrite");
       const store = tx.objectStore("entries"),
@@ -209,13 +225,27 @@
       const entries = tx.objectStore("entries").getAll();
       const reports = tx.objectStore("reports").getAll();
       const evidence = tx.objectStore("evidence").getAll();
-      return complete(tx, () => ({
-        entries: entries.result,
-        reports: reports.result,
-        evidence: evidence.result,
-      }));
+      return complete(tx, () => {
+        if (!canAccess)
+          return {
+            entries: entries.result,
+            reports: reports.result,
+            evidence: evidence.result,
+          };
+        const visible = entries.result.filter(permitted),
+          ids = new Set(visible.map((entry) => entry.id));
+        return {
+          entries: visible,
+          reports: reports.result.filter((item) => ids.has(item.id)),
+          evidence: evidence.result.filter((item) => ids.has(item.runId)),
+        };
+      });
     }
     async function restoreSnapshot(data) {
+      if (canAccess && data.entries?.some((entry) => !permitted(entry)))
+        throw new Error(
+          "This backup contains reports outside your assigned projects.",
+        );
       const db = await open();
       const tx = db.transaction(
         ["entries", "reports", "evidence"],
@@ -266,12 +296,14 @@
       }
     }
     async function saveEvidence(record) {
+      await guard(record.runId);
       const db = await open();
       const tx = db.transaction("evidence", "readwrite");
       tx.objectStore("evidence").put(record);
       return complete(tx, () => record);
     }
     async function listEvidence(runId, testKey) {
+      await guard(runId);
       const db = await open();
       const tx = db.transaction("evidence", "readonly");
       const request = tx.objectStore("evidence").index("runId").getAll(runId);
@@ -302,5 +334,10 @@
   }
   if (typeof module !== "undefined" && module.exports)
     module.exports = { createHistory };
-  else root.ImportHistory = createHistory();
+  else
+    root.ImportHistory = createHistory({
+      canAccess: (entry) =>
+        typeof root.canAccessBrowserImport === "function" &&
+        root.canAccessBrowserImport(entry),
+    });
 })(typeof globalThis !== "undefined" ? globalThis : this);

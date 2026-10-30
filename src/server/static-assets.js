@@ -41,6 +41,7 @@ for (const name of [
   "report-links",
   "project-catalog",
   "project-management",
+  "project-access",
   "dashboard-groups",
   "user-preferences",
   "investigation-model",

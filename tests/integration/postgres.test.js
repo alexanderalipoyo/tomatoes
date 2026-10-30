@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    6,
+    7,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -789,4 +789,33 @@ test("PostgreSQL project creation serializes duplicates and renaming preserves a
     "New Portal Name",
   );
   assert.equal((await store.listProjects(["unrelated"])).length, 0);
+});
+
+test("PostgreSQL persists organization membership and discovers assigned project scopes", async (t) => {
+  const { store } = await fixture(t);
+  await store.manageUser("member", () => ({
+    username: "member",
+    fullName: "Project Member",
+    email: "member@example.com",
+    role: "viewer",
+    projects: ["web", "mobile"],
+    organizationId: "default",
+    ...hashPassword("temporary-member-password"),
+  }));
+  await store.manageUser("outsider", () => ({
+    username: "outsider",
+    role: "viewer",
+    projects: ["private"],
+    organizationId: "other",
+    ...hashPassword("temporary-outsider-password"),
+  }));
+  const member = (await store.getUsers()).find(
+    (user) => user.username === "member",
+  );
+  assert.equal(member.organizationId, "default");
+  assert.deepEqual(member.projects, ["web", "mobile"]);
+  assert.deepEqual(
+    (await store.listProjects(["*"])).map((project) => project.id).sort(),
+    ["mobile", "web"],
+  );
 });

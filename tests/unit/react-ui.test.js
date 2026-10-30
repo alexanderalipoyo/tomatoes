@@ -399,3 +399,57 @@ test("project editor supports repeated creation and preserves errors without clo
     await state.cleanup();
   }
 });
+
+test("project picker preserves multiple selections while searching and requires explicit all-project access", async () => {
+  const { ProjectAccessPicker } = loadComponent(
+    "components/ProjectAccessPicker.jsx",
+  );
+  const state = await mount(
+    React.createElement(
+      "form",
+      null,
+      React.createElement(ProjectAccessPicker, {
+        projects: [
+          { id: "web", name: "Website" },
+          { id: "mobile", name: "Mobile app" },
+          { id: "api", name: "API" },
+        ],
+        selected: ["web"],
+      }),
+    ),
+  );
+  try {
+    const form = state.host.querySelector("form");
+    await act(async () =>
+      state.host.querySelector('input[aria-label="Mobile app"]').click(),
+    );
+    assert.deepEqual(new dom.window.FormData(form).getAll("projects").sort(), [
+      "mobile",
+      "web",
+    ]);
+    await act(async () => {
+      const input = state.host.querySelector('[type="search"]');
+      Object.getOwnPropertyDescriptor(
+        dom.window.HTMLInputElement.prototype,
+        "value",
+      ).set.call(input, "API");
+      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+    assert.equal(state.host.querySelectorAll('[type="checkbox"]').length, 1);
+    assert.deepEqual(new dom.window.FormData(form).getAll("projects").sort(), [
+      "mobile",
+      "web",
+    ]);
+    await act(async () => state.host.querySelector('[value="all"]').click());
+    assert.deepEqual(new dom.window.FormData(form).getAll("projects"), ["*"]);
+    await act(async () =>
+      state.host.querySelector('[value="specific"]').click(),
+    );
+    assert.deepEqual(new dom.window.FormData(form).getAll("projects").sort(), [
+      "mobile",
+      "web",
+    ]);
+  } finally {
+    await state.cleanup();
+  }
+});

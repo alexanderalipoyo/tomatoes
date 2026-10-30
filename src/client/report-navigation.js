@@ -82,6 +82,8 @@ function isReportIndependentView() {
   ].includes(location.hash.slice(1));
 }
 async function navigateReportLocation() {
+  if (typeof authStatus !== "undefined" && authStatus?.enabled)
+    await initializeAuth();
   if (authRequiresLogin() || isAuthRoute()) {
     renderAuthScreen();
     return;

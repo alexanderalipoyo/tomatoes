@@ -1689,3 +1689,137 @@ body:has(#integration-setup[open]) {
     padding: 24px 20px;
   }
 }
+
+/* Organization membership and searchable project assignment. */
+.users-organization-context {
+  margin: 14px 0 20px;
+  font-size: 12px;
+}
+.users-project-tag {
+  display: inline-block;
+  border: 1px solid var(--border);
+  background: var(--theme-surface-raised, #f4f7f5);
+  border-radius: 5px;
+  padding: 3px 7px;
+  margin: 2px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.users-organization-field {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--theme-surface-raised, #f7f9f7);
+}
+.users-organization-field > span {
+  font-size: 12px;
+  font-weight: 550;
+}
+.users-organization-field small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.users-editor-form .project-access-picker {
+  border: 0;
+  padding: 0;
+  margin: 8px 0 0;
+  min-width: 0;
+}
+.project-access-picker legend {
+  font-size: 13px;
+  font-weight: 550;
+  padding: 0;
+}
+.project-access-description {
+  margin: 7px 0 13px;
+  line-height: 1.7;
+}
+.project-access-modes {
+  display: grid;
+  gap: 9px;
+}
+.users-editor-form .project-access-modes label,
+.users-editor-form .project-access-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.users-editor-form
+  .project-access-picker
+  input:is([type="radio"], [type="checkbox"]) {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  flex: 0 0 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--green);
+}
+.project-access-modes label:has(input:checked),
+.project-access-list label.is-selected {
+  border-color: var(--green);
+  background: var(--theme-accent-surface, #edf7f1);
+}
+.project-access-modes small,
+.project-access-list small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin-top: 2px;
+}
+.project-access-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0 9px;
+}
+.project-access-tools input {
+  flex: 1;
+  min-width: 0;
+}
+.project-access-tools span {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.project-access-list {
+  display: grid;
+  gap: 7px;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+}
+.project-access-list strong {
+  font-size: 12px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.project-access-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+}
+.project-access-actions button {
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  color: var(--theme-accent-text, #147553);
+  font-size: 11px;
+}
+.project-access-required,
+.project-access-all-note {
+  font-size: 11px;
+  line-height: 1.8;
+  margin-top: 12px;
+}
+.project-access-picker:disabled {
+  opacity: 0.75;
+}

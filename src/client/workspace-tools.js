@@ -42,6 +42,7 @@ if (typeof document !== "undefined") {
     document.querySelector("#show-trash").onclick = showHistoryTrash;
   }
   async function backupHistory() {
+    if (authStatus?.enabled) await initializeAuth();
     await investigationBusy(
       "Preparing browser backup",
       async () => {

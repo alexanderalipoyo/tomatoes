@@ -1,3 +1,4 @@
+const ReportData = require("../shared/report-data");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createTeamService } = require("./team-service");
@@ -38,6 +39,7 @@ function createApplication({
   const team = createTeamService({
     store,
     hosted,
+    organizationName: env.TOMATOES_ORGANIZATION_NAME || "Tomatoes workspace",
     teamMode: env.TOMATOES_TEAM_MODE === "1",
     publicOrigin: origin,
     additionalOrigins,
@@ -64,9 +66,10 @@ function createApplication({
   const handler = async (req, res) => {
     const url = new URL(req.url, "http://localhost");
     if (await team.handle(req, res, url)) return;
+    let dataUser;
     if (url.pathname === "/results.json") {
       try {
-        await team.authenticateData(req);
+        dataUser = await team.authenticateData(req);
       } catch (error) {
         res.writeHead(error.status || 500, {
           "Content-Type": "application/json",
@@ -88,6 +91,24 @@ function createApplication({
       res.writeHead(500);
       res.end("Unable to read file");
       return;
+    }
+    if (dataUser && !dataUser.projects.includes("*")) {
+      const sampleProject =
+        ReportData.normalizeReport(JSON.parse(data.toString("utf8"))).metadata
+          .project || "tomatoes";
+      if (!dataUser.projects.includes(sampleProject)) {
+        res.writeHead(403, {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        });
+        res.end(
+          JSON.stringify({
+            error:
+              "This report is outside your assigned projects. Open a project you can access.",
+          }),
+        );
+        return;
+      }
     }
     if (hosted && data.length > 4 * 1024 * 1024) {
       res.writeHead(413, { "Content-Type": "application/json" });

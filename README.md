@@ -273,13 +273,13 @@ The PostgreSQL tests use the configured local connection, create uniquely named 
 
 ### Manage workspace users
 
-Open **Manage profile → Users** to search local accounts, filter by role or status, and add or edit users. Accounts have a full name, optional contact email, a unique username, and explicit project access. Use `*` for all projects. Creating an account does not send an invitation email; share its initial password securely.
+Open **Manage profile → Users** to search local accounts, filter by role or status, and add or edit users. Accounts have a full name, optional contact email, a unique username, and explicit project access. Choose **Specific projects** and select one or more projects, or explicitly choose **All projects** to include future projects. Search the picker by name or project identifier. Creating an account does not send an invitation email; share its initial password securely.
 
 - **Viewer:** read reports in assigned projects and save personal preferences.
 - **Editor:** Viewer access plus publishing reports and updating report notes and attachments in assigned projects.
 - **Admin:** Editor access; admins with `*` project access can administer users.
 
-Deactivating an account blocks sign-in and ends its active sessions. Its reports and account details are retained, and the account can be restored from the deactivated-account filter. Previously saved browser copies remain on their devices. The server prevents removing the last active admin with all-project access and prevents administrators from deactivating themselves or changing their own access.
+Deactivating an account blocks sign-in and ends its active sessions. Its reports and account details are retained, and the account can be restored from the deactivated-account filter. Previously saved browser copies remain on their devices, but signed-in users can only open, list, or back up copies in their assigned projects. The server prevents removing the last active admin with all-project access and prevents administrators from deactivating themselves or changing their own access.
 
 Local mode allows the operator of the local installation to manage accounts without signing in. To enforce account roles and project restrictions, enable the existing team sign-in mode after creating an all-project admin. Run `npm run db:migrate` when upgrading a PostgreSQL installation to add the user-management columns.
 
@@ -384,4 +384,6 @@ Names are shared through the configured server store. An immutable project ident
 
 Use a project's **Import report** action to preselect it, or choose a project in the import dialog. Branch choices and remembered branch defaults follow the selected project. Empty projects remain visible and ready for their first report. Local file-store mode also supports these features; the current installation is the shared organization boundary.
 
-PostgreSQL deployments require schema version **6**: run `npm run db:migrate` locally or `npm run db:migrate:production` for the configured production database before deploying this change. The migration only adds the project registry. Existing run identities and access scopes are preserved.
+PostgreSQL deployments require schema version **7**: run `npm run db:migrate` locally or `npm run db:migrate:production` for the configured production database before deploying this change. The upgrades add the project registry and explicit organization membership for users. Existing accounts are assigned to the current installation’s organization, and existing run identities and project scopes are preserved.
+
+The user editor displays the current organization and only offers its registered or previously assigned projects. Organization membership cannot be changed through the user API. Each configured installation/store currently represents one organization; this does not enable multi-organization tenancy. Set `TOMATOES_ORGANIZATION_NAME` to customize its displayed name. Enable `TOMATOES_TEAM_MODE=1` to enforce account restrictions; local mode remains unrestricted for its operator. Project scope changes take effect on subsequent server requests, and browser navigation refreshes access before restoring local reports.

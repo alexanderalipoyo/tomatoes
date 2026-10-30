@@ -1,3 +1,6 @@
+function canAccessBrowserImport(entry) {
+  return ProjectAccess.allowed(entry, authStatus);
+}
 /* Full-page sign-in and local password recovery. Passwords are never cached. */
 let authStatus = null;
 let authRenderVersion = 0;
@@ -37,6 +40,8 @@ async function initializeAuth() {
       error: "Could not connect to Tomatoes. Check the server and try again.",
     };
   }
+  if (typeof invalidateOutOfScopeReports === "function")
+    invalidateOutOfScopeReports();
   syncLogoutControl();
   document.body.classList.remove("auth-checking");
   return authStatus;

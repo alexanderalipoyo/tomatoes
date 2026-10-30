@@ -113,6 +113,21 @@ async function reloadUserPreferences() {
     navigate();
   return state;
 }
+function invalidateOutOfScopeReports() {
+  historyEntries = historyEntries.filter(canAccessBrowserImport);
+  comparison = null;
+  investigationCache.clear();
+  stability = null;
+  if (report && !canAccessBrowserImport({ metadata: report.metadata })) {
+    report = null;
+    currentFile = null;
+    activeHistoryId = null;
+    loadedReportLinkKey = null;
+    $("#report-content").hidden = true;
+    globalThis.TomatoesReact.clearReportContent();
+    $("#detail-content").replaceChildren();
+  }
+}
 function preferenceStatusMarkup() {
   const state = userPreferences.getState();
   return `<article class="settings-card preference-sync-status"><h2>User preferences</h2><p role="status">${state.ready ? `Saved to ${state.storage === "postgres" ? "PostgreSQL" : "the local server"} for ${esc(state.profile)}. ${state.profileId === "local" ? "Local mode uses one shared profile on this server." : "These settings belong to your signed-in account."}` : esc(state.error)}</p><p>Profile details, color mode, dashboard groups, time zone, and results per page load from the server. Report files and browser import history are managed separately.</p><button class="button" id="reload-user-preferences">Reload preferences</button>${!state.ready ? '<a class="button" href="#team">Settings: Sharing &amp; access</a>' : ""}</article>`;
@@ -595,8 +610,9 @@ async function loadReport(file = currentFile, options = {}) {
     if (options.restore) {
       try {
         historyId = await ImportHistory.lastActive();
-        if (historyId && (await ImportHistory.get(historyId)).entry.archivedAt)
-          historyId = (await ImportHistory.list())[0]?.id || null;
+        const accessible = await ImportHistory.list();
+        if (!accessible.some((entry) => entry.id === historyId))
+          historyId = accessible[0]?.id || null;
       } catch {
         historyNotice(
           "History is unavailable in this browser. The report can still be used for this session.",
@@ -686,6 +702,10 @@ async function loadReport(file = currentFile, options = {}) {
         ...next.metadata,
         branch: options.branch,
       });
+    if (!canAccessBrowserImport({ metadata: next.metadata }))
+      throw new Error(
+        "Choose one of your assigned projects before importing this report.",
+      );
     report = next;
     report.importedAt =
       saved?.entry.lastImportedAt ?? saved?.entry.importedAt ?? Date.now();

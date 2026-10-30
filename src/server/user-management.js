@@ -1,3 +1,6 @@
+const ORGANIZATION_ID = "default";
+const belongsToOrganization = (user) =>
+  Boolean(user) && (user.organizationId || ORGANIZATION_ID) === ORGANIZATION_ID;
 const roles = [
   {
     id: "viewer",
@@ -35,11 +38,17 @@ function validateUser(value, creating = false) {
           "role",
           "projects",
           "disabled",
+          "organizationId",
           ...(creating ? ["password"] : []),
         ].includes(key),
     )
   )
     fail("Use only the supported user fields.");
+  if (
+    value.organizationId !== undefined &&
+    value.organizationId !== ORGANIZATION_ID
+  )
+    fail("Users must belong to the current organization.");
   if (
     creating &&
     (typeof value.username !== "string" ||
@@ -87,6 +96,7 @@ function validateUser(value, creating = false) {
   )
     fail("Passwords must be 12–256 characters.");
   return {
+    organizationId: ORGANIZATION_ID,
     username: value.username,
     fullName: value.fullName.trim(),
     email: value.email.trim(),
@@ -96,8 +106,12 @@ function validateUser(value, creating = false) {
   };
 }
 const isGlobalAdmin = (user) =>
-  user.role === "admin" && user.projects.includes("*") && !user.disabled;
+  user.role === "admin" &&
+  user.projects.includes("*") &&
+  !user.disabled &&
+  belongsToOrganization(user);
 const publicUser = (user) => ({
+  organizationId: user.organizationId || ORGANIZATION_ID,
   username: user.username,
   fullName: user.fullName || user.username,
   email: user.email || "",
@@ -105,4 +119,11 @@ const publicUser = (user) => ({
   projects: user.projects,
   disabled: Boolean(user.disabled),
 });
-module.exports = { roles, validateUser, isGlobalAdmin, publicUser };
+module.exports = {
+  roles,
+  validateUser,
+  isGlobalAdmin,
+  publicUser,
+  ORGANIZATION_ID,
+  belongsToOrganization,
+};

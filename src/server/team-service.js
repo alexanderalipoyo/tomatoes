@@ -46,6 +46,7 @@ function createTeamService({
   slackNotifier = null,
   hosted = false,
   recoverySender = null,
+  organizationName = "Tomatoes workspace",
   store = createFileStore(dataDir),
 } = {}) {
   const sessions = new Map(),
@@ -129,7 +130,12 @@ function createTeamService({
     }
     const users = await store.getUsers();
     const user = users.find((user) => user.username === saved.username);
-    if (!user || user.disabled || saved.passwordHash !== user.hash) {
+    if (
+      !user ||
+      user.disabled ||
+      !UserManagement.belongsToOrganization(user) ||
+      saved.passwordHash !== user.hash
+    ) {
       await deleteSession(key);
       return null;
     }
@@ -140,6 +146,7 @@ function createTeamService({
       fullName: user.fullName || user.username,
       role: user.role,
       projects: user.projects,
+      organizationId: user.organizationId || UserManagement.ORGANIZATION_ID,
     };
   }
   async function principal(req) {
@@ -247,6 +254,10 @@ function createTeamService({
         const tokens = await store.getTokens();
         send(res, 200, {
           enabled: teamMode,
+          organization: {
+            id: UserManagement.ORGANIZATION_ID,
+            name: organizationName,
+          },
           authenticated: Boolean(user),
           user: user
             ? {
@@ -254,6 +265,8 @@ function createTeamService({
                 username: user.username,
                 role: user.role,
                 projects: user.projects,
+                organizationId:
+                  user.organizationId || UserManagement.ORGANIZATION_ID,
               }
             : null,
           csrf: user?.csrf || null,
@@ -312,6 +325,7 @@ function createTeamService({
         const matches = users.filter(
           (item) =>
             !item.disabled &&
+            UserManagement.belongsToOrganization(item) &&
             (item.username === identifier ||
               (item.email && item.email.toLowerCase() === identifier)),
         );
@@ -349,7 +363,13 @@ function createTeamService({
           res,
           200,
           {
-            user: { username, role: user.role, projects: user.projects },
+            user: {
+              username,
+              role: user.role,
+              projects: user.projects,
+              organizationId:
+                user.organizationId || UserManagement.ORGANIZATION_ID,
+            },
             csrf,
           },
           {
@@ -413,7 +433,10 @@ function createTeamService({
           )
             throw apiError(400, "Enter a valid account email address.");
           const matches = (await store.getUsers()).filter(
-            (user) => !user.disabled && user.email?.toLowerCase() === email,
+            (user) =>
+              !user.disabled &&
+              UserManagement.belongsToOrganization(user) &&
+              user.email?.toLowerCase() === email,
           );
           if (matches.length === 1) {
             const target = matches[0];
@@ -428,7 +451,7 @@ function createTeamService({
                     (item) => item.username === target.username,
                   );
                   if (
-                    !user ||
+                    !UserManagement.belongsToOrganization(user) ||
                     user.disabled ||
                     user.email?.toLowerCase() !== email
                   )
@@ -483,7 +506,9 @@ function createTeamService({
         }
         const digest = hashToken(body.token);
         const target = (await store.getUsers()).find(
-          (user) => user.resetHash === digest,
+          (user) =>
+            UserManagement.belongsToOrganization(user) &&
+            user.resetHash === digest,
         );
         if (!target)
           throw apiError(
@@ -493,7 +518,7 @@ function createTeamService({
         await store.manageUser(target.username, (rows) => {
           const user = rows.find((item) => item.username === target.username);
           if (
-            !user ||
+            !UserManagement.belongsToOrganization(user) ||
             user.disabled ||
             user.resetHash !== digest ||
             Number(user.resetExpires) <= now()
@@ -587,7 +612,14 @@ function createTeamService({
           );
         if (req.method === "GET" && url.pathname === "/api/users") {
           send(res, 200, {
-            users: (await store.getUsers()).map(UserManagement.publicUser),
+            users: (await store.getUsers())
+              .filter(UserManagement.belongsToOrganization)
+              .map(UserManagement.publicUser),
+            organization: {
+              id: UserManagement.ORGANIZATION_ID,
+              name: organizationName,
+            },
+            projects: await store.listProjects(["*"]),
             roles: UserManagement.roles,
             currentUsername: user.username || null,
             localMode: !teamMode,
@@ -621,6 +653,18 @@ function createTeamService({
           throw apiError(400, "Usernames cannot be changed.");
         const target = creating ? changes.username : username;
         const credentials = creating ? hashPassword(body.password) : null;
+        const availableProjects = new Set(
+          (await store.listProjects(["*"])).map((project) => project.id),
+        );
+        if (
+          changes &&
+          !changes.projects.includes("*") &&
+          changes.projects.some((id) => !availableProjects.has(id))
+        )
+          throw apiError(
+            400,
+            "Choose projects that belong to the current organization.",
+          );
         const saved = await store.manageUser(target, (rows) => {
           if (
             user.kind === "session" &&
@@ -635,6 +679,11 @@ function createTeamService({
               "Your user-management access has changed. Sign in again.",
             );
           const previous = rows.find((row) => row.username === target);
+          if (
+            !creating &&
+            (!previous || !UserManagement.belongsToOrganization(previous))
+          )
+            throw apiError(404, "User not found.");
           if (
             changes?.email &&
             rows.some(
@@ -652,7 +701,6 @@ function createTeamService({
               409,
               "This username already exists. Restore the account if it is deactivated.",
             );
-          if (!creating && !previous) throw apiError(404, "User not found.");
           const next = creating
             ? { ...changes, ...credentials }
             : req.method === "DELETE"

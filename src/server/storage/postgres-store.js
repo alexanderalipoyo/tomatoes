@@ -1,3 +1,4 @@
+const UserManagement = require("../user-management");
 const Projects = require("../../shared/project-management");
 const { Pool } = require("pg");
 const { databaseConfig } = require("../config");
@@ -45,7 +46,7 @@ function createPostgresStore({
     );
   const insertUser = (client, user, skip = false) =>
     client.query(
-      `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ${skip ? "ON CONFLICT(username) DO NOTHING" : ""}`,
+      `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,organization_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ${skip ? "ON CONFLICT(username) DO NOTHING" : ""}`,
       [
         user.username,
         user.role,
@@ -55,6 +56,7 @@ function createPostgresStore({
         user.fullName || "",
         user.email || "",
         Boolean(user.disabled),
+        user.organizationId || UserManagement.ORGANIZATION_ID,
       ],
     );
   const insertToken = (client, token, skip = false) =>
@@ -69,13 +71,19 @@ function createPostgresStore({
     const discovered = await client.query(
       `SELECT DISTINCT project FROM ${ns}.runs`,
     );
+    const assigned = await client.query(
+      `SELECT DISTINCT unnest(projects) AS project FROM ${ns}.users WHERE organization_id=$1`,
+      [UserManagement.ORGANIZATION_ID],
+    );
     return Projects.merge(
       registered.rows.map((row) => ({
         ...row,
         createdAt: Number(row.createdAt),
         updatedAt: Number(row.updatedAt),
       })),
-      discovered.rows.map((row) => ({ metadata: { project: row.project } })),
+      [...discovered.rows, ...assigned.rows].map((row) => ({
+        metadata: { project: row.project },
+      })),
     );
   }
   return {
@@ -109,7 +117,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=6`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=7`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {
@@ -152,7 +160,7 @@ function createPostgresStore({
     async getUsers() {
       return (
         await pool.query(
-          `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,reset_hash AS "resetHash",reset_expires AS "resetExpires" FROM ${ns}.users`,
+          `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires" FROM ${ns}.users`,
         )
       ).rows;
     },
@@ -163,12 +171,12 @@ function createPostgresStore({
         );
         const users = (
           await client.query(
-            `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,reset_hash AS "resetHash",reset_expires AS "resetExpires" FROM ${ns}.users`,
+            `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires" FROM ${ns}.users`,
           )
         ).rows;
         const next = mutate(users);
         await client.query(
-          `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,reset_hash,reset_expires) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(username) DO UPDATE SET role=EXCLUDED.role,projects=EXCLUDED.projects,full_name=EXCLUDED.full_name,email=EXCLUDED.email,disabled=EXCLUDED.disabled,salt=EXCLUDED.salt,password_hash=EXCLUDED.password_hash,reset_hash=EXCLUDED.reset_hash,reset_expires=EXCLUDED.reset_expires`,
+          `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,reset_hash,reset_expires,organization_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(username) DO UPDATE SET role=EXCLUDED.role,projects=EXCLUDED.projects,full_name=EXCLUDED.full_name,email=EXCLUDED.email,disabled=EXCLUDED.disabled,salt=EXCLUDED.salt,password_hash=EXCLUDED.password_hash,reset_hash=EXCLUDED.reset_hash,reset_expires=EXCLUDED.reset_expires,organization_id=EXCLUDED.organization_id`,
           [
             username,
             next.role,
@@ -180,6 +188,7 @@ function createPostgresStore({
             Boolean(next.disabled),
             next.resetHash || null,
             next.resetExpires || null,
+            next.organizationId || UserManagement.ORGANIZATION_ID,
           ],
         );
         return next;

@@ -17,7 +17,7 @@ async function renderUsers(host) {
     teamState = status;
     const data = await teamRequest("/api/users");
     if (view !== "users" || version !== usersRenderVersion) return;
-    host.innerHTML = `<section class="users-page" aria-label="Workspace users"><div class="users-tab-heading">Users <span id="users-total">${data.users.length}</span></div>${data.localMode ? '<p class="users-mode-note">Local mode: accounts are stored on this server. Roles and project restrictions apply when sign-in is enabled in Settings → Sharing &amp; access.</p>' : ""}
+    host.innerHTML = `<section class="users-page" aria-label="Workspace users"><div class="users-tab-heading">Users <span id="users-total">${data.users.length}</span></div><p class="users-organization-context">Organization: <strong>${esc(data.organization?.name || "Current organization")}</strong></p>${data.localMode ? '<p class="users-mode-note">Local mode: accounts are stored on this server. Roles and project restrictions apply when sign-in is enabled in Settings → Sharing &amp; access.</p>' : ""}
       <div class="users-toolbar"><label class="users-search">${icon("search")}<input type="search" id="users-search" placeholder="Search users" aria-label="Search users" value="${esc(usersFilters.query)}"/></label><details class="users-role-filter"><summary>Roles <span id="users-role-count"></span></summary><div>${data.roles.map((role) => `<label><input type="checkbox" aria-label="${esc(role.name)}" value="${role.id}" ${usersFilters.roles.has(role.id) ? "checked" : ""}/>${esc(role.name)}</label>`).join("")}</div></details><select id="users-status" aria-label="Account status"><option value="active">Active accounts</option><option value="inactive">Deactivated accounts</option><option value="all">All accounts</option></select><button class="button primary" id="users-add">${icon("plus")}Add user</button></div>
       <div class="users-table-wrap"><table class="users-table"><thead><tr><th scope="col" id="users-name-heading"><button data-users-sort="name">User <span aria-hidden="true">↕</span></button></th><th scope="col">Provider</th><th scope="col" id="users-role-heading"><button data-users-sort="role">Role <span aria-hidden="true">↕</span></button></th><th scope="col">Project access</th><th scope="col">Actions</th></tr></thead><tbody id="users-rows"></tbody></table></div><p id="users-results" class="users-results" role="status"></p>
       <details class="users-permissions"><summary>Roles and permissions</summary><div>${data.roles.map((role) => `<article><h3>${esc(role.name)}</h3><p>${esc(role.description)}</p></article>`).join("")}</div><p>Deactivated accounts cannot sign in. Access changes apply to existing sessions immediately. Browser copies previously saved on a device remain on that device.</p></details></section>`;
@@ -52,7 +52,7 @@ async function renderUsers(host) {
                   .map((part) => Array.from(part)[0])
                   .join("")
                   .toUpperCase(),
-              )}</span><span><strong>${esc(user.fullName)}${user.username === data.currentUsername ? " <small>(you)</small>" : ""}</strong><small>${esc(user.email || user.username)}</small>${user.disabled ? '<span class="users-inactive">Deactivated</span>' : ""}</span></div></th><td>Local account</td><td><span class="users-role-badge">${esc(data.roles.find((role) => role.id === user.role)?.name || user.role)}</span></td><td>${user.projects.includes("*") ? "All projects" : user.projects.map(esc).join(", ")}</td><td><div class="users-row-actions"><button class="button" data-user-edit="${esc(user.username)}">Edit<span class="visually-hidden"> ${esc(user.fullName)}</span></button><button class="button ${user.disabled ? "" : "users-danger"}" data-user-status="${esc(user.username)}" ${user.username === data.currentUsername ? 'disabled title="You cannot deactivate your own account"' : ""}>${user.disabled ? "Restore" : "Deactivate"}<span class="visually-hidden"> ${esc(user.fullName)}</span></button></div></td></tr>`,
+              )}</span><span><strong>${esc(user.fullName)}${user.username === data.currentUsername ? " <small>(you)</small>" : ""}</strong><small>${esc(user.email || user.username)}</small>${user.disabled ? '<span class="users-inactive">Deactivated</span>' : ""}</span></div></th><td>Local account</td><td><span class="users-role-badge">${esc(data.roles.find((role) => role.id === user.role)?.name || user.role)}</span></td><td>${user.projects.includes("*") ? "All projects" : user.projects.map((id) => `<span class="users-project-tag" title="${esc(id)}">${esc(data.projects.find((project) => project.id === id)?.name || id)}</span>`).join(" ")}</td><td><div class="users-row-actions"><button class="button" data-user-edit="${esc(user.username)}">Edit<span class="visually-hidden"> ${esc(user.fullName)}</span></button><button class="button ${user.disabled ? "" : "users-danger"}" data-user-status="${esc(user.username)}" ${user.username === data.currentUsername ? 'disabled title="You cannot deactivate your own account"' : ""}>${user.disabled ? "Restore" : "Deactivate"}<span class="visually-hidden"> ${esc(user.fullName)}</span></button></div></td></tr>`,
           )
           .join("") ||
         `<tr><td colspan="5" class="users-empty">${data.users.length ? "No users match these filters." : "No accounts yet. Add your first user to get started."}</td></tr>`;
@@ -180,9 +180,18 @@ function openUserEditor(data, user, host, trigger) {
   const self = user?.username === data.currentUsername;
   const dialog = showUserDialog(
     user ? "Edit user" : "Add user",
-    `<form class="users-editor-form"><label>Full name<input name="fullName" value="${esc(user?.fullName || "")}" maxlength="160" required autocomplete="name"/></label><label>Email <small>Optional; no invitation email is sent.</small><input name="email" type="email" value="${esc(user?.email || "")}" maxlength="254" autocomplete="off"/></label><label>Username<input name="username" value="${esc(user?.username || "")}" ${user ? "readonly" : 'pattern="[a-z0-9][a-z0-9_.-]{0,63}"'} maxlength="64" required autocomplete="off"/></label>${user ? "" : '<label>Initial password <small>12–256 characters. Share securely with the user.</small><input name="password" type="password" minlength="12" maxlength="256" required autocomplete="new-password"/></label>'}<label>Role<select name="role" ${self ? "disabled" : ""}>${data.roles.map((role) => `<option value="${role.id}" ${(user?.role || "viewer") === role.id ? "selected" : ""}>${esc(role.name)}</option>`).join("")}</select></label><label>Project access <small>Comma-separated project identifiers, or * for all projects.</small><input name="projects" value="${esc(user?.projects.join(", ") || currentWorkspaceProject)}" required maxlength="8099" ${self ? "readonly" : ""}/></label>${self ? '<p class="users-mode-note">Another administrator must change your role or project access.</p>' : ""}<p class="users-form-error" role="alert"></p><footer><button class="button" type="button" data-user-cancel>Cancel</button><button class="button primary" type="submit">${user ? "Save changes" : "Create user"}</button></footer></form>`,
+    `<form class="users-editor-form"><label>Full name<input name="fullName" value="${esc(user?.fullName || "")}" maxlength="160" required autocomplete="name"/></label><label>Email <small>Optional; no invitation email is sent.</small><input name="email" type="email" value="${esc(user?.email || "")}" maxlength="254" autocomplete="off"/></label><label>Username<input name="username" value="${esc(user?.username || "")}" ${user ? "readonly" : 'pattern="[a-z0-9][a-z0-9_.-]{0,63}"'} maxlength="64" required autocomplete="off"/></label>${user ? "" : '<label>Initial password <small>12–256 characters. Share securely with the user.</small><input name="password" type="password" minlength="12" maxlength="256" required autocomplete="new-password"/></label>'}<label>Role<select name="role" ${self ? "disabled" : ""}>${data.roles.map((role) => `<option value="${role.id}" ${(user?.role || "viewer") === role.id ? "selected" : ""}>${esc(role.name)}</option>`).join("")}</select></label><div class="users-organization-field"><span>Organization</span><strong>${esc(data.organization?.name || "Current organization")}</strong><small>This account belongs to the current organization.</small></div><div id="user-project-access"></div>${self ? '<p class="users-mode-note">Another administrator must change your role or project access.</p>' : ""}<p class="users-form-error" role="alert"></p><footer><button class="button" type="button" data-user-cancel>Cancel</button><button class="button primary" type="submit">${user ? "Save changes" : "Create user"}</button></footer></form>`,
     trigger,
   );
+  globalThis.TomatoesReact.renderProjectAccess({
+    projects: data.projects || [],
+    selected:
+      user?.projects ||
+      ((data.projects || []).some((item) => item.id === currentWorkspaceProject)
+        ? [currentWorkspaceProject]
+        : []),
+    readOnly: self,
+  });
   const form = dialog.querySelector("form");
   form.querySelector("[data-user-cancel]").onclick = () => dialog.close();
   form.onsubmit = async (event) => {
@@ -193,14 +202,16 @@ function openUserEditor(data, user, host, trigger) {
       fullName: fields.get("fullName"),
       email: fields.get("email").trim(),
       role: self ? user.role : fields.get("role"),
-      projects: fields
-        .get("projects")
-        .split(",")
-        .map((p) => p.trim())
-        .filter(Boolean),
+      organizationId: data.organization.id,
+      projects: self ? user.projects : fields.getAll("projects"),
       disabled: user?.disabled || false,
       ...(!user ? { password: fields.get("password") } : {}),
     };
+    if (!body.projects.length) {
+      form.querySelector('[role="alert"]').textContent =
+        "Select at least one project, or choose All projects.";
+      return;
+    }
     await runUserMutation(dialog, form, async () => {
       await teamRequest(
         user ? `/api/users/${encodeURIComponent(user.username)}` : "/api/users",
