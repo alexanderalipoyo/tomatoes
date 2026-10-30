@@ -10,7 +10,7 @@ test("every local stylesheet, script, and icon in the page can be served", () =>
   const references = [...html.matchAll(/(?:src|href)="(\/[^"#]+)"/g)].map(
     (match) => match[1],
   );
-  assert.ok(references.length > 15);
+  assert.ok(references.includes("/js/react-app.js"));
   for (const route of references) {
     const file = getStaticFile(route);
     assert.ok(file, `Missing public route: ${route}`);

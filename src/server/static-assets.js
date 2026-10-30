@@ -6,6 +6,7 @@ function add(route, relative) {
 }
 add("/", "public/index.html");
 add("/index.html", "public/index.html");
+add("/js/react-app.js", ".tomatoes-data/client-build/react-app.js");
 for (const name of [
   "app",
   "notifications",

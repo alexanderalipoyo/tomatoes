@@ -126,14 +126,19 @@ if (typeof document !== "undefined") {
           '<p role="status">The preview could not load. Use Download PDF or Open full preview.</p>';
     }
   }
-  document.addEventListener("DOMContentLoaded", () => {
+  function initializePDFPreviewCleanup() {
     document.querySelector("#detail").addEventListener("close", () => {
       disposePDFPreview();
       disposePDFPreview = () => {};
       if (pdfPreviewURL) URL.revokeObjectURL(pdfPreviewURL);
       pdfPreviewURL = null;
     });
-  });
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", initializePDFPreviewCleanup, {
+      once: true,
+    });
+  else initializePDFPreviewCleanup();
   async function exportReportPDF(historyId = null, initialOptions = {}) {
     if (loading) return;
     const entry = historyEntries.find(

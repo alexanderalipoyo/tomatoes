@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { PROJECT_ROOT } = require("../src/server/config");
 const { files } = require("../src/server/static-assets");
+const { buildReactClient } = require("./build-react");
 async function build({
   output = path.join(PROJECT_ROOT, "dist"),
   env = process.env,
@@ -10,6 +11,7 @@ async function build({
   output = path.resolve(output);
   if (output !== path.join(PROJECT_ROOT, "dist"))
     throw new Error("Build output must be the project's dist directory.");
+  await buildReactClient();
   // Only remove the explicitly checked, generated output folder.
   await fs.rm(output, { recursive: true, force: true });
   await fs.mkdir(output, { recursive: true });

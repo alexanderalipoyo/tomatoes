@@ -1426,12 +1426,12 @@ body:has(#integration-setup[open]) {
 
 /* Dedicated authentication pages follow the workspace color mode. */
 body.auth-checking > .sidebar,
-body.auth-checking > .shell {
+body.auth-checking .shell {
   visibility: hidden;
 }
-body.auth-mode > .sidebar,
-body.auth-mode > .shell,
-body.auth-mode > .skip-link {
+body.auth-mode .sidebar,
+body.auth-mode .shell,
+body.auth-mode .skip-link {
   display: none;
 }
 #auth-screen {
@@ -1700,4 +1700,16 @@ body.auth-mode > .skip-link {
     font-size: 18px;
     gap: 6px;
   }
+}
+
+.auth-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.startup-error {
+  max-width: 42rem;
+  margin: 12vh auto;
+  padding: 2rem;
 }

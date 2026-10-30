@@ -147,9 +147,13 @@ if (typeof document !== "undefined") {
   globalThis.appendTestEvidence = appendTestEvidence;
   globalThis.appendReportSettings = appendReportSettings;
   globalThis.retryEvidenceMarkup = retryEvidenceMarkup;
-  document.addEventListener("DOMContentLoaded", () =>
+  const initializeEvidenceCleanup = () =>
     document
       .querySelector("#detail")
-      ?.addEventListener("close", releaseEvidenceURLs),
-  );
+      ?.addEventListener("close", releaseEvidenceURLs);
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", initializeEvidenceCleanup, {
+      once: true,
+    });
+  else initializeEvidenceCleanup();
 }

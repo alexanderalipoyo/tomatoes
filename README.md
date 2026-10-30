@@ -365,3 +365,13 @@ If assets pass but `/api/team/status` returns **503**, inspect the function's Ru
 The app uses `@vercel/analytics` through its plain JavaScript SDK. Enable **Web Analytics** in the Vercel project dashboard and redeploy. The build activates analytics only when `VERCEL=1` and `VERCEL_ENV=production`; local and preview builds keep it disabled. Vercel's public observability client configuration is forwarded to the SDK when provided. No API key is needed in the browser.
 
 Page views use names such as `/app/runs`, `/app/results`, and `/app/projects` so hash navigation appears in Analytics. Report identifiers, URL query parameters, and recovery tokens are excluded. No report contents, profile fields, or custom events are submitted by this integration. Content blockers may prevent analytics requests; dashboard operation does not depend on analytics loading.
+
+### React frontend
+
+The interface now boots through React and React DOM, with JSX compiled by esbuild. Run `npm start` or `npm run start:production` as before; their prestart step builds the client. `npm run build:production` validates the source, runs tests, and generates the Vercel assets in `dist/`. Directly running `node src/server/index.js` requires a prior `npm run build`.
+
+`src/client/react/main.jsx` mounts the component tree. Reusable components live in `src/client/react/components/`: sidebar, topbar, mobile navigation, dialogs, report containers, authentication, and the latest-run dashboard. Login and recovery forms use React state; run summaries, metrics, outcome charts, hotspots, spec health, timing, coverage, result rows, and history cards use React event handlers and escaped values. Startup failures render a reload screen.
+
+The existing report import, history actions, result filtering and pagination, settings, user administration, project, and integration controllers remain behind `src/client/react/runtime.js`. They load in their existing order after the shell commits and operate on stable feature hosts. `report-bridge.jsx` and the auth adapter connect those controllers to React roots. Keep React-controlled widget contents separate from controller-controlled hosts; do not rewrite their `innerHTML`. This is a compatibility migration, and the remaining feature presenters still use their original rendering code. Shared report models, API routes, PostgreSQL storage, authentication cookies, and Vercel routing remain unchanged.
+
+Edit JSX components and run `npm run build` to rebuild, then reload the page. Generated bundles in `.tomatoes-data/client-build/` and `dist/` are ignored; commit source, `package.json`, and the lockfile. No framework migration to Next.js or a database migration is required.

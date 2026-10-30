@@ -40,20 +40,6 @@ if (typeof document !== "undefined") {
       event.target.value = "";
     };
     document.querySelector("#show-trash").onclick = showHistoryTrash;
-    document
-      .querySelectorAll("[data-manage-history]")
-      .forEach(
-        (button) =>
-          (button.onclick = () =>
-            editHistoryEntry(button.dataset.manageHistory)),
-      );
-    document
-      .querySelectorAll("[data-trash-history]")
-      .forEach(
-        (button) =>
-          (button.onclick = () =>
-            trashHistoryEntry(button.dataset.trashHistory)),
-      );
   }
   async function backupHistory() {
     await investigationBusy(
@@ -344,6 +330,8 @@ if (typeof document !== "undefined") {
   }
   Object.assign(globalThis, {
     appendHistoryTools,
+    editHistoryEntry,
+    trashHistoryEntry,
     filteredTrendEntries,
     appendTrendFilters,
     appendFailureTrends,

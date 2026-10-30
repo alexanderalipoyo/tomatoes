@@ -176,178 +176,34 @@ function renderWorkspaceIdentity() {
 }
 function renderSummary() {
   renderWorkspaceIdentity();
-  const c = report.counts;
-  $("#run-summary").innerHTML =
-    `<div><span class="eyebrow">${isPreviousImport() ? "PREVIOUS IMPORT" : "LATEST IMPORTED RUN"}</span><h2>${badge(report.status)} ${esc(sourceName)}</h2><p class="report-workspace-brand">${workspaceLogoMarkup(report.metadata?.project || currentWorkspaceProject)}<span>${esc(workspaceBranding(report.metadata?.project || currentWorkspaceProject).name)}</span></p><p>Started ${esc(date(report.start))}<br />Finished ${esc(date(report.end))}</p></div><div class="run-summary-stats"><strong>${duration(report.duration)}</strong><span>Reported run duration</span><span>${report.specs.length} specs · ${report.failedSpecs} with failures</span></div>`;
-  const metrics = [
-    [
-      "Registered tests",
-      number(c.total),
-      `${report.specs.length} spec files`,
-      "runs",
-    ],
-    [
-      "Pass rate",
-      `${report.passRate.toFixed(1)}<small>%</small>`,
-      `${number(c.passed)} passed / ${number(c.total)} registered`,
-      "check",
-    ],
-    [
-      "Failed tests",
-      number(c.failed),
-      `${report.failedSpecs} affected specs`,
-      "failure",
-    ],
-    ["Passed tests", number(c.passed), "Completed successfully", "check"],
-    [
-      "Pending tests",
-      number(c.pending),
-      "Marked pending in the report",
-      "clock",
-    ],
-    [
-      "Skipped tests",
-      number(c.skipped),
-      "Marked skipped in the report",
-      "flake",
-    ],
-  ];
-  $("#metrics").innerHTML = metrics
-    .map(
-      ([label, value, note, glyph]) =>
-        `<article class="metric"><div class="metric-label">${icon(glyph)}${label}</div><div class="metric-value">${value}</div><div class="metric-bottom">${note}</div></article>`,
-    )
-    .join("");
-  $("#spec-summary").textContent = `${report.specs.length} specs · 1 run`;
-  $("#outcome-chart").innerHTML =
-    `<div class="outcome-track" role="img" aria-label="${esc([...outcomes, "unknown"].map((status) => `${c[status]} ${status}`).join(", "))}">${[
-      ...outcomes,
-      "unknown",
-    ]
-      .filter((status) => c[status])
-      .map(
-        (status) =>
-          `<div class="${status}" style="width:${(c[status] / c.total) * 100}%" title="${number(c[status])} ${status}"></div>`,
-      )
-      .join("")}</div>`;
-  $("#outcome-legend").innerHTML = [...outcomes, "unknown"]
-    .filter((status) => status !== "unknown" || c.unknown)
-    .map(
-      (status) =>
-        `<button class="outcome-button" data-outcome="${status}"><i class="${status}"></i>${status[0].toUpperCase() + status.slice(1)} <strong>${number(c[status])}</strong><span>${(c.total ? (c[status] / c.total) * 100 : 0).toFixed(1)}%</span></button>`,
-    )
-    .join("");
-  $("#outcome-legend")
-    .querySelectorAll("[data-outcome]")
-    .forEach(
-      (button) =>
-        (button.onclick = () => openTests("all", button.dataset.outcome)),
-    );
+  globalThis.TomatoesReact.renderRunSummary({
+    report,
+    sourceName,
+    previous: isPreviousImport(),
+    brand: workspaceBranding(
+      report.metadata?.project || currentWorkspaceProject,
+    ),
+    formatDate: date,
+    duration,
+  });
   renderDashboard();
-  $("#data-warnings").innerHTML = report.warnings
-    .map((warning) => `<p class="notice data-warning">${esc(warning)}</p>`)
-    .join("");
   if (typeof reportIdentityMarkup === "function") reportIdentityMarkup();
-  $("#failure-count").textContent = c.failed;
-  $("#report-footer").textContent = `${number(c.total)} tests · ${sourceName}`;
+  $("#failure-count").textContent = report.counts.failed;
+  $("#report-footer").textContent =
+    `${number(report.counts.total)} tests · ${sourceName}`;
   $("#source-label").textContent = report.metadata?.project
     ? `${report.metadata.project} / ${sourceName}`
     : sourceName;
 }
 function renderDashboard() {
   renderCustomizedDashboard();
-  const stats = ReportData.dashboardStats(report);
-  const c = report.counts;
-  const colors = {
-    passed: "#53af8d",
-    failed: "#dc7884",
-    pending: "#dfba6a",
-    skipped: "#8e9eaf",
-    unknown: "#a497bd",
-  };
-  let position = 0;
-  const stops = [...outcomes, "unknown"]
-    .filter((status) => c[status])
-    .map((status) => {
-      const start = position;
-      position += (c[status] / c.total) * 100;
-      return `${colors[status]} ${start}% ${position}%`;
-    });
-  $("#outcome-chart").innerHTML =
-    `<div class="outcome-donut" role="img" aria-label="${esc([...outcomes, "unknown"].map((status) => `${c[status]} ${status}`).join(", "))}" style="background:${stops.length ? `conic-gradient(${stops.join(",")})` : "#edf0f4"}"><div><strong>${report.passRate.toFixed(1)}<small>%</small></strong><span>tests passed</span></div></div>`;
-  const maxFailures = stats.failureSpecs[0]?.counts.failed || 1;
-  const topFailures = stats.failureSpecs.reduce(
-    (sum, spec) => sum + spec.counts.failed,
-    0,
-  );
-  $("#failure-hotspots").innerHTML =
-    stats.failureSpecs
-      .map(
-        (spec) =>
-          `<button class="hotspot-row" data-dashboard-spec="${spec.id}" data-status="failed" title="${esc(spec.file)}"><span class="hotspot-label"><span><strong>${esc(spec.name)}</strong><small>${esc(spec.file.split("/").slice(-3, -1).join(" / "))}</small></span><b>${spec.counts.failed}<small>failed</small></b></span><span class="hotspot-track"><i style="width:${(spec.counts.failed / maxFailures) * 100}%"></i></span></button>`,
-      )
-      .join("") +
-    (stats.failureSpecs.length
-      ? `<p class="widget-footnote">Top ${stats.failureSpecs.length} specs account for ${topFailures} of ${c.failed} failures (${((topFailures / c.failed) * 100).toFixed(1)}%).</p>`
-      : '<p class="widget-empty">No failed tests in this run.</p>');
-  $("#spec-health-count").textContent = `${report.specs.length} specs`;
-  $("#spec-health").innerHTML =
-    report.specs
-      .map(
-        (spec) =>
-          `<button class="spec-tile ${spec.status}" data-dashboard-spec="${spec.id}" data-status="all" aria-label="${esc(spec.file)}: ${spec.counts.failed} failed, ${spec.counts.passed} passed, ${spec.counts.pending} pending, ${spec.counts.skipped} skipped" title="${esc(spec.file)} — ${spec.counts.failed} failed / ${spec.counts.total} tests"></button>`,
-      )
-      .join("") || '<p class="widget-empty">No specs recorded.</p>';
-  const specLabels = {
-    failed: "With failures",
-    passed: "No failures",
-    pending: "Not executed",
-    skipped: "Skipped only",
-    unknown: "Unknown",
-    empty: "Empty",
-  };
-  $("#spec-health-legend").innerHTML = Object.entries(stats.specGroups)
-    .filter(([, count]) => count)
-    .map(
-      ([status, count]) =>
-        `<span><i class="${status}"></i>${specLabels[status]} <strong>${count}</strong></span>`,
-    )
-    .join("");
-  $("#slow-tests").innerHTML =
-    stats.slowestTests
-      .map(
-        (test) =>
-          `<button class="slow-test-row" data-dashboard-test="${test.id}" title="${esc(test.fullTitle)}"><span><strong>${esc(test.title)}</strong><small>${esc(test.file.split("/").slice(-2).join(" / "))}</small></span><b>${duration(test.duration)}</b></button>`,
-      )
-      .join("") || '<p class="widget-empty">No test durations recorded.</p>';
-  $("#execution-coverage").innerHTML =
-    `<div class="coverage-value"><strong>${stats.executionRate.toFixed(1)}<small>%</small></strong><span>${number(stats.executed)} of ${number(c.total)} tests executed</span></div><div class="coverage-track" role="img" aria-label="${stats.executionRate.toFixed(1)}% executed"><i style="width:${stats.executionRate}%"></i></div><div class="coverage-details"><button data-coverage-status="pending"><strong>${number(c.pending)}</strong><span>Pending</span></button><button data-coverage-status="skipped"><strong>${number(c.skipped)}</strong><span>Skipped</span></button>${c.unknown ? `<button data-coverage-status="unknown"><strong>${c.unknown}</strong><span>Unknown</span></button>` : ""}</div>`;
-  $("#run-timing").innerHTML =
-    `<dl class="timing-list"><div><dt>Reported run duration</dt><dd>${duration(report.duration)}</dd></div><div><dt>Cumulative test time</dt><dd>${duration(stats.totalTestTime)}</dd></div><div><dt>Median executed test</dt><dd>${duration(stats.medianDuration)}</dd></div></dl><p class="widget-footnote">Test time sums recorded durations and can differ from reported run duration.</p>`;
-  $("#dashboard-widgets")
-    .querySelectorAll("[data-dashboard-spec]")
-    .forEach(
-      (button) =>
-        (button.onclick = () =>
-          openTests(button.dataset.dashboardSpec, button.dataset.status)),
-    );
-  $("#dashboard-widgets")
-    .querySelectorAll("[data-dashboard-test]")
-    .forEach(
-      (button) =>
-        (button.onclick = () => showTest(Number(button.dataset.dashboardTest))),
-    );
-  $("#execution-coverage")
-    .querySelectorAll("[data-coverage-status]")
-    .forEach(
-      (button) =>
-        (button.onclick = () =>
-          openTests("all", button.dataset.coverageStatus)),
-    );
-  $("#view-not-executed").onclick = () => openTests("all", "pending");
-  $("#dashboard-widgets")
-    .querySelectorAll("[data-icon]")
-    .forEach((element) => (element.innerHTML = icon(element.dataset.icon)));
+  globalThis.TomatoesReact.renderDashboard({
+    report,
+    stats: ReportData.dashboardStats(report),
+    openTests,
+    showTest,
+    duration,
+  });
 }
 function renderResults() {
   if (!report) return;
@@ -383,40 +239,13 @@ function renderResults() {
   $("#specs-view").disabled = view === "failures";
   $("#status").disabled = view === "failures";
   $("#status").value = status;
-  $("#results-head").innerHTML = isTests
-    ? "<tr><th>Test / spec</th><th>Status</th><th>Duration</th><th>Details</th></tr>"
-    : "<tr><th>Spec file</th><th>Outcomes</th><th>Test time</th><th>Details</th></tr>";
-  $("#results-body").innerHTML =
-    items
-      .slice((page - 1) * pageSize, page * pageSize)
-      .map((item) =>
-        isTests
-          ? `<tr><td data-label="Test"><button class="result-link" data-test="${item.id}">${esc(item.title)}</button><small>${esc(item.file)}</small>${item.error ? `<p class="error-preview">${esc(item.error.slice(0, 180))}</p>` : ""}</td><td data-label="Status">${badge(item.status)}</td><td class="duration-cell" data-label="Duration">${duration(item.duration)}</td><td data-label="Details"><button class="button" data-test="${item.id}">Inspect</button></td></tr>`
-          : `<tr><td data-label="Spec"><button class="result-link" data-spec="${item.id}">${esc(item.name)}</button><small>${esc(item.file)}</small><small>${number(item.counts.total)} tests</small></td><td data-label="Outcomes"><div class="spec-outcomes">${outcomes
-              .filter((status) => item.counts[status])
-              .map(
-                (status) =>
-                  `<span class="status-badge ${status}" title="${status}">${item.counts[status]} ${status}</span>`,
-              )
-              .join(
-                "",
-              )}${item.counts.unknown ? badge("unknown") : ""}${!item.counts.total ? badge("empty") : ""}</div></td><td class="duration-cell" data-label="Duration">${duration(item.duration)}</td><td data-label="Details"><button class="button" data-spec="${item.id}">View tests</button></td></tr>`,
-      )
-      .join("") ||
-    '<tr><td colspan="4" class="empty">No results match these filters.</td></tr>';
-  $("#results-body")
-    .querySelectorAll("[data-test]")
-    .forEach(
-      (button) =>
-        (button.onclick = () => showTest(Number(button.dataset.test))),
-    );
-  $("#results-body")
-    .querySelectorAll("[data-spec]")
-    .forEach(
-      (button) =>
-        (button.onclick = () =>
-          openTests(button.dataset.spec, $("#status").value)),
-    );
+  globalThis.TomatoesReact.renderResults({
+    items: items.slice((page - 1) * pageSize, page * pageSize),
+    isTests,
+    duration,
+    showTest,
+    openSpec: (id) => openTests(id, $("#status").value),
+  });
   $("#showing").textContent = items.length
     ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, items.length)} of ${number(items.length)} ${isTests ? "tests" : "specs"}`
     : "Showing 0 results";
@@ -642,30 +471,19 @@ function renderHistory() {
   $("#history-count").textContent = historyEntries.length;
   $("#history-total").textContent =
     `${historyEntries.length} saved ${historyEntries.length === 1 ? "report" : "reports"}`;
-  $("#history-list").innerHTML =
-    historyEntries
-      .map(
-        (entry, index) =>
-          `<article class="history-card ${entry.id === activeHistoryId ? "is-current" : ""}"><div class="history-card-title"><div>${badge(entry.status)}${index === 0 ? '<span class="history-tag">Latest import</span>' : ""}${entry.id === activeHistoryId ? '<span class="history-tag current-tag">Viewing</span>' : ""}<h3>${esc(entry.label || entry.name)}</h3>${entry.label ? `<p>Source: ${esc(entry.name)}</p>` : ""}${entry.notes ? `<p class="history-note">${esc(entry.notes)}</p>` : ""}<p>${entry.source === "bundled" ? "Bundled report saved" : "Imported"} ${esc(date(new Date(entry.lastImportedAt).toISOString()))}</p><p>Run started ${esc(date(entry.start))}</p></div><div class="history-actions"><button class="button" data-manage-history="${esc(entry.id)}">Edit name &amp; notes</button><button class="button" data-trash-history="${esc(entry.id)}">Move to trash</button><button class="button" data-export-pdf="${esc(entry.id)}" aria-label="Export PDF for ${esc(entry.name)}">Export PDF</button><button class="button" data-copy-report-link="${esc(entry.id)}" aria-label="Copy link for ${esc(entry.label || entry.name)}">Copy link</button><a class="button ${entry.id === activeHistoryId ? "" : "primary"}" href="${esc(reportHref(entry.id))}" data-open-history="${esc(entry.id)}">Open dashboard</a></div></div><dl class="history-stats"><div><dt>Tests</dt><dd>${number(entry.counts.total)}</dd></div><div><dt>Passed</dt><dd>${number(entry.counts.passed)}</dd></div><div><dt>Failed</dt><dd class="fail-text">${number(entry.counts.failed)}</dd></div><div><dt>Pending / skipped</dt><dd>${number(entry.counts.pending)} / ${number(entry.counts.skipped)}</dd></div><div><dt>Pass rate</dt><dd>${entry.passRate.toFixed(1)}%</dd></div><div><dt>Duration</dt><dd>${duration(entry.duration)}</dd></div></dl></article>`,
-      )
-      .join("") ||
-    '<div class="history-empty"><h3>No saved imports yet</h3><p>Import a valid Mochawesome JSON report to start your history.</p></div>';
+  globalThis.TomatoesReact.renderHistory({
+    entries: historyEntries,
+    activeId: activeHistoryId,
+    formatDate: date,
+    duration,
+    href: reportHref,
+    edit: editHistoryEntry,
+    trash: trashHistoryEntry,
+    exportPDF: exportReportPDF,
+    copyLink: copyHistoryReportLink,
+    openLink: openHistoryReportLink,
+  });
   appendHistoryTools();
-  $("#history-list")
-    .querySelectorAll("[data-export-pdf]")
-    .forEach((button) => {
-      button.onclick = () => exportReportPDF(button.dataset.exportPdf);
-    });
-  $("#history-list")
-    .querySelectorAll("[data-open-history]")
-    .forEach((link) => link.addEventListener("click", openHistoryReportLink));
-  $("#history-list")
-    .querySelectorAll("[data-copy-report-link]")
-    .forEach(
-      (button) =>
-        (button.onclick = () =>
-          copyHistoryReportLink(button.dataset.copyReportLink, button)),
-    );
 }
 function paintProgress(percent, label) {
   $("#render-progress").value = percent;
