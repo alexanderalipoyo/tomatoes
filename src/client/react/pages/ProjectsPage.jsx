@@ -232,7 +232,7 @@ export function ProjectsPage({
   return (
     <section className="projects-page" aria-label="Workspace projects">
       {organization && (
-        <p className="insight-source">
+        <p className="projects-organization-context">
           Organization: <strong>{organization.name}</strong>
         </p>
       )}

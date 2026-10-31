@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 export function WorkspaceMenu() {
   return (
     <section
@@ -71,11 +72,12 @@ export function WorkspaceMenu() {
         </a>
       </div>
       <a
-        className="workspace-menu-create"
+        className="workspace-menu-projects"
         href="#projects"
         data-access-view="projects"
         id="workspace-menu-projects"
       >
+        <Icon name="folder" />
         Projects
       </a>
       <div className="workspace-menu-account">

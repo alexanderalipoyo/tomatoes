@@ -1883,3 +1883,170 @@ select.project-picker {
   width: 100%;
   max-width: 480px;
 }
+
+/* Keep workspace identity and project controls aligned across roles and sizes. */
+.sidebar .workspace {
+  min-height: 60px;
+}
+.workspace-context .sidebar .workspace {
+  margin-bottom: 0;
+}
+.workspace .org-avatar {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+}
+.workspace-identity-text {
+  flex: 1;
+  min-width: 0;
+}
+.workspace-identity-text > span,
+.workspace-identity-text > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-menu-heading strong,
+.workspace-menu-heading > span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+#workspace-menu .workspace-menu-close {
+  flex: 0 0 32px;
+}
+.workspace-menu-projects {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin: 8px 16px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  text-decoration: none;
+}
+.workspace-menu-projects > svg {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+}
+.projects-organization-context {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.projects-organization-context strong {
+  color: var(--theme-text, #283641);
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.projects-toolbar {
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+.projects-search {
+  min-height: 44px;
+  padding: 0 12px;
+}
+.projects-search input {
+  flex: 1;
+  height: 42px;
+  box-shadow: none;
+}
+#create-project {
+  min-height: 44px;
+}
+.project-grid {
+  align-items: stretch;
+  gap: 20px;
+}
+.project-card {
+  display: flex;
+  flex-direction: column;
+}
+.project-card > header {
+  min-height: 142px;
+}
+.project-card-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
+}
+.project-card-title {
+  grid-column: 1;
+  line-height: 1.4;
+}
+.project-current-label {
+  grid-column: 1;
+  justify-self: start;
+}
+.project-card-heading .project-rename-button {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  min-height: 34px;
+}
+.project-branch-list {
+  flex: 1;
+}
+.project-card > footer {
+  justify-content: flex-start;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+}
+.project-card > footer .button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+.project-card > footer .project-open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  margin-left: auto;
+  line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .projects-toolbar {
+    gap: 10px;
+  }
+  .projects-toolbar > #create-project {
+    width: 100%;
+  }
+  .project-card > header {
+    min-height: 0;
+    padding: 18px;
+  }
+  .project-card > footer .button {
+    flex: 1 1 auto;
+    min-height: 42px;
+  }
+  .project-card > footer .project-open {
+    flex-basis: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+  .project-card-title {
+    font-size: 16px;
+  }
+  .project-branch {
+    gap: 10px;
+  }
+}
+
+@supports (grid-template-rows: subgrid) {
+  .project-card {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 3;
+    row-gap: 0;
+  }
+  .project-card > header {
+    min-height: 0;
+  }
+}
