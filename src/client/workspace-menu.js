@@ -43,6 +43,7 @@
   window.addEventListener("resize", close);
   window.addEventListener("hashchange", close);
   document.querySelector("#workspace-menu-current").onclick = close;
+  document.querySelector("#workspace-menu-projects").onclick = close;
   menu.querySelectorAll("[data-workspace-menu-link]").forEach((link) => {
     link.onclick = (event) => {
       event.preventDefault();

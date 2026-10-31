@@ -62,6 +62,7 @@ export function WorkspaceMenu() {
           className="workspace-menu-create"
           href="?settingsTab=general#workspace-settings"
           data-workspace-menu-link
+          data-access-view="workspace-settings"
         >
           <span className="workspace-menu-plus" aria-hidden="true">
             {"+"}
@@ -69,6 +70,14 @@ export function WorkspaceMenu() {
           {"Organization settings"}
         </a>
       </div>
+      <a
+        className="workspace-menu-create"
+        href="#projects"
+        data-access-view="projects"
+        id="workspace-menu-projects"
+      >
+        Projects
+      </a>
       <div className="workspace-menu-account">
         <h2>{"YOUR ACCOUNT"}</h2>
         <div className="workspace-menu-signed-in">
@@ -82,7 +91,11 @@ export function WorkspaceMenu() {
             <span data-workspace-user>{"Alex Ali"}</span>
           </span>
         </div>
-        <button type="button" id="workspace-menu-profile">
+        <button
+          type="button"
+          id="workspace-menu-profile"
+          data-access-view="profile"
+        >
           {" Manage profile "}
         </button>
         <button type="button" id="workspace-menu-sign-out" data-sign-out>

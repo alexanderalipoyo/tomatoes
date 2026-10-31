@@ -2647,7 +2647,50 @@ test("organization access policies enforce the supplied matrix and refresh live 
     true;
   draft.viewer["projects.view-projects-within-the-current-organization"] = true;
   draft.viewer["projects.archive-runs-with-confirmation"] = true;
+  for (const role of ["editor", "viewer"])
+    for (const id of [
+      "projects.view-projects-within-the-current-organization",
+      "organization-project-navigation.display-dynamic-organization-identity",
+      "organization-project-navigation.select-permitted-projects",
+    ])
+      draft[role][id] = true;
   assert.equal((await save(draft, 1)).status, 200);
+  for (const headers of [editor, viewer]) {
+    const fresh = (await f.request("/api/team/status", { headers })).body;
+    assert.equal(fresh.organization.name, "Renamed organization");
+    assert.equal(
+      fresh.permissions[
+        "organization-project-navigation.display-dynamic-organization-identity"
+      ],
+      true,
+    );
+    assert.equal(
+      fresh.permissions[
+        "organization-project-navigation.select-permitted-projects"
+      ],
+      true,
+    );
+    assert.equal(
+      fresh.permissions[
+        "projects.view-projects-within-the-current-organization"
+      ],
+      true,
+    );
+    assert.deepEqual(
+      fresh.accessibleProjects.map((p) => p.id),
+      ["web"],
+    );
+    assert.deepEqual(
+      (await f.request("/api/projects", { headers })).body.projects.map(
+        (p) => p.id,
+      ),
+      ["web"],
+    );
+    assert.equal(
+      (await f.request("/api/role-access", { headers })).status,
+      403,
+    );
+  }
   assert.equal((await upload("/api/history-imports", editor)).status, 201);
   assert.equal((await upload("/api/runs", editor)).status, 403);
   assert.equal(

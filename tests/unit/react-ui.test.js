@@ -976,3 +976,26 @@ test("React Users hides organization administration from project-scoped Admins",
     await state.cleanup();
   }
 });
+
+test("workspace menu exposes a direct permission-gated Projects route independently of profile", () => {
+  const { WorkspaceMenu } = loadComponent("components/WorkspaceMenu.jsx");
+  const markup = renderToStaticMarkup(React.createElement(WorkspaceMenu));
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  assert.equal(
+    host.querySelector("#workspace-menu-projects").getAttribute("href"),
+    "#projects",
+  );
+  assert.equal(
+    host.querySelector("#workspace-menu-projects").dataset.accessView,
+    "projects",
+  );
+  assert.equal(
+    host.querySelector("#workspace-menu-profile").dataset.accessView,
+    "profile",
+  );
+  assert.equal(
+    host.querySelector("[data-workspace-menu-link]").dataset.accessView,
+    "workspace-settings",
+  );
+});

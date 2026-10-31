@@ -10,6 +10,8 @@ const source = fs.readFileSync(
 test("authentication requests have a deadline and preserve server validation messages", async () => {
   let call;
   const context = {
+    window: { addEventListener() {} },
+    document: { addEventListener() {} },
     location: { protocol: "https:", hostname: "reports.example.com" },
     AbortSignal,
     teamRequest: async (route, options) => {
@@ -38,6 +40,8 @@ test("authentication requests have a deadline and preserve server validation mes
 });
 test("timed-out authentication explains how to recover from an unconfirmed password change", async () => {
   const context = {
+    window: { addEventListener() {} },
+    document: { addEventListener() {} },
     location: { protocol: "https:", hostname: "reports.example.com" },
     AbortSignal,
     teamRequest: async () => {
@@ -54,6 +58,8 @@ test("timed-out authentication explains how to recover from an unconfirmed passw
 test("authentication refuses remote HTTP while allowing HTTPS and loopback development", async () => {
   let calls = 0;
   const context = {
+    window: { addEventListener() {} },
+    document: { addEventListener() {} },
     location: { protocol: "http:", hostname: "reports.example.com" },
     AbortSignal,
     teamRequest: async () => {

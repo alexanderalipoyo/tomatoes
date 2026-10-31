@@ -18,6 +18,7 @@ export function ProjectsPage({
   can,
   branding,
   currentProject,
+  organization,
   reportLink,
   openReport,
   onImport,
@@ -230,6 +231,11 @@ export function ProjectsPage({
     );
   return (
     <section className="projects-page" aria-label="Workspace projects">
+      {organization && (
+        <p className="insight-source">
+          Organization: <strong>{organization.name}</strong>
+        </p>
+      )}
       <div className="projects-toolbar">
         <div className="projects-search">
           <Icon name="search" />

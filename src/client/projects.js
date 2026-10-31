@@ -24,6 +24,8 @@ function renderProjects(host) {
     can: hasAccess,
     branding: workspaceBranding,
     currentProject: currentWorkspaceProject,
+    organization:
+      typeof authStatus !== "undefined" ? authStatus?.organization : null,
     reportLink: projectReportLink,
     openReport: openHistoryReportLink,
     onImport: importToWorkspaceProject,

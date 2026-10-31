@@ -38,6 +38,7 @@ function authRequiresLogin() {
 async function initializeAuth() {
   try {
     authStatus = await teamRequest("/api/team/status", {
+      cache: "no-store",
       signal: AbortSignal.timeout(10000),
     });
   } catch {
@@ -55,6 +56,7 @@ async function initializeAuth() {
   if (typeof invalidateOutOfScopeReports === "function")
     invalidateOutOfScopeReports();
   if (typeof applyFeatureAccess === "function") applyFeatureAccess();
+  if (typeof renderWorkspaceIdentity === "function") renderWorkspaceIdentity();
   syncLogoutControl();
   document.body.classList.remove("auth-checking");
   return authStatus;
@@ -153,3 +155,48 @@ async function submitAuth(fields, route, version) {
     login.passwordChangeRecommended ? "warning" : "success",
   );
 }
+
+// Revisit the server policy when returning to a tab without polling on free-tier hosting.
+let accessRefresh = null;
+let lastAccessRefresh = 0;
+function sessionAccessSignature() {
+  return JSON.stringify([
+    authStatus?.authenticated,
+    authStatus?.user,
+    authStatus?.organization,
+    authStatus?.permissions,
+    authStatus?.accessibleProjects,
+  ]);
+}
+async function refreshSessionAccess() {
+  if (
+    !authStatus?.enabled ||
+    authRequiresLogin() ||
+    document.hidden ||
+    (typeof loading !== "undefined" && loading)
+  )
+    return;
+  if (accessRefresh) return accessRefresh;
+  if (Date.now() - lastAccessRefresh < 5000) return;
+  lastAccessRefresh = Date.now();
+  const before = sessionAccessSignature();
+  accessRefresh = (async () => {
+    await initializeAuth();
+    if (authRequiresLogin()) {
+      renderAuthScreen();
+      return;
+    }
+    if (before !== sessionAccessSignature()) {
+      const current = location.hash.slice(1) || "runs";
+      if (!canAccessView(current) || current === "projects") navigate();
+    }
+  })().finally(() => {
+    accessRefresh = null;
+  });
+  return accessRefresh;
+}
+window.addEventListener("focus", () => void refreshSessionAccess());
+document.addEventListener(
+  "visibilitychange",
+  () => void refreshSessionAccess(),
+);
