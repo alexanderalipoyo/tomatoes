@@ -443,3 +443,7 @@ Run `npm run db:verify:production` against the production configuration before d
 ### Android APK
 
 Build installable Android variants with `build-android-local.cmd` and `build-android-production.cmd`, or `npm run android:build:local` / `npm run android:build:production`. APKs are written to `artifacts/android/`. The corresponding `android:run:local` and `android:run:production` commands install and launch on the Pixel 10 Pro AVD. The app uses a browser-backed Android shell connected to the existing server; production full-screen verification requires deploying the generated Digital Asset Links file. See [Android builds, emulator and signing](docs/android.md) before distributing a release, especially the signing-key backup instructions.
+
+## iOS app
+
+See [iOS setup and build commands](docs/ios.md) for Capacitor sync, local/production Simulator builds, requested device shortcuts, and signed archive/IPA export. Native compilation requires a Mac with Xcode; Windows supports preparing and syncing the project.

@@ -23,3 +23,14 @@ android/local.properties
 artifacts/android/
 *.p12
 *.pfx
+
+# iOS generated assets and signing output.
+artifacts/ios/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+ios/App/CapApp-SPM/.build/
+*.mobileprovision
+*.ipa
+*.xcarchive/

@@ -6,3 +6,8 @@ android/.gradle/
 android/**/build/
 android/gradlew
 android/gradlew.bat
+
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/CapApp-SPM/.build/
+artifacts/ios/
