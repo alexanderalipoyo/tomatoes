@@ -63,8 +63,7 @@ if (typeof document !== "undefined") {
         pdf.destroy();
         return;
       }
-      host.innerHTML =
-        '<div class="pdf-page-toolbar"><button class="button" id="pdf-previous-page" disabled>Previous page</button><span id="pdf-page-number" role="status"></span><button class="button" id="pdf-next-page">Next page</button></div><div class="pdf-page-canvas"><canvas aria-label="PDF report page preview" role="img"></canvas></div>';
+      globalThis.TomatoesReact.renderPDFCanvas(host);
       let pageNumber = 1;
       const previous = host.querySelector("#pdf-previous-page"),
         next = host.querySelector("#pdf-next-page"),
@@ -122,8 +121,10 @@ if (typeof document !== "undefined") {
       await renderPage();
     } catch (error) {
       if (!disposed && host.isConnected)
-        host.innerHTML =
-          '<p role="status">The preview could not load. Use Download PDF or Open full preview.</p>';
+        globalThis.TomatoesReact.renderMessage(host, {
+          message:
+            "The preview could not load. Use Download PDF or Open full preview.",
+        });
     }
   }
   function initializePDFPreviewCleanup() {
@@ -162,15 +163,14 @@ if (typeof document !== "undefined") {
       );
       if (!optionReport) return;
     }
-    document.querySelector("#detail-content").innerHTML =
-      `<div class="dialog-heading"><h2 id="detail-title">Export PDF report</h2><p>${esc(entry?.label || entry?.name || sourceName)}</p></div><form class="pdf-options preference-form" id="pdf-options"><label>Report detail<select id="pdf-mode"><option value="summary">Brief summary</option><option value="detailed" selected>Detailed report with failed tests</option></select></label><label>Failure search<input id="pdf-failure-search" type="search" maxlength="180" placeholder="Test title, path, or error message"/></label><label>Failure spec path<input id="pdf-failure-spec" list="pdf-spec-options" placeholder="All specs (or enter an exact spec path)"/><datalist id="pdf-spec-options">${
-        optionReport
-          ? optionReport.specs
-              .filter((spec) => spec.counts.failed)
-              .map((spec) => `<option value="${esc(spec.file)}"></option>`)
-              .join("")
-          : ""
-      }</datalist></label><p class="widget-footnote">Overview totals always cover the full run. Filters apply to failure patterns and failed-test details. The summary includes top specs and patterns; detailed reports add up to 200 matching failed tests.</p><button class="button primary" type="submit">Preview PDF</button></form>`;
+    globalThis.TomatoesReact.renderPDFOptions(
+      document.querySelector("#detail-content"),
+      {
+        name: entry?.label || entry?.name || sourceName,
+        report: optionReport,
+        initialOptions,
+      },
+    );
     document.querySelector("#pdf-mode").value =
       initialOptions.mode || "detailed";
     document.querySelector("#pdf-failure-search").value =
@@ -262,8 +262,15 @@ if (typeof document !== "undefined") {
         }
         const blob = doc.output("blob");
         pdfPreviewURL = URL.createObjectURL(blob);
-        document.querySelector("#detail-content").innerHTML =
-          `<div class="dialog-heading"><h2 id="detail-title">PDF preview</h2><p>${esc(outputName)} · ${doc.getNumberOfPages()} pages · ${(blob.size / 1024).toFixed(0)} KB</p></div><div class="pdf-preview-actions"><button class="button primary" id="download-preview-pdf">Download PDF</button><a class="button" href="${pdfPreviewURL}" target="_blank" rel="noopener">Open full preview</a><button class="button" id="change-pdf-options">Change options</button></div><p class="widget-footnote">If your browser cannot show the embedded preview, use Open full preview or Download PDF.</p><div id="pdf-page-preview" aria-label="PDF page preview"><p role="status">Loading PDF preview…</p></div>`;
+        globalThis.TomatoesReact.renderPDFPreview(
+          document.querySelector("#detail-content"),
+          {
+            outputName,
+            pageCount: doc.getNumberOfPages(),
+            size: blob.size / 1024,
+            url: pdfPreviewURL,
+          },
+        );
         document.querySelector("#download-preview-pdf").onclick = async () => {
           const button = document.querySelector("#download-preview-pdf");
           button.disabled = true;

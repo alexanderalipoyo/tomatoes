@@ -65,103 +65,19 @@ test("UI role restrictions hide actions and block captured clicks while preservi
     doc.getElementById("users-add").classList.contains("access-restricted"),
   );
 });
-test("Admin role matrix preserves edits across search and saves with revision protection", async (t) => {
-  const { dom, context, notices } = fixture(t, "admin"),
-    calls = [];
-  context.view = "role-access";
-  context.structuredClone = structuredClone;
-  context.confirm = () => true;
-  context.esc = (value) =>
-    String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll('"', "&quot;");
+test("role access route mounts its React page with authenticated services", (t) => {
+  const { dom, context } = fixture(t, "admin");
+  let mounted;
+  context.teamRequest = async () => {};
   context.initializeAuth = async () => {};
-  context.teamRequest = async (route, options) => {
-    calls.push({ route, ...options });
-    return options
-      ? { revision: 5 }
-      : {
-          features: Policy.features,
-          permissions: {
-            editor: Policy.configured({}, "editor"),
-            viewer: Policy.configured({}, "viewer"),
-          },
-          revision: 4,
-          organization: { name: "Dynamic organization" },
-        };
+  context.TomatoesReact = {
+    renderRoleAccess: (host, props) => (mounted = { host, props }),
   };
   vm.runInNewContext(source("role-access"), context);
   const host = dom.window.document.querySelector("main");
-  await context.renderRoleAccess(host);
-  assert.equal(
-    host.querySelectorAll('[data-role="admin"]:checked:disabled').length,
-    136,
-  );
-  assert.ok(
-    host.querySelector(
-      '[data-role="editor"][data-permission="users.add-users"]',
-    ).disabled,
-  );
-  const key = "settings-appearance.save-appearance-preferences",
-    input = host.querySelector(
-      `[data-role="editor"][data-permission="${key}"]`,
-    );
-  input.checked = false;
-  input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-  const search = host.querySelector("#role-access-search");
-  search.value = "appearance";
-  search.dispatchEvent(new dom.window.Event("input"));
-  assert.equal(
-    host.querySelector(`[data-role="editor"][data-permission="${key}"]`)
-      .checked,
-    false,
-  );
-  const page = host.querySelector("#role-access-page"),
-    kind = host.querySelector("#role-access-kind");
-  page.value = "Users";
-  page.dispatchEvent(new dom.window.Event("change"));
-  assert.match(
-    host.querySelector("#role-access-rows").textContent,
-    /No matching features/,
-  );
-  search.value = "";
-  search.dispatchEvent(new dom.window.Event("input"));
-  kind.value = "editable";
-  kind.dispatchEvent(new dom.window.Event("change"));
-  assert.equal(host.querySelectorAll('[data-role="editor"]').length, 3);
-  assert.match(
-    host.querySelector("#role-access-count").textContent,
-    /3 of 136/,
-  );
-  kind.value = "protected";
-  kind.dispatchEvent(new dom.window.Event("change"));
-  assert.equal(
-    host.querySelectorAll('[data-role="editor"]:disabled').length,
-    7,
-  );
-  host.querySelector("#role-access-clear").click();
-  assert.equal(host.querySelectorAll('[data-role="editor"]').length, 136);
-  assert.equal(
-    host.querySelector(`[data-role="editor"][data-permission="${key}"]`)
-      .checked,
-    false,
-  );
-  kind.value = "changed";
-  kind.dispatchEvent(new dom.window.Event("change"));
-  assert.equal(host.querySelectorAll('[data-role="editor"]').length, 1);
-  assert.match(
-    host.querySelector("#role-access-changes").textContent,
-    /1 unsaved change/,
-  );
-  await host.querySelector("form").onsubmit({ preventDefault() {} });
-  const body = JSON.parse(calls.at(-1).body);
-  assert.equal(host.querySelector("#role-access-save").disabled, true);
-  assert.match(
-    host.querySelector("#role-access-count").textContent,
-    /0 of 136/,
-  );
-  assert.equal(body.revision, 4);
-  assert.equal(body.permissions.editor[key], false);
-  assert.equal(notices.at(-1), "Role permissions saved successfully.");
+  context.renderRoleAccess(host);
+  assert.equal(mounted.host, host);
+  assert.equal(mounted.props.request, context.teamRequest);
+  assert.equal(mounted.props.onRefresh, context.initializeAuth);
+  assert.equal(mounted.props.onToast, context.showToast);
 });

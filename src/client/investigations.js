@@ -91,14 +91,11 @@ function renderComparison(alt) {
     comparisonSelection.baseline =
       entries.find((entry) => entry.id !== comparisonSelection.target)?.id ||
       "";
-  const options = (selected) =>
-    entries
-      .map(
-        (entry) =>
-          `<option value="${esc(entry.id)}" ${entry.id === selected ? "selected" : ""}>${esc(entry.metadata?.project || entry.name)}${entry.metadata?.environment ? " / " + esc(entry.metadata.environment) : ""} · ${esc(date(entry.start))} · ${entry.counts.total} tests</option>`,
-      )
-      .join("");
-  alt.innerHTML = `<article class="insight-card"><form id="comparison-form"><div class="comparison-selectors"><label>Baseline report<select id="comparison-baseline" required ${entries.length < 2 ? "disabled" : ""}>${options(comparisonSelection.baseline)}</select><small>The reference run</small></label><button type="button" class="button swap-comparison" id="swap-comparison" aria-label="Swap baseline and target" ${entries.length < 2 ? "disabled" : ""}>↔</button><label>Target report<select id="comparison-target" required ${entries.length < 2 ? "disabled" : ""}>${options(comparisonSelection.target)}</select><small>The run to investigate</small></label><button class="button primary" type="submit" ${entries.length < 2 ? "disabled" : ""}>Compare reports</button></div><p id="comparison-error" class="fail-text" role="alert"></p></form><p class="widget-footnote">Tests match by exact spec path and full title. Duplicate identities are excluded. Code, data, and environment differences can affect results.</p></article>${entries.length < 2 ? '<div class="history-empty"><h3>Import another report to compare runs</h3><p>Two distinct saved reports are required.</p><a class="button" href="#history">Open history</a></div>' : ""}<div id="comparison-output"></div>`;
+  globalThis.TomatoesReact.renderComparisonForm(alt, {
+    entries,
+    selection: comparisonSelection,
+    formatDate: date,
+  });
   function updateSelection() {
     comparisonSelection = {
       baseline: $("#comparison-baseline").value,
@@ -166,10 +163,10 @@ function renderComparisonOutput() {
   const output = $("#comparison-output");
   if (!output) return;
   if (!comparison) {
-    output.innerHTML =
-      historyEntries.length > 1
-        ? '<div class="history-empty"><h3>Choose your baseline and target</h3><p>Compare to see regressions, fixes, missing tests, and duration changes.</p></div>'
-        : "";
+    globalThis.TomatoesReact.renderComparisonOutput(output, {
+      comparison: null,
+      historyCount: historyEntries.length,
+    });
     return;
   }
   const result = comparison.result;
@@ -190,8 +187,9 @@ function renderComparisonOutput() {
       hasAccess(accessFor[key]),
     );
   if (!comparisonFilter) {
-    output.innerHTML =
-      '<p class="notice">Your role cannot view these comparison categories.</p>';
+    globalThis.TomatoesReact.renderMessage(output, {
+      message: "Your role cannot view these comparison categories.",
+    });
     return;
   }
   const rows = result[comparisonFilter].filter((row) =>
@@ -201,26 +199,17 @@ function renderComparisonOutput() {
   );
   const pages = Math.max(1, Math.ceil(rows.length / 25));
   comparisonPage = Math.min(Math.max(1, comparisonPage), pages);
-  output.innerHTML = `<div class="insight-metrics">${insightMetric("New regressions", result.regressions.length, "Passed → failed")}${insightMetric("Fixed tests", result.fixed.length, "Failed → passed")}${insightMetric("Added tests", result.added.length, "Present only in the target")}${insightMetric("Missing tests", result.missing.length, "Present only in the baseline")}</div><article class="insight-card comparison-context"><div><strong>${result.matched} matched tests</strong><p>${result.ambiguous} ambiguous identities excluded</p></div><div><strong>${result.passRateDelta > 0 ? "+" : ""}${result.passRateDelta.toFixed(1)} pp</strong><p>Registered-test pass rate change</p></div><div><strong>${signedDuration(result.durationDelta)}</strong><p>Reported run duration change</p></div><button class="button" id="download-comparison">Download summary</button></article><div class="comparison-tabs" role="group" aria-label="Comparison category">${Object.entries(
-    comparisonLabels,
-  )
-    .map(
-      ([key, label]) =>
-        `<button class="button ${key === comparisonFilter ? "selected-comparison" : ""}" data-comparison-filter="${key}" aria-pressed="${key === comparisonFilter}">${label} <span>${result[key].length}</span></button>`,
-    )
-    .join(
-      "",
-    )}</div><div class="comparison-search"><label for="comparison-search">Search comparison</label><input id="comparison-search" type="search" value="${esc(comparisonSearch)}" placeholder="Test title or spec path" /></div><div class="results-scroll"><table class="results-table comparison-table"><caption class="visually-hidden">${comparisonLabels[comparisonFilter]} between the baseline and target reports</caption><thead><tr><th>Test / spec</th><th>Baseline</th><th>Target</th><th>Test time change</th><th>Details</th></tr></thead><tbody>${
-    rows
-      .slice((comparisonPage - 1) * 25, comparisonPage * 25)
-      .map((row) => {
-        const test = row.current || row.previous;
-        const side = row.current ? "target" : "baseline";
-        return `<tr><td data-label="Test"><strong>${esc(test.title)}</strong><small>${esc(test.file)}</small></td><td data-label="Baseline">${row.previous ? badge(row.previous.status) : '<span class="muted">Absent</span>'}</td><td data-label="Target">${row.current ? badge(row.current.status) : '<span class="muted">Absent</span>'}</td><td data-label="Time change">${signedDuration(row.durationDelta)}</td><td data-label="Details"><button class="button" data-comparison-side="${side}" data-comparison-key="${esc(row.identity)}">Inspect ${side}</button><button class="button" data-comparison-history="${esc(row.identity)}">Test history</button></td></tr>`;
-      })
-      .join("") ||
-    '<tr><td colspan="5" class="empty">No matching tests in this category.</td></tr>'
-  }</tbody></table></div><div class="pagination"><span role="status">${rows.length ? `${(comparisonPage - 1) * 25 + 1}–${Math.min(comparisonPage * 25, rows.length)} of ${rows.length}` : "0"} ${comparisonLabels[comparisonFilter].toLowerCase()}</span><div><button class="button" id="comparison-prev" ${comparisonPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${comparisonPage} of ${pages}</span><button class="button" id="comparison-next" ${comparisonPage === pages ? "disabled" : ""}>Next</button></div></div>`;
+  globalThis.TomatoesReact.renderComparisonOutput(output, {
+    comparison,
+    historyCount: historyEntries.length,
+    labels: comparisonLabels,
+    filter: comparisonFilter,
+    rows,
+    page: comparisonPage,
+    pages,
+    search: comparisonSearch,
+    duration: signedDuration,
+  });
   output.querySelectorAll("[data-comparison-filter]").forEach(
     (button) =>
       (button.onclick = () => {
@@ -295,30 +284,19 @@ function downloadInvestigation(text, name, type) {
 function renderFailureGroups() {
   const groups = Investigations.failureGroups(report);
   const host = $("#failure-groups");
-  host.innerHTML = `<div class="section-heading"><div><h2>Grouped failures</h2><p>${report.counts.failed} failed tests across ${groups.length} message groups</p></div><button class="button" id="download-failure-groups">Download groups</button></div><p class="widget-footnote">Groups use matching error messages with variable IDs, timestamps, and timeout values normalized. Review the evidence to confirm a shared cause.</p><div class="failure-group-list">${
-    groups
-      .slice(0, expandedFailureGroups ? groups.length : 8)
-      .map(
-        (group, index) =>
-          `<details class="failure-group"><summary><span class="group-number">${group.tests.length}</span><span><strong>${esc(group.fingerprint)}</strong><small>${group.specs.length} ${group.specs.length === 1 ? "spec" : "specs"} · ${duration(group.duration)} recorded test time</small></span></summary><div class="failure-group-evidence"><h3 data-feature="failed-tests.inspect-detailed-errors">Representative error</h3><pre data-feature="failed-tests.inspect-detailed-errors">${esc(group.message)}</pre><h3>Affected tests</h3>${group.tests.map((test) => `<button class="analysis-row" data-group-test="${test.id}"><span>${esc(test.title)}<small>${esc(test.file)}</small></span><strong>Inspect →</strong></button>`).join("")}</div></details>`,
-      )
-      .join("") || '<p class="widget-empty">No failures to group.</p>'
-  }</div>`;
+  globalThis.TomatoesReact.renderFailureGroups(host, {
+    report,
+    groups,
+    expanded: expandedFailureGroups,
+    duration,
+  });
   appendFailureTrends(host);
-  if (groups.length > 8) {
-    host.insertAdjacentHTML(
-      "beforeend",
-      '<button class="button" id="toggle-failure-groups">' +
-        (expandedFailureGroups
-          ? "Show top 8 groups"
-          : "Show all " + groups.length + " groups") +
-        "</button>",
-    );
-    $("#toggle-failure-groups").onclick = () => {
+  const toggle = $("#toggle-failure-groups");
+  if (toggle)
+    toggle.onclick = () => {
       expandedFailureGroups = !expandedFailureGroups;
       renderFailureGroups();
     };
-  }
   host
     .querySelectorAll("[data-group-test]")
     .forEach(
@@ -392,8 +370,13 @@ async function openTestHistory(test) {
         1,
         ...timeline.rows.map((row) => row.test?.duration || 0),
       );
-      $("#detail-content").innerHTML =
-        `<div class="dialog-heading"><span class="eyebrow">INDIVIDUAL TEST HISTORY</span><h2 id="detail-title">${esc(test.title)}</h2><p>${esc(test.file)}</p><p>${esc(test.fullTitle)}</p></div><div class="test-history-metrics"><div><strong>${timeline.executed}</strong><span>Executed runs</span></div><div><strong>${timeline.counts.passed}</strong><span>Passed</span></div><div><strong>${timeline.counts.failed}</strong><span>Failed</span></div><div><strong>${timeline.counts.missing}</strong><span>Missing</span></div></div><p class="widget-footnote">Oldest → newest, up to 20 saved reports. Missing tests and ambiguous duplicate titles remain separate from test outcomes.</p><div class="test-timeline">${timeline.rows.map((row) => `<article class="test-timeline-row"><div><strong>${esc(row.name)}</strong><small>${esc(date(row.start))}</small></div>${["missing", "ambiguous"].includes(row.status) ? `<span class="status-badge unknown">${row.status === "missing" ? "Missing" : "Duplicate matches"}</span>` : badge(row.status)}<div class="test-time-evidence">${row.test ? `<strong>${duration(row.test.duration)}</strong><span class="timeline-duration"><i style="width:${(row.test.duration / maxTime) * 100}%"></i></span>` : "<span>Duration unavailable</span>"}</div>${row.test ? `<button class="button" data-timeline-run="${esc(row.runId)}">Inspect run</button>` : ""}</article>`).join("") || '<p class="widget-empty">No saved reports are available for this test.</p>'}</div>`;
+      globalThis.TomatoesReact.renderTestTimeline($("#detail-content"), {
+        test,
+        timeline,
+        maxTime,
+        formatDate: date,
+        duration,
+      });
       $("#detail-content")
         .querySelectorAll("[data-timeline-run]")
         .forEach(
@@ -404,8 +387,11 @@ async function openTestHistory(test) {
       $("#detail").showModal();
     },
     (error) => {
-      $("#detail-content").innerHTML =
-        `<h2 id="detail-title">Test history unavailable</h2><p role="alert">${esc(error.message)}</p>`;
+      globalThis.TomatoesReact.renderMessage($("#detail-content"), {
+        title: "Test history unavailable",
+        message: error.message,
+        error: true,
+      });
       $("#detail").showModal();
     },
   );

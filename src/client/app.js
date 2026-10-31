@@ -1,38 +1,4 @@
 const $ = (selector) => document.querySelector(selector);
-const esc = (value) =>
-  String(value ?? "").replace(
-    /[&<>"']/g,
-    (ch) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        ch
-      ],
-  );
-const icons = {
-  close: '<path d="m6 6 12 12M6 18 18 6"/>',
-  integration:
-    '<path d="m9 3 3 3-6 6-3-3m12 12-3-3 6-6 3 3M8 16l-4 4m12-12 4-4M8 12l4 4m0-8 4 4"/>',
-  profile:
-    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="9" r="3"/><path d="M6 19v-2a6 6 0 0 1 12 0v2"/>',
-  users:
-    '<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 4v2"/>',
-  branch:
-    '<path d="M6 3v12a6 6 0 0 0 12 0V9M14 5l4 4 4-4"/><circle cx="6" cy="5" r="2"/>',
-  runs: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m9 8 7 4-7 4Z"/>',
-  failure: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/>',
-  chart: '<path d="M4 3v17h17M8 15v-4m5 4V6m5 9v-6"/>',
-  flake: '<path d="m12 2-2 7H4l5 5-2 8 7-9h6l-5-4 2-7Z"/>',
-  settings:
-    '<path d="m9 3-1 3-3 1-2 4 2 3v4l4 3 3-1 3 1 4-3v-4l2-3-2-4-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/>',
-  folder: '<path d="M3 7V5h6l2 2h10v12H3Z"/>',
-  refresh:
-    '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M5 8a8 8 0 0 1 13-3l2 3M4 16l2 3a8 8 0 0 0 13-3"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
-  search: '<circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/>',
-  check: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
-  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
-};
-const icon = (name) =>
-  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.runs}</svg>`;
 const number = (value) => value.toLocaleString("en-US");
 function duration(ms) {
   if (ms == null) return "Unavailable";
@@ -55,8 +21,6 @@ function date(value) {
       }).format(new Date(value)) + ` (${preferences.timeZone})`
     : "Unavailable";
 }
-const badge = (status) =>
-  `<span class="status-badge ${esc(status)}">${esc(status[0].toUpperCase() + status.slice(1))}</span>`;
 const preferenceDefaults = { ...UserPreferenceModel.DEFAULT_DISPLAY };
 let preferences = { ...preferenceDefaults };
 let appearanceDraft = null;
@@ -143,10 +107,6 @@ function invalidateOutOfScopeReports() {
     $("#detail-content").replaceChildren();
   }
 }
-function preferenceStatusMarkup() {
-  const state = userPreferences.getState();
-  return `<article class="settings-card preference-sync-status"><h2>User preferences</h2><p role="status">${state.ready ? `Saved to ${state.storage === "postgres" ? "PostgreSQL" : "the local server"} for ${esc(state.profile)}. ${state.profileId === "local" ? "Local mode uses one shared profile on this server." : "These settings belong to your signed-in account."}` : esc(state.error)}</p><p>Profile details, color mode, dashboard groups, time zone, and results per page load from the server. Report files and browser import history are managed separately.</p><button class="button" id="reload-user-preferences">Reload preferences</button>${!state.ready ? '<a class="button" href="#team">Settings: Sharing &amp; access</a>' : ""}</article>`;
-}
 let stability = null;
 let report;
 let sourceName = "index.json";
@@ -194,19 +154,20 @@ function renderWorkspaceIdentity() {
   document
     .querySelectorAll("[data-organization-initials]")
     .forEach((element) => {
-      element.innerHTML = authStatus?.organization?.logo
-        ? `<img class="workspace-logo" src="${esc(authStatus.organization.logo)}" alt="${esc(organizationName)} logo"/>`
-        : esc(organizationInitials);
+      globalThis.TomatoesReact.renderAvatar(element, {
+        logo: authStatus?.organization?.logo,
+        initials: organizationInitials,
+        name: organizationName,
+      });
     });
   document.querySelectorAll("[data-project-picker]").forEach((select) => {
-    select.innerHTML = workspaceProjects.length
-      ? workspaceProjects
-          .map(
-            (project) =>
-              `<option value="${esc(project.id)}">${esc(project.name)}</option>`,
-          )
-          .join("")
-      : '<option value="">No assigned projects</option>';
+    globalThis.TomatoesReact.renderOptions(select, {
+      options: workspaceProjects.map((project) => ({
+        value: project.id,
+        label: project.name,
+      })),
+      empty: "No assigned projects",
+    });
     select.value = currentWorkspaceProject;
     select.disabled = !workspaceProjects.length;
     select.onchange = () => void openWorkspaceProject(select.value);
@@ -234,12 +195,15 @@ function renderWorkspaceIdentity() {
     .join("")
     .toUpperCase();
   document.querySelectorAll("[data-workspace-initials]").forEach((element) => {
-    element.innerHTML = branding.logo
-      ? `<img class="workspace-logo" src="${esc(branding.logo)}" alt=""/>`
-      : esc(initials);
+    globalThis.TomatoesReact.renderAvatar(element, {
+      logo: branding.logo,
+      initials,
+    });
   });
   document.querySelectorAll("[data-workspace-logo]").forEach((element) => {
-    element.innerHTML = workspaceLogoMarkup(currentWorkspaceProject);
+    globalThis.TomatoesReact.renderAvatar(element, {
+      logo: branding.logo || "/assets/tomatoes-logo.svg",
+    });
   });
   document.querySelectorAll("[data-workspace-user]").forEach((element) => {
     element.textContent = fullName;
@@ -287,7 +251,6 @@ function renderSummary() {
     duration,
   });
   renderDashboard();
-  if (typeof reportIdentityMarkup === "function") reportIdentityMarkup();
   $("#failure-count").textContent = report.counts.failed;
   $("#report-footer").textContent =
     `${number(report.counts.total)} tests · ${sourceName}`;
@@ -369,14 +332,17 @@ function openTests(spec, status = "all") {
 function showTest(id) {
   if (!hasAccess("test-results.view-test-details")) return;
   const test = report.tests[id];
-  $("#detail-content").innerHTML =
-    `<div class="dialog-heading">${badge(test.status)}<h2 id="detail-title">${esc(test.title)}</h2><p>${esc(test.fullTitle)}</p></div><div class="detail-grid"><div><small>Spec</small>${esc(test.file)}</div><div><small>Duration</small>${duration(test.duration)}</div><div><small>Suite</small>${esc(test.suite || "Root suite")}</div><div><small>Status</small>${esc(test.status)}</div></div>${test.error && hasAccess("test-results.inspect-errors-and-stack-traces") ? `<h2>Failure message</h2><pre class="failure-message">${esc(test.error)}</pre>` : '<p class="notice">No failure message recorded for this test.</p>'}${test.stack && hasAccess("test-results.inspect-errors-and-stack-traces") ? `<details><summary>Stack trace</summary><pre>${esc(test.stack)}</pre></details>` : ""}${test.code && hasAccess("test-results.view-recorded-test-code") ? `<details><summary>Test code</summary><pre>${esc(test.code)}</pre></details>` : ""}${test.context ? `<details><summary>Reported context</summary><pre>${esc(test.context)}</pre></details>` : ""}`;
-  $("#detail-content").insertAdjacentHTML(
-    "beforeend",
-    `<div class="test-history-action"><button class="button primary" id="view-test-history">View test history</button><p class="widget-footnote">Follow this exact test across saved reports.</p></div>`,
-  );
-  $("#view-test-history").onclick = () => openTestHistory(test);
-  appendTestEvidence(test);
+  const runId = activeHistoryId,
+    key = Investigations.identity(test);
+  globalThis.TomatoesReact.renderTestDetail($("#detail-content"), {
+    test,
+    duration,
+    can: hasAccess,
+    runId,
+    listEvidence: () => ImportHistory.listEvidence(runId, key),
+    onUpload: (file) => saveTestEvidence(test, file, runId),
+    onHistory: () => openTestHistory(test),
+  });
   $("#detail").showModal();
 }
 function navigate(force = false) {
@@ -414,6 +380,7 @@ function navigate(force = false) {
     ].includes(view)
   )
     view = "runs";
+  globalThis.TomatoesReact.clearPage();
   const workspaceContext = [
     "role-access",
     "integrations",
@@ -533,8 +500,7 @@ function navigate(force = false) {
     ].forEach((selector) => ($(selector).hidden = true));
     $("#report-content").hidden = false;
     $("#alternate").hidden = false;
-    $("#alternate").innerHTML =
-      '<article class="settings-card"><h2>Access denied</h2><p>Your role cannot open this page. Contact your organization administrator.</p><a class="button" href="#runs">Latest run</a> <a class="button" href="#profile">My profile</a></article>';
+    globalThis.TomatoesReact.renderAccessDenied($("#alternate"));
     return;
   }
   if (view === "role-access") {
@@ -661,11 +627,15 @@ function processReport(text, onProgress = paintProgress) {
   });
 }
 function populateSpecFilter() {
-  $("#spec-filter").innerHTML =
-    '<option value="all">All specs</option>' +
-    report.specs
-      .map((spec) => `<option value="${spec.id}">${esc(spec.file)}</option>`)
-      .join("");
+  globalThis.TomatoesReact.renderOptions($("#spec-filter"), {
+    options: [
+      { value: "all", label: "All specs" },
+      ...report.specs.map((spec) => ({
+        value: String(spec.id),
+        label: spec.file,
+      })),
+    ],
+  });
 }
 async function loadReport(file = currentFile, options = {}) {
   if (
@@ -1063,7 +1033,9 @@ $("#import-progress").addEventListener("cancel", (event) =>
 );
 document
   .querySelectorAll("[data-icon]")
-  .forEach((element) => (element.innerHTML = icon(element.dataset.icon)));
+  .forEach((element) =>
+    globalThis.TomatoesReact.renderIcon(element, element.dataset.icon),
+  );
 document.querySelectorAll('nav a[data-view="runs"]').forEach((link) =>
   link.addEventListener("click", (event) => {
     if (isPreviousImport() && !loading) {
@@ -1158,14 +1130,11 @@ function renderWorkspaceSettings(alt) {
     : sections.some(([id]) => id === "appearance")
       ? "appearance"
       : sections[0]?.[0];
-  alt.innerHTML = `<div class="workspace-settings-page"><div class="workspace-settings-tabs" role="tablist" aria-label="Settings sections">${sections
-    .map(
-      ([id, label]) =>
-        `<button type="button" role="tab" id="settings-tab-${id}" data-settings-section="${id}" aria-controls="workspace-settings-panel" aria-selected="${section === id}" tabindex="${section === id ? "0" : "-1"}">${label}</button>`,
-    )
-    .join(
-      "",
-    )}</div><div id="workspace-settings-panel" role="tabpanel" aria-labelledby="settings-tab-${section}"></div></div>`;
+  globalThis.TomatoesReact.renderSettingsTabs(alt, {
+    sections,
+    section,
+    onSelect: selectSection,
+  });
   function selectSection(next, focus = false) {
     if (next !== section) {
       const url = new URL(location.href);
@@ -1176,27 +1145,6 @@ function renderWorkspaceSettings(alt) {
     }
     if (focus) document.querySelector("#settings-tab-" + next).focus();
   }
-  alt.querySelectorAll("[data-settings-section]").forEach((button) => {
-    button.onclick = () => selectSection(button.dataset.settingsSection);
-    button.onkeydown = (event) => {
-      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
-        return;
-      event.preventDefault();
-      const tabs = sections.map(([id]) => id);
-      selectSection(
-        event.key === "Home"
-          ? tabs[0]
-          : event.key === "End"
-            ? tabs[tabs.length - 1]
-            : tabs[
-                (tabs.indexOf(section) +
-                  (event.key === "ArrowRight" ? 1 : tabs.length - 1)) %
-                  tabs.length
-              ],
-        true,
-      );
-    };
-  });
   const panel = document.querySelector("#workspace-settings-panel");
   if (section === "general") renderWorkspaceGeneral(panel);
   else if (section === "sharing") renderTeam(panel);
@@ -1213,35 +1161,7 @@ function renderAppearanceSettings(alt) {
     };
   const draft = appearanceDraft;
   const selected = draft.colorMode;
-  alt.innerHTML = `<div class="workspace-settings">
-    <article class="settings-card appearance-card">
-      <span class="eyebrow">APPEARANCE</span>
-      <h2>Color Mode</h2>
-      <p id="color-mode-description">Choose whether the appearance is light, dark, or follows your computer's settings.</p>
-      <form id="appearance-form" aria-describedby="color-mode-description">
-        <fieldset class="color-mode-options" ${state.ready ? "" : "disabled"}>
-          <legend class="visually-hidden">Color Mode</legend>
-          ${[
-            ["light", "Light", "A bright, clear workspace."],
-            ["dark", "Dark", "A softer view for low light."],
-            ["system", "System", "Follow your computer's settings."],
-          ]
-            .map(
-              ([mode, label, description]) => `<label class="color-mode-option">
-            <span class="mode-preview mode-preview-${mode}" aria-hidden="true"><i></i><b></b><em></em></span>
-            <span class="mode-option-heading"><input type="radio" name="colorMode" value="${mode}" ${selected === mode ? "checked" : ""} /><strong>${label}</strong></span>
-            <small>${description}</small>
-          </label>`,
-            )
-            .join("")}
-        </fieldset>
-        <div class="settings-buttons"><button class="button primary" type="submit" ${state.ready ? "" : "disabled"}>Save appearance</button><button class="button" type="button" id="discard-appearance" hidden>Discard changes</button></div>
-        <p id="appearance-feedback" class="appearance-feedback" role="status" aria-live="polite"></p>
-        <p class="appearance-save-note">${state.ready ? "Your color mode is saved to your user preferences and applied throughout Tomatoes." : esc(state.error)}</p>
-      </form>
-    </article>
-    ${preferenceStatusMarkup()}
-  </div>`;
+  globalThis.TomatoesReact.renderAppearance(alt, { state, selected });
   $("#reload-user-preferences").onclick = async () => {
     const button = $("#reload-user-preferences");
     button.disabled = true;
@@ -1319,12 +1239,6 @@ function workspaceBranding(
     includeOrganization ? authStatus?.organization : {},
   );
 }
-function workspaceLogoMarkup(project) {
-  const brand = workspaceBranding(project);
-  return brand.logo
-    ? `<img class="workspace-logo" src="${esc(brand.logo)}" alt=""/>`
-    : `<img class="workspace-logo" src="/assets/tomatoes-logo.svg" alt=""/>`;
-}
 function hasUnsavedWorkspace() {
   return Boolean(
     workspaceDraft &&
@@ -1385,16 +1299,14 @@ function renderOrganizationSettings(host) {
       saving: false,
     };
   const draft = organizationDraft;
-  host.insertAdjacentHTML(
-    "afterbegin",
-    `<form id="organization-settings-form" class="profile-details organization-general"><h2>Organization</h2><div class="profile-detail-row"><div><label for="organization-name">Organization name</label><p>Your organization contains projects and user memberships.</p></div><input id="organization-name" name="name" maxlength="80" required ${canManage ? "" : "readonly"} value="${esc(draft.name)}"/></div><div class="profile-detail-row"><div><label for="organization-logo">Organization logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Shared across navigation, project cards, run summaries, and PDF reports.</p></div><div><div class="workspace-logo-preview" id="organization-logo-preview"></div>${canManage ? '<input id="organization-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="organization-remove-logo">Remove organization logo</button>' : "<p>Ask an organization admin to update the logo.</p>"}<p id="organization-logo-status" role="status"></p></div></div><div class="profile-detail-row"><div>Organization ID<p>Projects and users belong to this organization.</p></div><code>${esc(organization.id)}</code></div>${canManage ? '<div class="profile-form-actions"><button class="button primary" type="submit">Update organization</button></div>' : ""}</form>`,
+  globalThis.TomatoesReact.renderOrganization(
+    host.querySelector("#organization-settings-root"),
+    { organization, draft, canManage },
   );
   const form = host.querySelector("#organization-settings-form");
   const preview = form.querySelector("#organization-logo-preview");
   const paint = () => {
-    preview.innerHTML = draft.logo
-      ? `<img src="${esc(draft.logo)}" alt="Organization logo preview"/>`
-      : "<span>No organization logo uploaded</span>";
+    globalThis.TomatoesReact.renderImage(preview, { logo: draft.logo });
   };
   paint();
   if (!canManage) return;
@@ -1493,12 +1405,12 @@ function renderWorkspaceGeneral(host) {
   const registered = workspaceProjects.some(
     (item) => item.id === brand.project && item.registered,
   );
-  host.innerHTML = `<form class="profile-details workspace-general" id="workspace-general-form"><h2>Project branding</h2><fieldset ${!state.ready || draft.saving ? "disabled" : ""}><legend class="visually-hidden">Workspace branding</legend>
-    <div class="profile-detail-row"><div><label for="workspace-brand-name">Project name</label><p>${registered ? 'The shared project name. Rename it from <a href="#projects">Projects</a>.' : "The name displayed throughout Tomatoes. Report project identifiers stay the same."}</p></div><input id="workspace-brand-name" name="name" ${registered ? "readonly" : ""} maxlength="80" required value="${esc(brand.name)}"/></div>
-    <div class="profile-detail-row"><div><label for="workspace-brand-website">Project website</label><p>An optional link for your company or team.</p></div><input id="workspace-brand-website" name="website" type="url" maxlength="500" placeholder="https://example.com" value="${esc(brand.website)}"/></div>
-    <div class="profile-detail-row"><div><label for="workspace-brand-logo">Project logo</label><p>PNG, JPEG, or WebP, up to 2 MB. Used for reports when your organization has no logo.</p></div><div><div class="workspace-logo-preview" id="workspace-logo-preview">${brand.logo ? `<img src="${esc(brand.logo)}" alt="Workspace logo preview"/>` : "<span>No logo uploaded</span>"}</div><input id="workspace-brand-logo" type="file" accept="image/png,image/jpeg,image/webp"/><button type="button" class="button" id="workspace-remove-logo">Remove logo</button><p id="workspace-logo-status" role="status"></p></div></div>
-    <div class="profile-detail-row"><div><span>Report project</span><p>Branding is saved for this project in your database preferences.</p></div><code>${esc(brand.project)}</code></div></fieldset>
-    <div class="profile-form-actions"><span id="workspace-brand-status" role="status"></span><button type="button" class="button" id="workspace-brand-reset">Reset</button><button class="button primary" type="submit">Save changes</button></div></form>`;
+  globalThis.TomatoesReact.renderGeneral(host, {
+    state,
+    draft,
+    brand,
+    registered,
+  });
   renderOrganizationSettings(host);
   const form = host.querySelector("#workspace-general-form");
   const save = form.querySelector('[type="submit"]');

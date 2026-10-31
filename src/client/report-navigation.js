@@ -248,8 +248,7 @@ async function copyHistoryReportLink(id, button) {
         "success",
       );
     } catch {
-      $("#detail-content").innerHTML =
-        '<h2 id="detail-title">Report link</h2><p>Copy this link to reopen the specific report.</p><label for="copy-report-link">Report URL</label><input id="copy-report-link" readonly style="width:100%" />';
+      globalThis.TomatoesReact.renderCopyLink($("#detail-content"), { url });
       $("#copy-report-link").value = url;
       $("#detail").showModal();
       $("#copy-report-link").select();

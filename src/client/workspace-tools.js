@@ -13,7 +13,7 @@ if (typeof document !== "undefined") {
       host.id = "history-tools";
       document.querySelector("#history-list").before(host);
     }
-    host.innerHTML = `<div class="history-utility"><div><strong>Keep your reports safe</strong><p id="storage-usage">Checking browser storage…</p></div><div class="history-actions"><button class="button" id="backup-history">Download backup</button><button class="button" id="restore-history">Restore backup</button><button class="button" id="show-trash">View trash</button></div><input hidden type="file" id="backup-file" accept="application/json,.json"/></div><p class="widget-footnote">Backups include reports, labels, notes, metadata, attachments, and trash. Restores merge missing records and preserve existing local edits. Maximum backup size: 100 MB.</p><div id="trash-list"></div>`;
+    globalThis.TomatoesReact.renderHistoryTools(host);
     if (navigator.storage?.estimate)
       navigator.storage
         .estimate()
@@ -146,8 +146,10 @@ if (typeof document !== "undefined") {
       return;
     const entry = historyEntries.find((item) => item.id === id);
     if (!entry) return;
-    document.querySelector("#detail-content").innerHTML =
-      `<div class="dialog-heading"><h2 id="detail-title">Edit saved report</h2><p>${esc(entry.name)}</p></div><form id="history-edit" class="preference-form"><label>Display name<input id="history-label" maxlength="180" value="${esc(entry.label || entry.name)}" required/></label><label>Notes<textarea id="history-notes" maxlength="2000" rows="5">${esc(entry.notes || "")}</textarea></label><p class="widget-footnote">The original JSON and import timestamp are preserved.</p><button class="button primary">Save changes</button><p id="history-edit-status" role="status"></p></form>`;
+    globalThis.TomatoesReact.renderHistoryEdit(
+      document.querySelector("#detail-content"),
+      { entry },
+    );
     document.querySelector("#history-edit").onsubmit = async (event) => {
       event.preventDefault();
       const label = document.querySelector("#history-label").value.trim(),
@@ -236,7 +238,7 @@ if (typeof document !== "undefined") {
         (entry) => entry.deletedAt,
       );
       const host = document.querySelector("#trash-list");
-      host.innerHTML = `<article class="insight-card"><h3>Trash</h3><p>Reports stay recoverable here and continue to use browser storage.</p>${entries.map((entry) => `<div class="trash-row"><span>${esc(entry.label || entry.name)}<small>Removed ${esc(date(new Date(entry.deletedAt).toISOString()))}</small></span><button class="button" data-restore-trash="${entry.id}">Restore</button></div>`).join("") || "<p>Trash is empty.</p>"}</article>`;
+      globalThis.TomatoesReact.renderTrash(host, { entries, formatDate: date });
       host
         .querySelectorAll("[data-restore-trash]")
         .forEach(
@@ -257,41 +259,9 @@ if (typeof document !== "undefined") {
       };
     return WorkspaceTools.filterEntries(historyEntries, trendFilters);
   }
-  function appendTrendFilters(alt) {
-    const trendCard =
-      alt.querySelector("[data-trend]")?.closest("article") ||
-      [...alt.querySelectorAll("article")].find(
-        (card) => card.querySelector("h2")?.textContent === "Saved-run trends",
-      );
-    if (!trendCard) return;
-    const options = (key) =>
-      [
-        ...new Set(
-          historyEntries.map((entry) => entry.metadata?.[key]).filter(Boolean),
-        ),
-      ]
-        .sort()
-        .map(
-          (value) =>
-            `<option value="${esc(value)}" ${trendFilters[key] === value ? "selected" : ""}>${esc(value)}</option>`,
-        )
-        .join("");
-    trendCard.insertAdjacentHTML(
-      "afterbegin",
-      `<div class="trend-filters">${["project", "environment", "branch"].map((key) => `<label>${key[0].toUpperCase() + key.slice(1)}<select data-trend-filter="${key}"><option value="">All</option><option value="__unlabelled__" ${trendFilters[key] === "__unlabelled__" ? "selected" : ""}>Unlabelled</option>${options(key)}</select></label>`).join("")}</div><p class="widget-footnote">Filters apply to saved-run trends. The other analytics describe the selected report. Showing up to eight matching runs; unlabelled reports are identified separately.</p>`,
-    );
-    trendCard.querySelectorAll("[data-trend-filter]").forEach(
-      (select) =>
-        (select.onchange = () => {
-          trendFilters[select.dataset.trendFilter] = select.value;
-          renderAnalytics(alt);
-        }),
-    );
-  }
   function appendFailureTrends(host) {
-    host.insertAdjacentHTML(
-      "beforeend",
-      `<article class="insight-card failure-trend-card"><h2>Failure history</h2><p>Find first seen, last seen, and recurrence across reports with the same project, environment, and branch as this run. Blank labels match blank labels.</p><button class="button" id="analyze-failure-history">Analyze comparable runs</button><div id="failure-history-results" aria-live="polite"></div></article>`,
+    globalThis.TomatoesReact.renderFailureTrends(
+      host.querySelector("#failure-trends-host"),
     );
     document.querySelector("#analyze-failure-history").onclick = async () => {
       await investigationBusy(
@@ -337,17 +307,10 @@ if (typeof document !== "undefined") {
             await allowPaint();
           }
           const trends = WorkspaceTools.failureTrends(runs, Investigations);
-          document.querySelector("#failure-history-results").innerHTML =
-            `<p class="widget-footnote">${trends.runs} distinct comparable reports analyzed (up to 20 saved reports). Matching run times and normalized test results count once. Frequency means reports containing this message pattern, not a test failure rate. Missing patterns do not establish a fix.</p>${
-              trends.patterns
-                .slice(0, 30)
-                .map(
-                  (item) =>
-                    `<details class="failure-recurrence"><summary><strong>${esc(item.pattern.slice(0, 180))}${item.pattern.length > 180 ? "…" : ""}</strong><span>${item.runs} / ${trends.runs} reports</span></summary><p>${esc(item.pattern)}</p><dl><div><dt>First seen</dt><dd>${esc(date(new Date(item.first).toISOString()))}</dd></div><div><dt>Last seen</dt><dd>${esc(date(new Date(item.last).toISOString()))}</dd></div><div><dt>Frequency</dt><dd>${item.runs} / ${trends.runs} reports (${((item.runs / Math.max(1, trends.runs)) * 100).toFixed(0)}%)</dd></div></dl></details>`,
-                )
-                .join("") ||
-              "<p>No recorded failures in the comparable reports.</p>"
-            }${trends.patterns.length > 30 ? `<p>Showing the top 30 of ${trends.patterns.length} patterns by recurrence.</p>` : ""}`;
+          globalThis.TomatoesReact.renderFailureTrendResults(
+            document.querySelector("#failure-history-results"),
+            { trends, formatDate: date },
+          );
         },
         (error) =>
           historyNotice(`Failure history unavailable: ${error.message}`),
@@ -359,7 +322,6 @@ if (typeof document !== "undefined") {
     editHistoryEntry,
     trashHistoryEntry,
     filteredTrendEntries,
-    appendTrendFilters,
     appendFailureTrends,
   });
 }

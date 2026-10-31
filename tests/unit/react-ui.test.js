@@ -41,6 +41,13 @@ function loadComponent(relative) {
     exports: module.exports,
     console,
     FormData: dom.window.FormData,
+    structuredClone,
+    crypto: require("node:crypto").webcrypto,
+    AbortSignal,
+    window: dom.window,
+    document: dom.window.document,
+    URL,
+    location: dom.window.location,
   });
   return module.exports;
 }
@@ -451,6 +458,520 @@ test("project picker preserves multiple selections while searching and requires 
       "mobile",
       "web",
     ]);
+  } finally {
+    await state.cleanup();
+  }
+});
+
+// Native dialogs are simulated so lifecycle and confirmation behavior can be tested.
+dom.window.HTMLDialogElement.prototype.showModal = function () {
+  this.open = true;
+};
+dom.window.HTMLDialogElement.prototype.close = function () {
+  this.open = false;
+};
+const change = async (element, value) =>
+  act(async () => {
+    const prototype =
+      element.tagName === "SELECT"
+        ? dom.window.HTMLSelectElement.prototype
+        : element.type === "checkbox"
+          ? dom.window.HTMLInputElement.prototype
+          : dom.window.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(
+      prototype,
+      element.type === "checkbox" ? "checked" : "value",
+    ).set.call(element, value);
+    element.dispatchEvent(
+      new dom.window.Event(
+        element.tagName === "SELECT" || element.type === "checkbox"
+          ? "change"
+          : "input",
+        { bubbles: true },
+      ),
+    );
+  });
+
+test("React role matrix combines page and feature filters and saves the complete draft with revision", async () => {
+  const { RoleAccessPage } = loadComponent("pages/RoleAccessPage.jsx"),
+    Policy = require("../../src/shared/access-policy"),
+    calls = [];
+  const request = async (route, options) => {
+    calls.push({ route, ...options });
+    return options
+      ? { revision: 5 }
+      : {
+          features: Policy.features,
+          permissions: {
+            editor: Policy.configured({}, "editor"),
+            viewer: Policy.configured({}, "viewer"),
+          },
+          revision: 4,
+          organization: { name: "Dynamic organization" },
+        };
+  };
+  const state = await mount(
+    React.createElement(RoleAccessPage, {
+      request,
+      onRefresh: async () => {},
+      onToast: () => {},
+    }),
+  );
+  try {
+    assert.equal(
+      state.host.querySelectorAll('[data-role="admin"]:checked:disabled')
+        .length,
+      136,
+    );
+    const key = "settings-appearance.save-appearance-preferences";
+    await act(async () =>
+      state.host
+        .querySelector(`[data-role="editor"][data-permission="${key}"]`)
+        .click(),
+    );
+    await change(state.host.querySelector("#role-access-page"), "Users");
+    await change(state.host.querySelector("#role-access-kind"), "editable");
+    assert.match(
+      state.host.querySelector("#role-access-count").textContent,
+      /3 of 136/,
+    );
+    await change(
+      state.host.querySelector("#role-access-search"),
+      "no-such-feature",
+    );
+    assert.match(state.host.textContent, /No matching features/);
+    await act(async () =>
+      state.host.querySelector("#role-access-clear").click(),
+    );
+    await change(state.host.querySelector("#role-access-kind"), "changed");
+    assert.equal(state.host.querySelectorAll('[data-role="editor"]').length, 1);
+    await act(async () =>
+      state.host
+        .querySelector("form")
+        .dispatchEvent(
+          new dom.window.Event("submit", { bubbles: true, cancelable: true }),
+        ),
+    );
+    const body = JSON.parse(calls.at(-1).body);
+    assert.equal(body.revision, 4);
+    assert.equal(body.permissions.editor[key], false);
+    assert.equal(Object.keys(body.permissions.viewer).length, 136);
+    assert.equal(state.host.querySelector("#role-access-save").disabled, true);
+  } finally {
+    await state.cleanup();
+  }
+});
+const pageRun = (n) => ({
+  id: n.toString(16).padStart(64, "0"),
+  name: `report-${n}.json`,
+  status: "passed",
+  receivedAt: 1000 - n,
+  start: "2026-10-31T00:00:00Z",
+  metadata: { project: "web", branch: "main" },
+  counts: { total: 1, passed: 1, failed: 0, pending: 0, skipped: 0 },
+  duration: 1,
+  passRate: 100,
+});
+test("React Projects loads older runs without duplicates even when browser storage is blocked", async () => {
+  const { ProjectsPage } = loadComponent("pages/ProjectsPage.jsx"),
+    requests = [];
+  const request = async (route) => {
+    requests.push(route);
+    if (route === "/api/projects")
+      return {
+        projects: [{ id: "web", name: "Web", registered: true }],
+        canManage: false,
+      };
+    return route.includes("cursor=")
+      ? { runs: [pageRun(2), pageRun(3)], nextCursor: null }
+      : { runs: [pageRun(1), pageRun(2)], nextCursor: "page-2" };
+  };
+  const state = await mount(
+    React.createElement(ProjectsPage, {
+      request,
+      historyStore: {
+        list: async () => {
+          throw new Error("Storage blocked");
+        },
+      },
+      historyFallback: [],
+      can: () => true,
+      branding: (id) => ({ name: id }),
+      currentProject: "web",
+      reportLink: (run) => "#runs?" + run.id,
+      openReport: () => {},
+      onImport: () => {},
+      onDirectory: () => {},
+      onHistory: async () => {},
+      onToast: () => {},
+      formatDate: (value) => value,
+    }),
+  );
+  try {
+    assert.match(
+      state.host.textContent,
+      /Browser archives could not be loaded/,
+    );
+    assert.match(
+      state.host.querySelector("#projects-page-status").textContent,
+      /2 shared reports/,
+    );
+    assert.equal(
+      requests.filter((route) => route.includes("cursor=")).length,
+      0,
+    );
+    await act(async () =>
+      state.host.querySelector("[data-project-runs]").click(),
+    );
+    assert.equal(state.host.querySelector("#project-runs-dialog").open, true);
+    await act(async () =>
+      state.host.querySelector("#project-runs-more").click(),
+    );
+    assert.match(
+      state.host.querySelector("#projects-page-status").textContent,
+      /3 shared reports/,
+    );
+    assert.equal(
+      state.host.querySelectorAll("[data-open-project-run]").length,
+      3,
+    );
+    assert.equal(state.host.querySelector("#project-runs-more").hidden, true);
+    assert.equal(
+      requests.filter((route) => route.includes("cursor=")).length,
+      1,
+    );
+  } finally {
+    await state.cleanup();
+  }
+});
+test("React Sharing appends older reports without resetting the first page", async () => {
+  const { SharingPage } = loadComponent("pages/SharingPage.jsx"),
+    requests = [];
+  const request = async (route) => {
+    requests.push(route);
+    return route === "/api/team/status"
+      ? {
+          enabled: false,
+          storage: "postgres",
+          accessibleProjects: [{ id: "web", name: "Web" }],
+        }
+      : route.includes("cursor=")
+        ? { runs: [pageRun(2), pageRun(3)], nextCursor: null }
+        : { runs: [pageRun(1), pageRun(2)], nextCursor: "page-2" };
+  };
+  const state = await mount(
+    React.createElement(SharingPage, {
+      request,
+      onStatus: () => {},
+      branding: (id) => ({ name: id }),
+      selectedProject: "web",
+      hasReport: false,
+      historyCount: 0,
+      onToast: () => {},
+      onOpen: async () => {},
+      onPublish: async () => {},
+      onSaveHistory: async () => {},
+    }),
+  );
+  try {
+    assert.equal(state.host.querySelectorAll("[data-open-shared]").length, 2);
+    await act(async () => state.host.querySelector("#team-load-more").click());
+    assert.equal(state.host.querySelectorAll("[data-open-shared]").length, 3);
+    assert.equal(state.host.querySelector("#team-load-more").hidden, true);
+    assert.equal(
+      requests.filter((route) => route.includes("cursor=")).length,
+      1,
+    );
+    assert.equal(
+      requests.filter((route) => route === "/api/team/status").length,
+      1,
+    );
+  } finally {
+    await state.cleanup();
+  }
+});
+test("React analytics and widget editor render real report data without HTML templates", async () => {
+  const report = normalizeReport(fixture),
+    { AnalyticsPage } = loadComponent("pages/AnalyticsPage.jsx"),
+    { GroupWidgetEditor } = loadComponent("components/GroupWidgets.jsx");
+  const analytics = await mount(
+    React.createElement(AnalyticsPage, {
+      report,
+      sourceName: "report.json",
+      entries: [],
+      activeId: null,
+      formatDate: (value) => value,
+      duration: (value) => String(value),
+      onTest: () => {},
+      onArea: () => {},
+      onHistory: () => {},
+    }),
+  );
+  try {
+    assert.match(analytics.host.textContent, /Failure patterns/);
+    assert.equal(
+      analytics.host.querySelectorAll("[data-trend-filter]").length,
+      3,
+    );
+  } finally {
+    await analytics.cleanup();
+  }
+  const editor = await mount(
+    React.createElement(GroupWidgetEditor, {
+      initialGroups: [],
+      report,
+      sourceName: "report.json",
+      duration: (value) => String(value),
+      save: async (value) => value,
+      onSaved: () => {},
+      onToast: () => {},
+      can: () => true,
+    }),
+  );
+  try {
+    assert.ok(
+      editor.host.querySelector("#custom-widget-path-choice").options.length >
+        1,
+    );
+    assert.match(editor.host.textContent, /Live group preview/);
+  } finally {
+    await editor.cleanup();
+  }
+});
+test("every client view uses React rendering and startup modules are bundled at build time", async () => {
+  const { listFiles } = require("../../scripts/lib/project-files");
+  for (const file of listFiles("src/client"))
+    assert.doesNotMatch(
+      fs.readFileSync(file, "utf8"),
+      /\.innerHTML\s*=|\.insertAdjacentHTML\(/,
+      file,
+    );
+  const runtime = fs.readFileSync(
+    path.resolve(__dirname, "../../src/client/react/runtime.js"),
+    "utf8",
+  );
+  assert.ok(runtime.includes("tomatoes:controllers"));
+  assert.doesNotMatch(runtime, /createElement|appendChild|document/);
+  const source =
+    await require("../../scripts/lib/client-runtime").clientRuntimeSource();
+  assert.ok(source.includes("export async function startFeatureControllers"));
+});
+
+test("remaining React report views render fixtures and imported error text safely", () => {
+  const report = normalizeReport(fixture),
+    state = {
+      ready: true,
+      profileId: "local",
+      profile: "Local",
+      storage: "postgres",
+      preferences: {
+        profile: { firstName: "Alex", lastName: "Ali", email: "" },
+      },
+    };
+  const { ReportSettingsPage } = loadComponent("pages/ReportSettingsPage.jsx"),
+    { FlakyPage } = loadComponent("pages/FlakyPage.jsx"),
+    { ComparisonForm, ComparisonOutput, FailureGroups } = loadComponent(
+      "components/InvestigationViews.jsx",
+    ),
+    { TestDetail, PDFOptions, PDFPreview } = loadComponent(
+      "components/ReportDialogs.jsx",
+    ),
+    { AppearanceSettings, GeneralSettings, OrganizationSettings } =
+      loadComponent("pages/WorkspaceSettings.jsx"),
+    Model = require("../../src/shared/investigation-model");
+  const views = [
+    [
+      ReportSettingsPage,
+      {
+        report,
+        sourceName: "fixture.json",
+        zones: ["UTC"],
+        preferences: { timeZone: "UTC" },
+        pageSize: 15,
+        historyCount: 1,
+        state,
+        formatDate: (value) => value,
+        duration: (value) => String(value),
+      },
+    ],
+    [
+      FlakyPage,
+      {
+        report,
+        entries: [],
+        stability: null,
+        duration: (value) => String(value),
+        onAnalyze: () => {},
+        onTest: () => {},
+      },
+    ],
+    [
+      ComparisonForm,
+      { entries: [], selection: {}, formatDate: (value) => value },
+    ],
+    [
+      ComparisonOutput,
+      {
+        comparison: { result: Model.compareRuns(report, report) },
+        labels: {
+          regressions: "New regressions",
+          fixed: "Fixed",
+          added: "Added",
+          missing: "Missing",
+          stateChanges: "State changes",
+          stillFailing: "Still failing",
+          slower: "Slower",
+        },
+        filter: "regressions",
+        rows: [],
+        search: "",
+        duration: (value) => String(value),
+      },
+    ],
+    [
+      FailureGroups,
+      {
+        report,
+        groups: Model.failureGroups(report),
+        expanded: false,
+        duration: (value) => String(value),
+      },
+    ],
+    [PDFOptions, { name: "fixture.json", report, initialOptions: {} }],
+    [
+      PDFPreview,
+      { outputName: "report.pdf", pageCount: 1, size: 10, url: "blob:test" },
+    ],
+    [AppearanceSettings, { state, selected: "system" }],
+    [
+      GeneralSettings,
+      {
+        state,
+        draft: { saving: false },
+        brand: { name: "Web", project: "web", logo: "", website: "" },
+        registered: true,
+      },
+    ],
+    [
+      OrganizationSettings,
+      {
+        organization: { id: "default" },
+        draft: { name: "Organization", logo: "" },
+        canManage: true,
+      },
+    ],
+  ];
+  for (const [View, props] of views)
+    assert.ok(
+      renderToStaticMarkup(React.createElement(View, props)).length > 0,
+      View.name,
+    );
+  const malicious = '<script>alert("report")</script>',
+    test = {
+      ...report.tests[0],
+      error: malicious,
+      stack: malicious,
+      code: malicious,
+      context: malicious,
+    };
+  const markup = renderToStaticMarkup(
+    React.createElement(TestDetail, {
+      test,
+      duration: String,
+      can: () => true,
+      runId: null,
+      listEvidence: async () => [],
+      onUpload: async () => {},
+      onHistory: () => {},
+    }),
+  );
+  assert.ok(!markup.includes("<script>"));
+  assert.ok(markup.includes("&lt;script&gt;"));
+});
+test("React Users keeps Editor access read-only and respects role filters", async () => {
+  const { UsersPage } = loadComponent("pages/UsersPage.jsx"),
+    Policy = require("../../src/shared/access-policy"),
+    permissions = Policy.resolve({}, "editor");
+  const data = {
+    users: [
+      {
+        username: "alex",
+        fullName: "Alex Ali",
+        email: "alex@example.com",
+        role: "admin",
+        projects: ["web"],
+        disabled: false,
+      },
+    ],
+    roles: [
+      {
+        id: "admin",
+        name: "Admin",
+        description: "Organization administration",
+      },
+      { id: "viewer", name: "Viewer", description: "Read reports" },
+    ],
+    projects: [{ id: "web", name: "Web" }],
+    organization: { id: "default", name: "Organization" },
+    currentUsername: "editor",
+    localMode: false,
+  };
+  const state = await mount(
+    React.createElement(UsersPage, {
+      request: async (route) =>
+        route === "/api/team/status" ? { enabled: true } : data,
+      can: (id) => Policy.can(permissions, id),
+      onToast: () => {},
+      currentProject: "web",
+      onStatus: () => {},
+    }),
+  );
+  try {
+    assert.match(state.host.textContent, /Alex Ali/);
+    assert.equal(state.host.querySelector("#users-add"), null);
+    assert.equal(state.host.querySelector("[data-user-edit]"), null);
+    assert.equal(state.host.querySelector("[data-user-status]"), null);
+    assert.equal(
+      state.host.querySelectorAll(".users-role-filter input").length,
+      2,
+    );
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("React Users hides organization administration from project-scoped Admins", async () => {
+  const { UsersPage } = loadComponent("pages/UsersPage.jsx");
+  const state = await mount(
+    React.createElement(UsersPage, {
+      request: async (route) =>
+        route === "/api/team/status"
+          ? { enabled: true, canManageRoleAccess: false }
+          : {
+              users: [
+                {
+                  username: "member",
+                  fullName: "Member",
+                  role: "viewer",
+                  projects: ["web"],
+                  disabled: false,
+                },
+              ],
+              organization: { name: "Organization" },
+              roles: [],
+              projects: [],
+              currentUsername: "scoped",
+            },
+      can: () => true,
+      onStatus: () => {},
+      onToast: () => {},
+      currentProject: "web",
+    }),
+  );
+  try {
+    assert.equal(state.host.querySelector("#users-add"), null);
+    assert.equal(state.host.querySelector("[data-user-edit]"), null);
+    assert.equal(state.host.querySelector("[data-user-status]"), null);
   } finally {
     await state.cleanup();
   }

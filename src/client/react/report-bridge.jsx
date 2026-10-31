@@ -1,3 +1,43 @@
+import { ViewBoundary } from "./components/ViewBoundary";
+import {
+  HistoryTools,
+  HistoryEdit,
+  TrashList,
+  PDFCanvasFrame,
+  LegalDocument,
+  Avatar,
+  SelectOptions,
+  AccessDenied,
+  CopyReportLink,
+} from "./components/UtilityViews";
+import { Icon } from "./components/Icon";
+import { SharingPage } from "./pages/SharingPage";
+import {
+  ComparisonForm,
+  ComparisonOutput,
+  FailureGroups,
+  TestTimeline,
+  FailureTrends,
+  FailureTrendResults,
+} from "./components/InvestigationViews";
+import { TestDetail, PDFOptions, PDFPreview } from "./components/ReportDialogs";
+import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { FlakyPage } from "./pages/FlakyPage";
+import { Message } from "./components/ReportPrimitives";
+import { ReportSettingsPage } from "./pages/ReportSettingsPage";
+import { GroupDashboard, GroupWidgetEditor } from "./components/GroupWidgets";
+import {
+  SettingsTabs,
+  AppearanceSettings,
+  GeneralSettings,
+  OrganizationSettings,
+  ImagePreview,
+} from "./pages/WorkspaceSettings";
+import { ProjectsPage } from "./pages/ProjectsPage";
+import { UsersPage } from "./pages/UsersPage";
+import { ProfilePage } from "./pages/ProfilePage";
+import { IntegrationsPage } from "./pages/IntegrationsPage";
+import { RoleAccessPage } from "./pages/RoleAccessPage";
 import { ProjectAccessPicker } from "./components/ProjectAccessPicker";
 import { ProjectEditor } from "./components/ProjectEditor";
 import { ResultHeaders, ResultRows } from "./components/ResultRows";
@@ -12,19 +52,147 @@ import {
 } from "./components/RunDashboard";
 const roots = new WeakMap();
 function render(selector, component) {
-  const host = document.querySelector(selector);
+  const host =
+    typeof selector === "string" ? document.querySelector(selector) : selector;
   if (!host) throw new Error(`Missing React feature host: ${selector}`);
   let root = roots.get(host);
   if (!root) {
     root = createRoot(host);
     roots.set(host, root);
   }
-  flushSync(() => root.render(component));
+  flushSync(() => root.render(<ViewBoundary>{component}</ViewBoundary>));
 }
 let projectEditorKey = 0;
-export const dashboardBridge = {
+const pageRoots = new Map();
+export const applicationBridge = {
+  clearPage() {
+    for (const root of [...pageRoots.values()].reverse()) root.unmount();
+    pageRoots.clear();
+  },
+  renderPage(host, component) {
+    for (const [target, root] of [...pageRoots].reverse())
+      if (target === host || host.contains(target)) {
+        root.unmount();
+        pageRoots.delete(target);
+      }
+    const container = document.createElement("div");
+    host.replaceChildren(container);
+    const root = createRoot(container);
+    pageRoots.set(host, root);
+    flushSync(() => root.render(<ViewBoundary>{component}</ViewBoundary>));
+  },
+  renderSettingsTabs(host, props) {
+    this.renderPage(host, <SettingsTabs {...props} />);
+  },
+  renderAppearance(host, props) {
+    this.renderPage(host, <AppearanceSettings {...props} />);
+  },
+  renderGeneral(host, props) {
+    this.renderPage(host, <GeneralSettings {...props} />);
+  },
+  renderOrganization(host, props) {
+    this.renderPage(host, <OrganizationSettings {...props} />);
+  },
+  renderImage(host, props) {
+    this.renderPage(host, <ImagePreview {...props} />);
+  },
+  renderReportSettings(host, props) {
+    this.renderPage(host, <ReportSettingsPage {...props} />);
+  },
+  renderGroups(host, props) {
+    render("#custom-dashboard-content", <GroupDashboard {...props} />);
+  },
+  renderGroupEditor(host, props) {
+    this.renderPage(host, <GroupWidgetEditor {...props} />);
+  },
+  renderAnalytics(host, props) {
+    this.renderPage(host, <AnalyticsPage {...props} />);
+  },
+  renderFlaky(host, props) {
+    this.renderPage(host, <FlakyPage {...props} />);
+  },
+  renderMessage(host, props) {
+    this.renderPage(host, <Message {...props} />);
+  },
+  renderTestDetail(host, props) {
+    this.renderPage(host, <TestDetail {...props} />);
+  },
+  renderPDFOptions(host, props) {
+    this.renderPage(host, <PDFOptions {...props} />);
+  },
+  renderPDFPreview(host, props) {
+    this.renderPage(host, <PDFPreview {...props} />);
+  },
+  renderComparisonForm(host, props) {
+    this.renderPage(host, <ComparisonForm {...props} />);
+  },
+  renderComparisonOutput(host, props) {
+    this.renderPage(host, <ComparisonOutput {...props} />);
+  },
+  renderFailureGroups(host, props) {
+    this.renderPage(host, <FailureGroups {...props} />);
+  },
+  renderTestTimeline(host, props) {
+    this.renderPage(host, <TestTimeline {...props} />);
+  },
+  renderFailureTrends(host) {
+    this.renderPage(host, <FailureTrends />);
+  },
+  renderFailureTrendResults(host, props) {
+    this.renderPage(host, <FailureTrendResults {...props} />);
+  },
+  renderSharing(host, props) {
+    this.renderPage(host, <SharingPage {...props} />);
+  },
+
+  renderHistoryTools(host) {
+    this.renderPage(host, <HistoryTools />);
+  },
+  renderHistoryEdit(host, props) {
+    this.renderPage(host, <HistoryEdit {...props} />);
+  },
+  renderTrash(host, props) {
+    this.renderPage(host, <TrashList {...props} />);
+  },
+  renderPDFCanvas(host) {
+    this.renderPage(host, <PDFCanvasFrame />);
+  },
+  renderLegal(host, props) {
+    this.renderPage(host, <LegalDocument {...props} />);
+  },
+  renderAvatar(host, props) {
+    render(host, <Avatar {...props} />);
+  },
+  renderOptions(host, props) {
+    render(host, <SelectOptions {...props} />);
+  },
+  renderIcon(host, name) {
+    render(host, <Icon name={name} />);
+  },
+  renderAccessDenied(host) {
+    this.renderPage(host, <AccessDenied />);
+  },
+  renderCopyLink(host, props) {
+    this.renderPage(host, <CopyReportLink {...props} />);
+  },
+  renderRoleAccess(host, props) {
+    this.renderPage(host, <RoleAccessPage {...props} />);
+  },
+  renderProjects(host, props) {
+    this.renderPage(host, <ProjectsPage {...props} />);
+  },
+  renderUsers(host, props) {
+    this.renderPage(host, <UsersPage {...props} />);
+  },
+  renderProfile(host, props) {
+    this.renderPage(host, <ProfilePage {...props} />);
+  },
+  renderIntegrations(host, props) {
+    this.renderPage(host, <IntegrationsPage {...props} />);
+  },
   clearReportContent() {
     for (const selector of [
+      "#custom-dashboard-content",
       "#run-summary",
       "#metrics",
       "#dashboard-widgets",

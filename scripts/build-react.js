@@ -1,6 +1,7 @@
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const esbuild = require("esbuild");
+const { clientRuntimePlugin } = require("./lib/client-runtime");
 const { PROJECT_ROOT } = require("./lib/project-files");
 const output = path.join(
   PROJECT_ROOT,
@@ -11,6 +12,7 @@ async function buildReactClient() {
     absWorkingDir: PROJECT_ROOT,
     entryPoints: ["src/client/react/main.jsx"],
     bundle: true,
+    plugins: [clientRuntimePlugin()],
     write: false,
     minify: true,
     format: "iife",

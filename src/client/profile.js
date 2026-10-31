@@ -33,21 +33,13 @@ function renderUserProfile(host) {
     userProfileDraft?.profileId === state.profileId
       ? userProfileDraft.profile
       : confirmed;
-  host.innerHTML = `<div class="profile-page">
-    <form id="profile-form" class="profile-details">
-      <h2>Details</h2>
-      <fieldset ${state.ready ? "" : "disabled"}>
-        <legend class="visually-hidden">Profile details</legend>
-        <div class="profile-detail-row"><div><label for="profile-first-name">Full name</label><p id="profile-name-description">Your name appears throughout Tomatoes.</p></div>
-          <div class="profile-name-fields"><input id="profile-first-name" name="firstName" aria-label="First name" aria-describedby="profile-name-description" autocomplete="given-name" maxlength="80" value="${esc(profile.firstName)}" required/><input id="profile-last-name" name="lastName" aria-label="Last name" autocomplete="family-name" maxlength="80" value="${esc(profile.lastName)}"/></div></div>
-        <div class="profile-detail-row"><div><label for="profile-email">Email</label><p id="profile-email-description">A contact email for your profile. Email notifications are not enabled.</p></div><input type="email" id="profile-email" name="email" aria-describedby="profile-email-description" autocomplete="email" maxlength="254" placeholder="Add your email address" value="${esc(profile.email)}"/></div>
-      </fieldset>
-      <div class="profile-form-actions"><p id="profile-feedback" role="status">${hasUnsavedProfile() ? "Unsaved changes" : state.ready ? "" : esc(state.error)}</p><button class="button" type="button" id="profile-reset">Reset</button><button class="button primary" type="submit" ${state.ready ? "" : "disabled"}>Save changes</button></div>
-    </form>
-    ${authStatus?.enabled && authStatus.authenticated ? `<form class="settings-card account-password" id="change-password-form"><h2>Change password</h2><p>Use a unique password of 12-256 characters, different from your email and username. Updating it signs you out on every device.</p>${authStatus.passwordChangeRecommended ? '<p class="notice data-warning">Your current password matches your account identifier. Choose a unique password.</p>' : ""}<label for="account-current-password">Current password</label><input id="account-current-password" name="currentPassword" type="password" autocomplete="current-password" maxlength="256" required/><label for="account-new-password">New password</label><input id="account-new-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required/><label for="account-confirm-password">Confirm new password</label><input id="account-confirm-password" name="confirm" type="password" autocomplete="new-password" minlength="12" maxlength="256" required/><div class="profile-form-actions"><button class="button primary" type="submit">Update password</button></div></form>` : ""}
-    <section class="settings-card account-project-access"><h2>Organization and project access</h2><p data-feature="my-profile.view-organization-membership"><strong>${esc(authStatus?.organization?.name || "Current organization")}</strong></p><p>Role: ${esc(state.user?.role || "Local administrator")}</p><p>Your account can access ${authStatus?.user?.projects?.includes("*") ? "all projects in this organization" : "the projects listed below"}.</p><ul data-feature="my-profile.view-assigned-projects">${workspaceProjects.map((project) => `<li>${esc(project.name)} <small>(${esc(project.id)})</small></li>`).join("") || "<li>No assigned projects.</li>"}</ul></section>
-    ${preferenceStatusMarkup()}
-  </div>`;
+  globalThis.TomatoesReact.renderProfile(host, {
+    state,
+    profile,
+    auth: authStatus,
+    projects: workspaceProjects,
+    dirty: hasUnsavedProfile(),
+  });
   setupPasswordChange(host);
   const form = document.querySelector("#profile-form");
   const button = form.querySelector('button[type="submit"]');

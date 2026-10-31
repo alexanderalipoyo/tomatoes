@@ -4,7 +4,7 @@ import { flushSync } from "react-dom";
 import { ApplicationShell } from "./ApplicationShell";
 import { AuthPage } from "./components/AuthPage";
 import { startFeatureControllers } from "./runtime";
-import { dashboardBridge } from "./report-bridge";
+import { applicationBridge } from "./report-bridge";
 const authRoots = new WeakMap();
 let authKey = 0;
 function renderAuth(screen, props) {
@@ -39,9 +39,9 @@ class ErrorBoundary extends Component {
     );
   }
 }
-window.TomatoesReact = { renderAuth, ...dashboardBridge };
+window.TomatoesReact = { renderAuth, ...applicationBridge };
 const root = createRoot(document.getElementById("root"));
-// Commit the stable shell before compatibility controllers query their host elements.
+// Commit the shell before initializing the bundled workflow services.
 flushSync(() =>
   root.render(
     <ErrorBoundary>

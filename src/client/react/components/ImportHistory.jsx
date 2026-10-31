@@ -17,6 +17,7 @@ export function ImportHistory() {
           </button>
         </div>
       </div>
+      <div id="history-tools"></div>
       <div id="history-list"></div>
       <p className="notice history-storage-note">
         {

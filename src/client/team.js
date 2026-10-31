@@ -1,6 +1,3 @@
-function sharedRunMarkup(run) {
-  return `<article class="shared-run"><div>${badge(run.status)}<strong>${esc(run.label || run.name)}</strong>${run.notes ? `<p>${esc(run.notes)}</p>` : ""}<p>${esc(workspaceBranding(run.metadata.project).name)}${run.metadata.environment ? " / " + esc(run.metadata.environment) : ""} · ${number(run.counts.total)} tests · ${run.counts.failed} failed</p><small>${esc(date(run.start))}</small>${run.metadata.branch ? `<small>Branch ${esc(run.metadata.branch)}${run.metadata.commit ? " · " + esc(run.metadata.commit) : ""}</small>` : ""}</div><button class="button" data-open-shared="${run.id}">Open browser copy</button></article>`;
-}
 let teamState = null;
 let teamRenderVersion = 0;
 let teamProject = "";
@@ -70,263 +67,78 @@ async function originalReportText() {
 function isTeamSettingsView(alt) {
   return isSharingSettingsView() && alt.isConnected;
 }
-async function renderTeam(alt) {
-  if (!isTeamSettingsView(alt)) return;
-  const version = ++teamRenderVersion;
-  $("#report-content").hidden = false;
-  alt.innerHTML =
-    '<article class="insight-card"><p role="status">Connecting to the local team store…</p></article>';
-  try {
-    const status = await teamRequest("/api/team/status");
-    if (!isTeamSettingsView(alt) || version !== teamRenderVersion) return;
-    teamState = status;
-    if (status.enabled && !status.authenticated) {
-      alt.innerHTML = `<form id="team-login" class="settings-card preference-form team-login"><h2>Sign in to the local team store</h2><p>Your account determines which projects you can access. Browser import history is stored separately on this device.</p><label>Email or username<input id="team-username" autocomplete="username" required maxlength="64"/></label><label>Password<input id="team-password" type="password" autocomplete="current-password" required maxlength="256"/></label><button class="button primary" type="submit">Sign in</button><p id="team-login-error" role="alert"></p></form><article class="settings-card"><h2>Local account setup</h2><p>In a terminal, create an account with a role and project scope:</p><pre>node scripts/team-admin.js add-user alex --projects tomatoes --role editor</pre><p class="widget-footnote">Account setup runs on this machine; the password is prompted without echo.</p></article>`;
-      $("#team-login").onsubmit = async (event) => {
-        event.preventDefault();
-        const form = event.target;
-        const submit = form.querySelector("button");
-        const username = form.querySelector("#team-username");
-        const password = form.querySelector("#team-password");
-        submit.disabled = true;
-        try {
-          await teamRequest("/api/login", {
-            method: "POST",
-            body: JSON.stringify({
-              username: username.value,
-              password: password.value,
-            }),
-          });
-          password.value = "";
-          await reloadUserPreferences();
-          await renderTeam(alt);
-          showToast("Signed in. Your preferences are loaded.", "success");
-        } catch (error) {
-          form.querySelector("#team-login-error").textContent = error.message;
-          showToast(error.message, "error");
-          submit.disabled = false;
-        }
-      };
-      return;
-    }
-    const projects = (status.accessibleProjects || [])
-      .map((project) => project.id)
-      .sort();
-    if (teamProject && !projects.includes(teamProject)) teamProject = "";
-    const route =
-      "/api/runs" +
-      (teamProject ? "?project=" + encodeURIComponent(teamProject) : "");
-    const payload = await teamRequest(route);
-    if (!isTeamSettingsView(alt) || version !== teamRenderVersion) return;
-    let nextCursor = payload.nextCursor || null;
-    let visibleRuns = payload.runs;
-    const editable = !status.user || status.user.role !== "viewer";
-    alt.innerHTML = `<div class="insight-source"><span>${status.enabled ? `Signed in as ${esc(status.user.username)} · ${esc(status.user.role)}` : "Local mode · sign-in is optional"}</span><span>${status.storage === "postgres" ? "PostgreSQL connected · local database" : "File storage on this machine"} ${status.enabled ? '<button class="button" id="team-logout">Sign out</button>' : ""}</span></div><div class="team-layout"><article class="settings-card"><h2>Shared reports</h2><p>Filter by project and open a report as a browser copy.</p><label class="team-project-label">Project<select id="team-project"><option value="">All accessible projects</option>${projects.map((project) => `<option value="${esc(project)}" ${project === teamProject ? "selected" : ""}>${esc(workspaceBranding(project).name)}</option>`).join("")}</select></label><p class="widget-footnote">Opening a report saves a copy in this browser's import history, including after sign-out.</p><div id="team-runs">${visibleRuns.map(sharedRunMarkup).join("") || '<p class="widget-empty">No shared reports in this project yet.</p>'}</div><div class="report-page-controls"><p id="team-page-status" role="status"></p><button type="button" class="button" id="team-load-more">Load older reports</button></div></article><div><form class="settings-card preference-form" id="publish-current"><h2>Publish selected run</h2><p>Copy the currently viewed report into the local server store.</p><label>Project<input id="publish-project" value="${esc(report?.metadata?.project || projects[0] || "tomatoes")}" required maxlength="80"/></label><button class="button primary" ${!report || !editable ? "disabled" : ""}>Publish report</button><p id="team-feedback" role="status">${!editable ? "Your account has read-only access." : !report ? "Open a run from Projects or Shared reports to enable publishing." : ""}</p></form><article class="settings-card"><h2>Optional local sign-in</h2><p>Create users with viewer, editor, or admin roles, then start the server with TOMATOES_TEAM_MODE=1. Each user has an explicit project scope.</p><p class="widget-footnote">${status.storage === "postgres" ? "Reports, account hashes, CI token hashes, and attachment metadata are stored in PostgreSQL. Attachment files stay in the private local storage folder." : "Server reports are saved under .tomatoes-data and excluded from Git."} Existing browser imports can be copied using Save browser imports. New file imports are copied automatically when PostgreSQL access is available.</p></article></div></div>`;
-    $("#team-project").onchange = (event) => {
-      teamProject = event.target.value;
-      renderTeam(alt);
-    };
-    if ($("#team-logout"))
-      $("#team-logout").onclick = async () => {
-        try {
-          await teamRequest("/api/logout", { method: "POST", body: "{}" });
-          teamState = null;
-          await reloadUserPreferences();
-          renderTeam(alt);
-          showToast("Signed out.", "success");
-        } catch (error) {
-          historyNotice(error.message);
-        }
-      };
-    $("#publish-current").onsubmit = async (event) => {
-      event.preventDefault();
-      const project = $("#publish-project").value;
-      await investigationBusy(
-        "Publishing report to the local team store",
-        async () => {
-          paintProgress(35, "Saving report and attachments");
-          await uploadBrowserReport(
-            historyEntries.find((entry) => entry.id === activeHistoryId),
-            project,
-          );
-          teamProject = project;
-          await renderTeam(alt);
-          $("#team-feedback").textContent =
-            "Report and attachments saved to the local server store.";
-          showToast("Report and attachments saved to the server.", "success");
-        },
-        (error) => {
-          if ($("#team-feedback"))
-            $("#team-feedback").textContent = error.message;
-          showToast(`Report could not be saved: ${error.message}`, "error");
-        },
-      );
-    };
-    document
-      .querySelector("#publish-current")
-      .insertAdjacentHTML(
-        "afterend",
-        `<article class="settings-card"><h2>Save browser history</h2><p>Copy saved browser imports, names, notes, and attachments into ${status.storage === "postgres" ? "PostgreSQL" : "the server store"}. Browser copies remain available. Trash is excluded.</p><button type="button" class="button" id="save-browser-history" ${!editable || !historyEntries.length ? "disabled" : ""}>Save browser imports</button><p id="browser-save-feedback" role="status"></p></article>`,
-      );
-    document.querySelector("#save-browser-history").onclick = async () => {
-      await investigationBusy(
-        "Saving browser reports",
-        async () => {
-          const entries = [...historyEntries].sort(
-            (a, b) => a.lastImportedAt - b.lastImportedAt,
-          );
-          const ids = new Set();
-          for (let index = 0; index < entries.length; index++) {
-            const entry = entries[index];
-            const saved = await uploadBrowserReport(
-              entry,
-              entry.metadata?.project || "tomatoes",
-              "history",
-            );
-            ids.add(saved.id);
-            paintProgress(
-              Math.round(((index + 1) / entries.length) * 95),
-              `Saved import ${index + 1} of ${entries.length}`,
-            );
-            await allowPaint();
-          }
-          teamProject = "";
-          await renderTeam(alt);
-          document.querySelector("#browser-save-feedback").textContent =
-            `Saved ${entries.length} browser imports as ${ids.size} distinct server reports, including their attachments. Browser history was preserved.`;
-          showToast(
-            `Saved ${ids.size} reports and their attachments to the server.`,
-            "success",
-          );
-        },
-        (error) => {
-          showToast(`Saving imports stopped: ${error.message}`, "error");
-          if (document.querySelector("#browser-save-feedback"))
-            document.querySelector("#browser-save-feedback").textContent =
-              `Save stopped: ${error.message} Earlier reports may already be saved. Retrying merges duplicates; browser originals are preserved.`;
-        },
-      );
-    };
-    function bindSharedRunButtons() {
-      alt.querySelectorAll("[data-open-shared]").forEach(
-        (button) =>
-          (button.onclick = async () => {
-            button.disabled = true;
-            try {
-              const saved = await teamRequest(
-                "/api/runs/" + button.dataset.openShared,
-              );
-              const file = new File(
-                [saved.originalText || JSON.stringify(saved.report)],
-                saved.run.name.endsWith(".json")
-                  ? saved.run.name
-                  : saved.run.name + ".json",
-                { type: "application/json" },
-              );
-              const existingIds = new Set(
-                historyEntries.map((entry) => entry.id),
-              );
-              await loadReport(file, {
-                recordImport: true,
-                openDashboard: true,
-                metadataOverride: saved.run.metadata,
-                skipServerSave: true,
-                serverId: saved.run.id,
-              });
-              if (currentFile !== file) {
-                button.disabled = false;
-                return;
-              }
-              if (activeHistoryId) {
-                const localId = activeHistoryId;
-                await investigationBusy(
-                  "Restoring server report details",
-                  async () => {
-                    if (!existingIds.has(localId)) {
-                      await ImportHistory.updateDetails(localId, {
-                        label: saved.run.label || "",
-                        notes: saved.run.notes || "",
-                      });
-                      if (saved.run.label) sourceName = saved.run.label;
-                    }
-                    await restoreSharedEvidence(saved, localId);
-                    await refreshHistory();
-                    renderSummary();
-                  },
-                  (error) =>
-                    historyNotice(
-                      `Report opened, but some saved details could not be restored: ${error.message}`,
-                    ),
-                );
-              }
-            } catch (error) {
-              historyNotice(error.message);
-              button.disabled = false;
-            }
-          }),
-      );
-    }
-    bindSharedRunButtons();
-    function updatePaging() {
-      const button = alt.querySelector("#team-load-more");
-      button.hidden = !nextCursor;
-      alt.querySelector("#team-page-status").textContent =
-        visibleRuns.length +
-        " shared reports loaded." +
-        (nextCursor ? " Older reports are available." : "");
-    }
-    updatePaging();
-    alt.querySelector("#team-load-more").onclick = async (event) => {
-      const button = event.currentTarget;
-      if (!nextCursor || button.disabled) return;
-      button.disabled = true;
-      button.textContent = "Loading older reports...";
-      try {
-        const separator = route.includes("?") ? "&" : "?";
-        const page = await teamRequest(
-          route + separator + "cursor=" + encodeURIComponent(nextCursor),
-          { signal: AbortSignal.timeout(15000) },
-        );
-        if (!isTeamSettingsView(alt) || version !== teamRenderVersion) return;
-        const seen = new Set(visibleRuns.map((run) => run.id));
-        const extra = page.runs.filter((run) => !seen.has(run.id));
-        visibleRuns.push(...extra);
-        nextCursor = page.nextCursor || null;
-        alt
-          .querySelector("#team-runs")
-          .insertAdjacentHTML("beforeend", extra.map(sharedRunMarkup).join(""));
-        bindSharedRunButtons();
-        updatePaging();
-      } catch (error) {
-        showToast("Could not load older reports: " + error.message, "error");
-      } finally {
-        button.disabled = false;
-        button.textContent = "Load older reports";
-      }
-    };
-  } catch (error) {
-    if (isTeamSettingsView(alt) && version === teamRenderVersion)
-      alt.innerHTML = `<article class="settings-card"><h2>Local team store unavailable</h2><p role="alert">${esc(error.message)}</p><button class="button" id="retry-team">Reconnect</button></article>`;
-    if ($("#retry-team")) $("#retry-team").onclick = () => renderTeam(alt);
-  }
+function updateSharingStatus(status) {
+  teamState = status;
 }
-function reportIdentityMarkup() {
-  const metadata = report.metadata || {};
-  const summary = $("#run-summary");
-  summary.querySelector(".run-identity")?.remove();
-  if (!Object.values(metadata).some(Boolean)) return;
-  summary.insertAdjacentHTML(
-    "beforeend",
-    `<div class="run-identity">${["project", "environment", "branch", "commit"]
-      .filter((key) => metadata[key])
-      .map(
-        (key) =>
-          `<span><small>${key}</small>${esc(key === "project" ? workspaceBranding(metadata[key]).name : metadata[key])}</span>`,
-      )
-      .join(
-        "",
-      )}${metadata.buildUrl ? `<a class="button" href="${esc(metadata.buildUrl)}" target="_blank" rel="noopener noreferrer">Open build →</a>` : ""}</div>`,
+async function publishCurrentReport(project) {
+  let failure = null;
+  await investigationBusy(
+    "Publishing report to the team store",
+    async () => {
+      teamState = await teamRequest("/api/team/status");
+      paintProgress(35, "Saving report and attachments");
+      await uploadBrowserReport(
+        historyEntries.find((entry) => entry.id === activeHistoryId),
+        project,
+      );
+    },
+    (error) => {
+      failure = error;
+    },
   );
+  if (failure) throw failure;
+  return "Report and attachments saved to the server.";
+}
+async function saveBrowserImports() {
+  let failure = null,
+    count = 0;
+  await investigationBusy(
+    "Saving browser history",
+    async () => {
+      teamState = await teamRequest("/api/team/status");
+      const entries = await ImportHistory.list();
+      const ids = new Set();
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index];
+        const saved = await uploadBrowserReport(
+          entry,
+          entry.metadata?.project || "tomatoes",
+          "history",
+        );
+        ids.add(saved.id);
+        paintProgress(
+          Math.round(((index + 1) / entries.length) * 95),
+          `Saved import ${index + 1} of ${entries.length}`,
+        );
+        await allowPaint();
+      }
+      count = ids.size;
+    },
+    (error) => {
+      failure = error;
+    },
+  );
+  if (failure) throw failure;
+  return `Saved ${count} reports and their attachments to the server. Browser history was preserved.`;
+}
+function openSharedReport(id) {
+  return loadReport(null, { serverId: id, fromURL: true, openDashboard: true });
+}
+function renderTeam(alt) {
+  if (!isTeamSettingsView(alt)) return;
+  globalThis.TomatoesReact.renderSharing(alt, {
+    request: teamRequest,
+    onStatus: updateSharingStatus,
+    branding: workspaceBranding,
+    selectedProject: report?.metadata?.project || currentWorkspaceProject,
+    hasReport: !!report,
+    historyCount: historyEntries.length,
+    onPublish: publishCurrentReport,
+    onSaveHistory: saveBrowserImports,
+    onOpen: openSharedReport,
+    onToast: showToast,
+    formatDate: date,
+  });
 }
 async function uploadBrowserReport(
   entry,

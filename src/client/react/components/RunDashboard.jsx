@@ -1,3 +1,4 @@
+import { RunIdentity } from "../pages/SharingPage";
 import { Icon } from "./Icon";
 const outcomes = ["passed", "failed", "pending", "skipped", "unknown"];
 const colors = {
@@ -50,6 +51,7 @@ export function RunSummary({
           {report.specs.length} specs · {report.failedSpecs} with failures
         </span>
       </div>
+      <RunIdentity metadata={report.metadata || {}} branding={() => brand} />
     </>
   );
 }

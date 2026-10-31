@@ -109,7 +109,7 @@
       const title = terms ? "Terms of Use" : "Privacy Policy";
       const url = `/legal/${terms ? "terms-of-use" : "privacy-policy"}.sample.md`;
       const content = document.querySelector("#detail-content");
-      content.innerHTML = `<article class="legal-document" aria-busy="true"><h2 id="detail-title">${title}</h2><p role="status">Loading sample document…</p></article>`;
+      globalThis.TomatoesReact.renderLegal(content, { title, loading: true });
       detail.showModal();
       try {
         const response = await fetch(url, {
@@ -119,20 +119,14 @@
         const markdown = await response.text();
         if (request.signal.aborted || !detail.open) return;
         const blocks = markdown.trim().split(/\r?\n\s*\r?\n/);
-        content.innerHTML = `<article class="legal-document">${blocks
-          .map((block, index) => {
-            if (index === 0)
-              return `<h2 id="detail-title">${esc(block.replace(/^# /, ""))}</h2>`;
-            if (block.startsWith("## "))
-              return `<h3>${esc(block.slice(3))}</h3>`;
-            return `<p${index === 1 ? ' class="legal-sample-notice"' : ""}>${esc(block)}</p>`;
-          })
-          .join(
-            "",
-          )}<a class="legal-download" href="${url}" download>Download sample document (.md)</a></article>`;
+        globalThis.TomatoesReact.renderLegal(content, { title, blocks, url });
       } catch (error) {
         if (request.signal.aborted || !detail.open) return;
-        content.innerHTML = `<article class="legal-document"><h2 id="detail-title">${title}</h2><p role="alert">We couldn’t load this sample document. Close this window and try again.</p></article>`;
+        globalThis.TomatoesReact.renderLegal(content, {
+          title,
+          error:
+            "We couldn't load this sample document. Close this window and try again.",
+        });
       }
     };
   });

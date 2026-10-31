@@ -10,7 +10,7 @@ import { MobileNavigation } from "./components/MobileNavigation.jsx";
 import { ImportDialog } from "./components/ImportDialog.jsx";
 import { ImportProgress } from "./components/ImportProgress.jsx";
 import { ToastHost } from "./components/ToastHost.jsx";
-// Static shell mounts once. Existing controllers own only the empty feature hosts.
+// Stable application shell; React page roots own the route and report outlets.
 export function ApplicationShell() {
   return (
     <>

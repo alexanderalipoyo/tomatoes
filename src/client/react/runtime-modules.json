@@ -1,5 +1,4 @@
-// Ordered compatibility modules; do not bundle them into a module scope.
-export const runtimeScripts = [
+[
   "/js/notifications.js",
   "/js/access-policy.js",
   "/js/access-control.js",
@@ -35,5 +34,5 @@ export const runtimeScripts = [
   "/js/profile.js",
   "/js/users.js",
   "/js/auth.js",
-  "/js/app.js",
-];
+  "/js/app.js"
+]

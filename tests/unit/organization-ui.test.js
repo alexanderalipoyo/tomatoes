@@ -24,6 +24,29 @@ test("Justine sees organization identity independently of permitted project sele
     },
   ];
   const context = {
+    TomatoesReact: {
+      renderAvatar: (element, { logo, initials, name }) => {
+        element.replaceChildren();
+        if (logo) {
+          const img = dom.window.document.createElement("img");
+          img.src = logo;
+          img.alt = name || "";
+          element.append(img);
+        } else element.textContent = initials || "";
+      },
+      renderOptions: (element, { options, empty }) => {
+        element.replaceChildren(
+          ...(options.length ? options : [{ value: "", label: empty }]).map(
+            (item) => {
+              const option = dom.window.document.createElement("option");
+              option.value = item.value;
+              option.textContent = item.label;
+              return option;
+            },
+          ),
+        );
+      },
+    },
     AccessPolicy: require("../../src/shared/access-policy"),
     authRequiresLogin: () => false,
     MutationObserver: dom.window.MutationObserver,

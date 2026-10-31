@@ -12,6 +12,10 @@ The application runs locally. Imports and evidence are available in your browser
 
 **Created by Alex Ali.**
 
+## React frontend
+
+The interface uses React 19 components and JSX for pages, dashboards, forms, and dialogs. The browser loads one application bundle; the existing Node.js API and PostgreSQL storage remain in place. See the [React architecture guide](docs/react-architecture.md) for page components, workflow adapters, and build details.
+
 ## Get started
 
 With Node.js and npm installed, run:
@@ -370,7 +374,7 @@ The interface now boots through React and React DOM, with JSX compiled by esbuil
 
 `src/client/react/main.jsx` mounts the component tree. Reusable components live in `src/client/react/components/`: sidebar, topbar, mobile navigation, dialogs, report containers, authentication, and the latest-run dashboard. Login and recovery forms use React state; run summaries, metrics, outcome charts, hotspots, spec health, timing, coverage, result rows, and history cards use React event handlers and escaped values. Startup failures render a reload screen.
 
-The existing report import, history actions, result filtering and pagination, settings, user administration, project, and integration controllers remain behind `src/client/react/runtime.js`. They load in their existing order after the shell commits and operate on stable feature hosts. `report-bridge.jsx` and the auth adapter connect those controllers to React roots. Keep React-controlled widget contents separate from controller-controlled hosts; do not rewrite their `innerHTML`. This is a compatibility migration, and the remaining feature presenters still use their original rendering code. Shared report models, API routes, PostgreSQL storage, authentication cookies, and Vercel routing remain unchanged.
+All page and dialog markup now lives in React components. Page components in `src/client/react/pages/` cover workspace administration and report analysis; shared widgets and dialogs live in `components/`. The application mounts them through `report-bridge.jsx`, which cleans up nested roots when navigating. Workflow adapters retain report processing, browser storage, native APIs, and authenticated backend calls. The build bundles those services with the React entry point using `runtime-modules.json`; the browser no longer injects ordered controller scripts. Shared report models, API routes, PostgreSQL storage, authentication cookies, and Vercel routing retain their existing contracts. See [React architecture](docs/react-architecture.md).
 
 Edit JSX components and run `npm run build` to rebuild, then reload the page. Generated bundles in `.tomatoes-data/client-build/` and `dist/` are ignored; commit source, `package.json`, and the lockfile. No framework migration to Next.js or a database migration is required.
 
