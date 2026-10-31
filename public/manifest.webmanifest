@@ -1,0 +1,17 @@
+{
+  "name": "Tomatoes Test Reports",
+  "short_name": "Tomatoes",
+  "start_url": "/#runs",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111b24",
+  "theme_color": "#18232d",
+  "icons": [
+    {
+      "src": "/assets/tomatoes-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

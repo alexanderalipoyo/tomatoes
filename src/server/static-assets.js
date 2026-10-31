@@ -6,6 +6,8 @@ function add(route, relative) {
 }
 add("/", "public/index.html");
 add("/index.html", "public/index.html");
+add("/.well-known/assetlinks.json", "public/.well-known/assetlinks.json");
+add("/manifest.webmanifest", "public/manifest.webmanifest");
 add("/js/react-app.js", ".tomatoes-data/client-build/react-app.js");
 for (const name of [
   "app",

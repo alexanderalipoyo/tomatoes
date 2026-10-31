@@ -439,3 +439,7 @@ Google Identity Services sign-in is available alongside password login. Set `TOM
 ### Before deploying database changes
 
 Run `npm run db:verify:production` against the production configuration before deploying. This read-only check compares every required migration with the database and exits unsuccessfully if one is missing. Apply missing migrations with `npm run db:migrate:production`, then repeat the check. For a CI environment with database variables already configured, run `node scripts/check-schema.js` directly. The production build remains independent of database access and never runs migrations automatically.
+
+### Android APK
+
+Build installable Android variants with `build-android-local.cmd` and `build-android-production.cmd`, or `npm run android:build:local` / `npm run android:build:production`. APKs are written to `artifacts/android/`. The corresponding `android:run:local` and `android:run:production` commands install and launch on the Pixel 10 Pro AVD. The app uses a browser-backed Android shell connected to the existing server; production full-screen verification requires deploying the generated Digital Asset Links file. See [Android builds, emulator and signing](docs/android.md) before distributing a release, especially the signing-key backup instructions.

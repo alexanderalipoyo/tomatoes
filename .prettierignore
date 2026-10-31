@@ -1,3 +1,8 @@
 node_modules/
 package-lock.json
 examples/reports/results.json
+
+android/.gradle/
+android/**/build/
+android/gradlew
+android/gradlew.bat

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.tomatoes.reports",
+      "sha256_cert_fingerprints": [
+        "C2:DA:10:CC:EC:7E:BD:DE:EC:6C:44:EA:EC:9D:5F:7F:06:1C:0F:55:0E:94:51:74:FE:07:30:3C:D4:21:9E:DC"
+      ]
+    }
+  }
+]

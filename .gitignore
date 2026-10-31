@@ -12,3 +12,14 @@ tmp/
 # Generated production build and local Vercel state.
 dist/
 .vercel/
+
+# Android build output and private machine configuration.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.jks
+*.keystore
+artifacts/android/
+*.p12
+*.pfx

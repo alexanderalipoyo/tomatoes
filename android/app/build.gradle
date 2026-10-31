@@ -1,0 +1,60 @@
+import groovy.json.JsonOutput
+plugins { id 'com.android.application' }
+def productionOrigin = providers.gradleProperty('tomatoesProductionOrigin').getOrElse('https://tomatoes-reports.vercel.app')
+def localPort = providers.gradleProperty('tomatoesLocalPort').getOrElse('3004')
+def localOrigin = "http://localhost:${localPort}"
+if (!(localPort ==~ /[0-9]{2,5}/) || localPort.toInteger() > 65535) throw new GradleException('Invalid local server port')
+def parsedOrigin = new URI(productionOrigin)
+if (parsedOrigin.scheme != 'https' || !parsedOrigin.host || parsedOrigin.userInfo || parsedOrigin.query || parsedOrigin.fragment || !(parsedOrigin.path in ['', '/'])) throw new GradleException('Production requires a clean HTTPS origin')
+productionOrigin = productionOrigin.replaceAll('/$', '')
+android {
+    namespace 'com.tomatoes.reports'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.tomatoes.reports'
+        minSdk 26
+        targetSdk 36
+        versionCode providers.gradleProperty('tomatoesVersionCode').getOrElse('1').toInteger()
+        versionName providers.gradleProperty('tomatoesVersionName').getOrElse('1.0.0')
+    }
+    buildFeatures { buildConfig true }
+    flavorDimensions += 'environment'
+    productFlavors {
+        local {
+            dimension 'environment'
+            applicationIdSuffix '.local'
+            versionNameSuffix '-local'
+            resValue 'string', 'app_name', 'Tomatoes Local'
+            resValue 'string', 'launch_url', localOrigin + '/#runs'
+            resValue 'string', 'asset_statements', JsonOutput.toJson([[relation: ['delegate_permission/common.handle_all_urls'], target: [namespace: 'web', site: localOrigin]]])
+            manifestPlaceholders = [cleartextTraffic: 'true', launchUrl: localOrigin + '/#runs']
+        }
+        production {
+            dimension 'environment'
+            resValue 'string', 'app_name', 'Tomatoes'
+            resValue 'string', 'launch_url', productionOrigin + '/#runs'
+            resValue 'string', 'asset_statements', JsonOutput.toJson([[relation: ['delegate_permission/common.handle_all_urls'], target: [namespace: 'web', site: productionOrigin]]])
+            manifestPlaceholders = [cleartextTraffic: 'false', launchUrl: productionOrigin + '/#runs']
+        }
+    }
+    signingConfigs {
+        production {
+            if (System.getenv('TOMATOES_ANDROID_KEYSTORE')) {
+                storeFile file(System.getenv('TOMATOES_ANDROID_KEYSTORE'))
+                storePassword System.getenv('TOMATOES_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('TOMATOES_ANDROID_KEY_ALIAS') ?: 'tomatoes'
+                keyPassword System.getenv('TOMATOES_ANDROID_KEY_PASSWORD') ?: System.getenv('TOMATOES_ANDROID_STORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { debuggable true }
+        release {
+            debuggable false
+            signingConfig signingConfigs.production
+            minifyEnabled false
+        }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.6.2' }
