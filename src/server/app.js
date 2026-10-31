@@ -49,6 +49,7 @@ function createApplication({
     ciToken: env.TOMATOES_CI_TOKEN || "",
     ciProject: env.TOMATOES_CI_PROJECT || "tomatoes",
     recoverySender: createRecoverySender(env),
+    googleAuth: require("./google-auth").createGoogleAuth(env),
     slackNotifier: createSlackNotifier({
       webhookURL: env.TOMATOES_SLACK_WEBHOOK_URL,
       enabled: env.TOMATOES_SLACK_ENABLED !== "false",
@@ -131,8 +132,10 @@ function createApplication({
       "Content-Type": types[path.extname(file)],
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
       "Content-Security-Policy":
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' blob: https://fonts.gstatic.com; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; frame-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src 'self' blob: https://fonts.gstatic.com; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' https://accounts.google.com/gsi/; worker-src 'self'; frame-src 'self' blob: https://accounts.google.com/gsi/; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     });
     res.end(data);
   };

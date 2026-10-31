@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@vercel/analytics": "2.0.1",
+    "google-auth-library": "11.3.2",
     "jspdf": "4.2.1",
     "pdfjs-dist": "6.4.299",
     "pg": "8.23.1",

@@ -516,13 +516,15 @@ function UserDialog({
               </>
             )}
             <label>
-              Username
+              {existingAccount ? "Username or Gmail address" : "Username"}
               <input
                 name="username"
                 defaultValue={user?.username || ""}
                 readOnly={!!user}
-                pattern="[a-z0-9][a-z0-9_.-]{0,63}"
-                maxLength="64"
+                pattern={
+                  existingAccount ? undefined : "[a-z0-9][a-z0-9_.-]{0,63}"
+                }
+                maxLength={existingAccount ? 254 : 64}
                 required
                 autoComplete="off"
               />

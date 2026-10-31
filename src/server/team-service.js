@@ -53,6 +53,7 @@ function createTeamService({
   slackNotifier = null,
   hosted = false,
   recoverySender = null,
+  googleAuth = null,
   store = createFileStore(dataDir),
 } = {}) {
   const sessions = new Map(),
@@ -179,6 +180,27 @@ function createTeamService({
       await deleteSession(key);
       return null;
     }
+    if (
+      !UserManagement.memberships(account).length &&
+      account.googleAuth?.hasHomeMembership === false
+    ) {
+      return {
+        ...saved,
+        key,
+        username: account.username,
+        fullName: account.fullName || account.username,
+        email: account.email || "",
+        role: "viewer",
+        projects: [],
+        projectScopes: [],
+        accessibleProjects: [],
+        organizationMemberships: [],
+        organization: null,
+        organizationId: null,
+        permissions: {},
+        pendingOrganization: true,
+      };
+    }
     const member = UserManagement.memberships(account).find(
       (row) => !row.disabled,
     );
@@ -251,6 +273,11 @@ function createTeamService({
       };
     const user = await session(req);
     if (!user) throw apiError(401, "Sign in to access the local team store.");
+    if (user.pendingOrganization)
+      throw apiError(
+        403,
+        "Your account is waiting for organization membership. Ask an organization administrator to add your Gmail address.",
+      );
     return { ...user, kind: "session" };
   }
   function canAccess(user, project) {
@@ -363,6 +390,12 @@ function createTeamService({
         const tokens = await store.getTokens();
         send(res, 200, {
           enabled: teamMode,
+          google: {
+            enabled: Boolean(teamMode && googleAuth?.enabled),
+            clientId:
+              teamMode && googleAuth?.enabled ? googleAuth.clientId : "",
+          },
+          pendingOrganization: Boolean(user?.pendingOrganization),
           canCreateOrganization: Boolean(
             user && UserManagement.isGlobalAdmin(user, user.organizationId),
           ),
@@ -414,8 +447,10 @@ function createTeamService({
                 username: user.username,
                 role: user.role,
                 projects: user.projects,
-                organizationId:
-                  user.organizationId || UserManagement.ORGANIZATION_ID,
+                organizationId: user.pendingOrganization
+                  ? null
+                  : user.organizationId || UserManagement.ORGANIZATION_ID,
+                email: user.email || "",
               }
             : null,
           csrf: user?.csrf || null,
@@ -430,6 +465,189 @@ function createTeamService({
             : "local",
           maxRequestBytes: hosted ? maxRequestBytes : null,
         });
+        return true;
+      }
+      if (
+        req.method === "POST" &&
+        ["/api/auth/google/challenge", "/api/auth/google"].includes(
+          url.pathname,
+        )
+      ) {
+        checkOrigin(req);
+        if (!teamMode || !googleAuth?.enabled)
+          throw apiError(
+            503,
+            "Google sign-in is not configured. Contact your administrator.",
+          );
+        if (!(await consumeLoginLimit("google-ip:" + clientAddress(req), 30)))
+          throw apiError(
+            429,
+            "Too many Google sign-in attempts. Try again in 15 minutes.",
+          );
+        const body = await bodyJSON(req, 16384);
+        const secure =
+          hosted || publicOrigin.startsWith("https:") ? "; Secure" : "";
+        if (url.pathname.endsWith("/challenge")) {
+          if (
+            !body ||
+            !["login", "signup"].includes(body.mode) ||
+            Object.keys(body).some((key) => key !== "mode")
+          )
+            throw apiError(400, "Choose sign in or sign up.");
+          const nonce = crypto.randomBytes(32).toString("base64url");
+          await store.saveAuthChallenge(hashToken(nonce), {
+            mode: body.mode,
+            expires: now() + 10 * 60 * 1000,
+          });
+          send(
+            res,
+            200,
+            { nonce },
+            {
+              "Set-Cookie": `tomatoes_google_nonce=${nonce}; HttpOnly; SameSite=Strict; Path=/api/auth/google; Max-Age=600${secure}`,
+            },
+          );
+          return true;
+        }
+        if (
+          !body ||
+          typeof body.credential !== "string" ||
+          body.credential.length > 12000 ||
+          Object.keys(body).some((key) => key !== "credential")
+        )
+          throw apiError(400, "Submit a Google sign-in credential.");
+        const nonce = String(req.headers.cookie || "")
+          .split(";")
+          .map((value) => value.trim())
+          .find((value) => value.startsWith("tomatoes_google_nonce="))
+          ?.slice("tomatoes_google_nonce=".length);
+        if (!nonce || !/^[a-zA-Z0-9_-]{43}$/.test(nonce))
+          throw apiError(401, "Google sign-in expired. Please try again.");
+        const challenge = await store.consumeAuthChallenge(
+          hashToken(nonce),
+          now(),
+        );
+        if (!challenge)
+          throw apiError(
+            401,
+            "Google sign-in expired or was already used. Please try again.",
+          );
+        const identity = await googleAuth.verify(body.credential, nonce);
+        const accounts = await store.getUsers();
+        const linked = accounts.filter(
+          (row) => row.googleAuth?.sub === identity.sub,
+        );
+        const matching = accounts.filter(
+          (row) => row.email?.toLowerCase() === identity.email,
+        );
+        if (linked.length > 1 || (!linked.length && matching.length > 1))
+          throw apiError(
+            401,
+            "Google sign-in could not be verified. Contact your administrator.",
+          );
+        const existing = linked[0] || matching[0];
+        if (!existing && challenge.mode !== "signup")
+          throw apiError(
+            403,
+            "No account is linked to this Gmail address. Choose Sign up to request access.",
+          );
+        if (
+          existing?.disabled ||
+          (existing?.googleAuth?.sub &&
+            existing.googleAuth.sub !== identity.sub)
+        )
+          throw apiError(
+            401,
+            "Google sign-in could not be verified. Contact your administrator.",
+          );
+        const username =
+          existing?.username ||
+          "google_" + hashToken(identity.sub).slice(0, 24);
+        const credentials = existing
+          ? null
+          : hashPassword(crypto.randomBytes(48).toString("base64url"));
+        const account = await store.manageUser(username, (rows) => {
+          const previous = rows.find((row) => row.username === username);
+          if (previous) {
+            if (
+              previous.disabled ||
+              (previous.googleAuth?.sub &&
+                previous.googleAuth.sub !== identity.sub) ||
+              (!previous.googleAuth?.sub &&
+                previous.email?.toLowerCase() !== identity.email)
+            )
+              throw apiError(401, "Google sign-in could not be verified.");
+            if (
+              rows.some(
+                (row) =>
+                  row.username !== username &&
+                  row.googleAuth?.sub === identity.sub,
+              )
+            )
+              throw apiError(409, "This Google account is already linked.");
+            return {
+              ...previous,
+              googleAuth: {
+                ...previous.googleAuth,
+                sub: identity.sub,
+                only: previous.googleAuth?.only || false,
+              },
+            };
+          }
+          if (
+            existing ||
+            rows.some(
+              (row) =>
+                row.googleAuth?.sub === identity.sub ||
+                row.email?.toLowerCase() === identity.email,
+            )
+          )
+            throw apiError(
+              409,
+              "This account changed. Please try Google sign-in again.",
+            );
+          return {
+            username,
+            fullName: identity.fullName,
+            email: identity.email,
+            organizationId: "default",
+            role: "viewer",
+            projects: [],
+            disabled: false,
+            memberships: [],
+            ...credentials,
+            googleAuth: {
+              sub: identity.sub,
+              only: true,
+              hasHomeMembership: false,
+            },
+          };
+        });
+        const memberships = UserManagement.memberships(account);
+        if (memberships.length && !memberships.some((row) => !row.disabled))
+          throw apiError(
+            403,
+            "Your organization membership is inactive. Contact your administrator.",
+          );
+        const token = crypto.randomBytes(32).toString("base64url"),
+          csrf = crypto.randomBytes(24).toString("base64url");
+        await saveSession(hashToken(token), {
+          username,
+          csrf,
+          passwordHash: account.hash,
+          expires: now() + 8 * 60 * 60 * 1000,
+        });
+        send(
+          res,
+          200,
+          { ok: true, pendingOrganization: !memberships.length },
+          {
+            "Set-Cookie": [
+              `tomatoes_google_nonce=; HttpOnly; SameSite=Strict; Path=/api/auth/google; Max-Age=0${secure}`,
+              `tomatoes_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${secure}`,
+            ],
+          },
+        );
         return true;
       }
       if (req.method === "POST" && url.pathname === "/api/login") {
@@ -491,6 +709,7 @@ function createTeamService({
         const user = matches.length === 1 ? matches[0] : null;
         if (
           !verifyPassword(body?.password, user) ||
+          user?.googleAuth?.only ||
           !(await store.getOrganization(user.organizationId || "default"))
         ) {
           const record =
@@ -609,7 +828,10 @@ function createTeamService({
           )
             throw apiError(400, "Enter a valid account email address.");
           const candidates = (await store.getUsers()).filter(
-            (user) => !user.disabled && user.email?.toLowerCase() === email,
+            (user) =>
+              !user.disabled &&
+              !user.googleAuth?.only &&
+              user.email?.toLowerCase() === email,
           );
           const matches = [];
           for (const user of candidates)
@@ -731,8 +953,12 @@ function createTeamService({
         return true;
       }
       if (req.method === "POST" && url.pathname === "/api/logout") {
-        const user = await principal(req);
-        canWrite({ ...req, headers: req.headers }, { ...user, role: "editor" });
+        const user = teamMode ? await session(req) : await principal(req);
+        if (!user) throw apiError(401, "Your session has ended.");
+        canWrite(
+          { ...req, headers: req.headers },
+          { ...user, kind: teamMode ? "session" : user.kind, role: "editor" },
+        );
         if (user.key) await deleteSession(user.key);
         send(
           res,
@@ -894,9 +1120,24 @@ function createTeamService({
           )
         )
           throw apiError(400, "Use username, role and projects.");
+        const identifier =
+          typeof body.username === "string"
+            ? body.username.trim().toLowerCase()
+            : "";
+        const matches = (await store.getUsers()).filter(
+          (row) =>
+            row.username === identifier ||
+            row.email?.toLowerCase() === identifier,
+        );
+        if (matches.length !== 1)
+          throw apiError(
+            404,
+            "An active account with this username or Gmail address was not found.",
+          );
         const changes = UserManagement.validateUser(
           {
             ...body,
+            username: matches[0].username,
             fullName: "Existing member",
             email: "",
             disabled: false,

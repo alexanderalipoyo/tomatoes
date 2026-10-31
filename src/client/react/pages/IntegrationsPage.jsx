@@ -166,6 +166,52 @@ export function IntegrationsPage({ request, catalog, project }) {
   );
 }
 function Setup({ entry, status, project }) {
+  if (entry.setup === "google")
+    return (
+      <>
+        <p>
+          {status.google?.enabled
+            ? "Google sign-in is configured on this server."
+            : "Create a Google OAuth Web application client to enable Gmail sign-in and signup."}
+        </p>
+        <h3>1. Configure Google Cloud</h3>
+        <p>
+          Configure your app's branding and audience in Google Auth Platform,
+          then create a Web application OAuth client. Add this site's exact
+          origin to Authorized JavaScript origins:
+        </p>
+        <pre>{location.origin}</pre>
+        <p>
+          For localhost, include the port. Add your production origin
+          separately. If your Google app is in Testing, add the Gmail accounts
+          that will test sign-in.
+        </p>
+        <h3>2. Configure Tomatoes</h3>
+        <pre>
+          {
+            "TOMATOES_TEAM_MODE=1\nTOMATOES_GOOGLE_CLIENT_ID=<your Web application client ID>"
+          }
+        </pre>
+        <p>
+          Set these values in the server environment, then restart locally or
+          redeploy Vercel. This ID-token flow needs no client secret or redirect
+          URI.
+        </p>
+        <h3>3. Grant organization membership</h3>
+        <p>
+          New signups wait for access. In Users, choose Add user / Add an
+          existing account and enter their Gmail address, role, and permitted
+          projects. Signing in never grants administrator access automatically.
+        </p>
+        <a
+          href="https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Google setup documentation
+        </a>
+      </>
+    );
   if (entry.setup === "slack")
     return (
       <>

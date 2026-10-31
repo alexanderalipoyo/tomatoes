@@ -1147,3 +1147,94 @@ test("organization list shows only additional memberships and switches the chose
     await state.cleanup();
   }
 });
+
+test("Gmail signup has a separate screen and pending accounts cannot enter the report UI", async () => {
+  const { AuthPage } = loadComponent("components/AuthPage.jsx");
+  const signup = await mount(
+    React.createElement(AuthPage, {
+      route: "signup",
+      onSubmit: async () => {},
+      google: { enabled: false },
+    }),
+  );
+  try {
+    assert.match(signup.host.textContent, /Create your account/);
+    assert.match(signup.host.textContent, /administrator setup/);
+    assert.equal(signup.host.querySelector('input[type="password"]'), null);
+    assert.equal(
+      signup.host.querySelector('.auth-secondary-link[href="#login"]')
+        .textContent,
+      "Already have an account? Sign in",
+    );
+  } finally {
+    await signup.cleanup();
+  }
+  let refreshed = 0,
+    signedOut = 0;
+  const pending = await mount(
+    React.createElement(AuthPage, {
+      route: "pending",
+      user: { fullName: "Gmail Member", email: "member@gmail.com" },
+      onRefreshAccess: async () => {
+        refreshed++;
+      },
+      onSignOut: async () => {
+        signedOut++;
+      },
+    }),
+  );
+  try {
+    assert.match(pending.host.textContent, /member@gmail.com/);
+    assert.match(pending.host.textContent, /organization administrator/);
+    assert.equal(pending.host.querySelector("form"), null);
+    await act(async () => pending.host.querySelectorAll("button")[0].click());
+    await act(async () => pending.host.querySelectorAll("button")[1].click());
+    assert.equal(refreshed, 1);
+    assert.equal(signedOut, 1);
+  } finally {
+    await pending.cleanup();
+  }
+});
+
+test("Google button sends the server nonce to Google and verifies a returned credential once", async () => {
+  const { GoogleSignIn } = loadComponent("components/GoogleSignIn.jsx");
+  let options,
+    callbackCalls = 0;
+  dom.window.google = {
+    accounts: {
+      id: {
+        initialize: (value) => {
+          options = value;
+        },
+        renderButton: (host) => {
+          const button = document.createElement("button");
+          button.textContent = "Continue with Google";
+          host.append(button);
+        },
+      },
+    },
+  };
+  const state = await mount(
+    React.createElement(GoogleSignIn, {
+      enabled: { clientId: "client.apps.googleusercontent.com" },
+      mode: "signup",
+      onChallenge: async (mode) => {
+        assert.equal(mode, "signup");
+        return { nonce: "server-nonce" };
+      },
+      onCredential: async (credential) => {
+        callbackCalls++;
+        assert.equal(credential, "signed-token");
+      },
+    }),
+  );
+  try {
+    assert.equal(options.nonce, "server-nonce");
+    assert.equal(options.auto_select, false);
+    await act(async () => options.callback({ credential: "signed-token" }));
+    assert.equal(callbackCalls, 1);
+  } finally {
+    await state.cleanup();
+    delete dom.window.google;
+  }
+});

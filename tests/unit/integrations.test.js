@@ -23,3 +23,13 @@ test("unsupported integrations have no setup action", () => {
     assert.equal(entry.state, "Not available yet");
   }
 });
+
+test("Google sign-in setup reflects the server capability", () => {
+  const disabled = catalog({}).find((item) => item.id === "google-auth");
+  assert.equal(disabled.setup, "google");
+  assert.equal(disabled.state, "Not configured");
+  const enabled = catalog({ google: { enabled: true } }).find(
+    (item) => item.id === "google-auth",
+  );
+  assert.equal(enabled.group, "Enabled");
+});

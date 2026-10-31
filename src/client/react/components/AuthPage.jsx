@@ -1,3 +1,4 @@
+import { GoogleSignIn, PendingAccess } from "./GoogleSignIn";
 import { useEffect, useRef, useState } from "react";
 import { AuthArtwork } from "./AuthArtwork";
 function AuthIcon({ name, ...props }) {
@@ -114,7 +115,18 @@ function PasswordField({
     </div>
   );
 }
-export function AuthPage({ route, message, delivery, onSubmit }) {
+export function AuthPage({
+  route,
+  message,
+  delivery,
+  onSubmit,
+  google,
+  onGoogleChallenge,
+  onGoogleCredential,
+  user,
+  onRefreshAccess,
+  onSignOut,
+}) {
   const successNotice = /^(Password updated|Signed out)/.test(message || "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(successNotice ? "" : message || "");
@@ -165,6 +177,15 @@ export function AuthPage({ route, message, delivery, onSubmit }) {
       if (alive.current) setPending(false);
     }
   }
+  if (route === "pending")
+    return (
+      <PendingAccess
+        user={user}
+        onRefresh={onRefreshAccess}
+        onSignOut={onSignOut}
+      />
+    );
+  const signup = route === "signup";
   return (
     <div className="auth-layout">
       <AuthArtwork />
@@ -197,14 +218,18 @@ export function AuthPage({ route, message, delivery, onSubmit }) {
                 ? "A FRESH START"
                 : forgot
                   ? "LET’S GET YOU BACK IN"
-                  : "GOOD TO SEE YOU AGAIN"}
+                  : signup
+                    ? "GET STARTED"
+                    : "GOOD TO SEE YOU AGAIN"}
             </span>
             <h1 id="auth-title">
               {reset
                 ? "Set a new password"
                 : forgot
                   ? "Forgot your password?"
-                  : "Welcome back."}
+                  : signup
+                    ? "Create your account"
+                    : "Welcome back."}
             </h1>
             <p>
               {reset
@@ -213,132 +238,160 @@ export function AuthPage({ route, message, delivery, onSubmit }) {
                   ? delivery === "local"
                     ? "Enter your account email and we’ll prepare a link in your local recovery inbox."
                     : "Enter your account email and we’ll help you reset your password."
-                  : "Sign in to pick up where your last run left off."}
+                  : signup
+                    ? "Sign up with Gmail, then ask an administrator for organization access."
+                    : "Sign in to pick up where your last run left off."}
             </p>
           </div>
-          <form id="auth-form" onSubmit={submit} aria-busy={pending}>
-            <fieldset disabled={pending} className="auth-fields">
-              <legend className="visually-hidden">
-                {reset
-                  ? "Set your password"
-                  : forgot
-                    ? "Password recovery"
-                    : "Sign in to Tomatoes"}
-              </legend>
-              {reset ? (
-                <>
-                  <PasswordField
-                    name="password"
-                    label="New password"
-                    autoComplete="new-password"
-                    minLength={12}
-                    help
-                  />
-                  <PasswordField
-                    name="confirm"
-                    label="Confirm password"
-                    autoComplete="new-password"
-                    minLength={12}
-                  />
-                </>
-              ) : (
-                <>
-                  <div className="auth-field">
-                    <label htmlFor="auth-email">
-                      {forgot ? "Account email" : "Email or username"}
-                    </label>
-                    <div className="auth-input-wrap">
-                      <AuthIcon name="mail" />
-                      <input
-                        id="auth-email"
-                        type={forgot ? "email" : "text"}
-                        name="email"
-                        autoComplete="username"
-                        autoCapitalize="none"
-                        spellCheck={false}
-                        maxLength={254}
-                        required
-                        placeholder="you@example.com"
-                      />
-                    </div>
-                  </div>
-                  {!forgot && (
+          {!forgot && !reset && (
+            <GoogleSignIn
+              enabled={google?.enabled ? google : null}
+              mode={signup ? "signup" : "login"}
+              onChallenge={onGoogleChallenge}
+              onCredential={onGoogleCredential}
+            />
+          )}
+          {!signup && !forgot && !reset && google?.enabled && (
+            <div className="auth-divider">or use your Tomatoes account</div>
+          )}
+          {!signup && (
+            <form id="auth-form" onSubmit={submit} aria-busy={pending}>
+              <fieldset disabled={pending} className="auth-fields">
+                <legend className="visually-hidden">
+                  {reset
+                    ? "Set your password"
+                    : forgot
+                      ? "Password recovery"
+                      : "Sign in to Tomatoes"}
+                </legend>
+                {reset ? (
+                  <>
                     <PasswordField
                       name="password"
-                      label="Password"
-                      autoComplete="current-password"
-                      forgotLink
+                      label="New password"
+                      autoComplete="new-password"
+                      minLength={12}
+                      help
                     />
-                  )}
-                </>
-              )}
-              {error && (
-                <div
-                  id="auth-error"
-                  className="auth-message auth-message-error"
-                  role="alert"
-                >
-                  <span className="auth-message-mark" aria-hidden="true">
-                    !
-                  </span>
-                  <span>{error}</span>
-                </div>
-              )}
-              {feedback?.message && (
-                <div
-                  id="auth-feedback"
-                  className="auth-message auth-message-success"
-                  role="status"
-                >
-                  <div>
-                    {feedback.message}
-                    {feedback.delivery === "local" && (
-                      <details className="auth-recovery-help">
-                        <summary>Open local recovery instructions</summary>
-                        <p>
-                          On this computer, run the following from the Tomatoes
-                          folder, replacing YOUR_EMAIL with your account email.
-                          Open the link it displays.
-                        </p>
-                        <code>
-                          node scripts/password-recovery.js YOUR_EMAIL
-                        </code>
-                        <p>
-                          No email is sent. Only someone with access to this
-                          computer can retrieve the link.
-                        </p>
-                      </details>
-                    )}
-                  </div>
-                </div>
-              )}
-              <button
-                className="button primary auth-submit"
-                type="submit"
-                disabled={pending}
-              >
-                {pending ? (
-                  <>
-                    <span className="auth-button-spinner" aria-hidden="true" />
-                    {forgot
-                      ? "Preparing your link…"
-                      : reset
-                        ? "Updating password…"
-                        : "Signing you in…"}
+                    <PasswordField
+                      name="confirm"
+                      label="Confirm password"
+                      autoComplete="new-password"
+                      minLength={12}
+                    />
                   </>
                 ) : (
                   <>
-                    {reset
-                      ? "Reset password"
-                      : forgot
-                        ? "Send reset link"
-                        : "Sign in"}
-                    <AuthIcon name="arrow" />
+                    <div className="auth-field">
+                      <label htmlFor="auth-email">
+                        {forgot ? "Account email" : "Email or username"}
+                      </label>
+                      <div className="auth-input-wrap">
+                        <AuthIcon name="mail" />
+                        <input
+                          id="auth-email"
+                          type={forgot ? "email" : "text"}
+                          name="email"
+                          autoComplete="username"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          maxLength={254}
+                          required
+                          placeholder="you@example.com"
+                        />
+                      </div>
+                    </div>
+                    {!forgot && (
+                      <PasswordField
+                        name="password"
+                        label="Password"
+                        autoComplete="current-password"
+                        forgotLink
+                      />
+                    )}
                   </>
                 )}
-              </button>
-            </fieldset>
-          </form>
+                {error && (
+                  <div
+                    id="auth-error"
+                    className="auth-message auth-message-error"
+                    role="alert"
+                  >
+                    <span className="auth-message-mark" aria-hidden="true">
+                      !
+                    </span>
+                    <span>{error}</span>
+                  </div>
+                )}
+                {feedback?.message && (
+                  <div
+                    id="auth-feedback"
+                    className="auth-message auth-message-success"
+                    role="status"
+                  >
+                    <div>
+                      {feedback.message}
+                      {feedback.delivery === "local" && (
+                        <details className="auth-recovery-help">
+                          <summary>Open local recovery instructions</summary>
+                          <p>
+                            On this computer, run the following from the
+                            Tomatoes folder, replacing YOUR_EMAIL with your
+                            account email. Open the link it displays.
+                          </p>
+                          <code>
+                            node scripts/password-recovery.js YOUR_EMAIL
+                          </code>
+                          <p>
+                            No email is sent. Only someone with access to this
+                            computer can retrieve the link.
+                          </p>
+                        </details>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <button
+                  className="button primary auth-submit"
+                  type="submit"
+                  disabled={pending}
+                >
+                  {pending ? (
+                    <>
+                      <span
+                        className="auth-button-spinner"
+                        aria-hidden="true"
+                      />
+                      {forgot
+                        ? "Preparing your link…"
+                        : reset
+                          ? "Updating password…"
+                          : "Signing you in…"}
+                    </>
+                  ) : (
+                    <>
+                      {reset
+                        ? "Reset password"
+                        : forgot
+                          ? "Send reset link"
+                          : "Sign in"}
+                      <AuthIcon name="arrow" />
+                    </>
+                  )}
+                </button>
+              </fieldset>
+            </form>
+          )}
+          {!forgot && !reset && (
+            <a
+              className="auth-secondary-link"
+              href={signup ? "#login" : "#signup"}
+            >
+              {signup
+                ? "Already have an account? Sign in"
+                : "New to Tomatoes? Sign up with Gmail"}
+            </a>
+          )}
           {reset ? (
             <a className="auth-secondary-link" href="#forgot-password">
               Need another link? Request a new one

@@ -54,7 +54,9 @@ async function teamRequest(route, options = {}) {
   const result = await response.json();
   if (
     response.status === 401 &&
-    !["/api/login", "/api/reset-password"].includes(route) &&
+    !["/api/login", "/api/reset-password", "/api/auth/google"].includes(
+      route,
+    ) &&
     typeof authSessionExpired === "function"
   )
     authSessionExpired();

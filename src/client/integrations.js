@@ -15,6 +15,18 @@
         setup: "ci",
       },
       {
+        id: "google-auth",
+        name: "Google sign-in",
+        mark: "G",
+        kind: "google",
+        description:
+          "Let members sign in and request access with a verified Gmail account.",
+        group: status.google?.enabled ? "Enabled" : "Available",
+        state: status.google?.enabled ? "Configured" : "Not configured",
+        action: status.google?.enabled ? "Configure" : "Set up",
+        setup: "google",
+      },
+      {
         id: "api",
         name: "Report API",
         mark: "{}",

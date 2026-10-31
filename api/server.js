@@ -3,6 +3,8 @@ function startupDiagnostic(error, env = process.env) {
   const known = {
     TOMATOES_CONFIG:
       "Check production database settings and the CA certificate.",
+    TOMATOES_GOOGLE_CONFIG:
+      "Check TOMATOES_GOOGLE_CLIENT_ID; use the Google Web application client ID.",
     TOMATOES_SCHEMA: "Run the production database migration.",
     ENOENT:
       "A required deployment file is missing; use an inline CA certificate on Vercel.",

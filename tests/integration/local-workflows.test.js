@@ -2918,3 +2918,178 @@ test("admin-only organization creation preserves memberships and isolates switch
   await writeJSON(file, rows);
   assert.equal((await switchTo(viewer, id)).status, 403);
 });
+
+test("Google signup verifies one-time challenges, preserves existing roles and waits for admin membership", async (t) => {
+  const { createGoogleAuth } = require("../../src/server/google-auth");
+  const clientId = "1234567890-test.apps.googleusercontent.com";
+  let tokenClaims;
+  const googleAuth = createGoogleAuth(
+    { TOMATOES_GOOGLE_CLIENT_ID: clientId },
+    { verifyToken: async () => tokenClaims },
+  );
+  const f = await serviceFixture(t, { teamMode: true, googleAuth });
+  const password = "google-existing-password-123";
+  await writeJSON(path.join(f.dataDir, "users.json"), [
+    {
+      username: "owner",
+      email: "owner@gmail.com",
+      fullName: "Owner",
+      role: "admin",
+      projects: ["*"],
+      ...hashPassword(password),
+    },
+    {
+      username: "member",
+      email: "member@gmail.com",
+      fullName: "Member",
+      role: "editor",
+      projects: ["web"],
+      ...hashPassword(password),
+    },
+  ]);
+  assert.equal((await f.request("/api/team/status")).body.google.enabled, true);
+  const challenge = async (mode = "signup") => {
+    const result = await f.request("/api/auth/google/challenge", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ mode }),
+    });
+    assert.equal(result.status, 200);
+    return {
+      nonce: result.body.nonce,
+      cookie: result.headers.get("set-cookie").split(";")[0],
+    };
+  };
+  const authenticate = (value, origin = f.origin) =>
+    f.request("/api/auth/google", {
+      method: "POST",
+      headers: { Origin: origin, Cookie: value.cookie },
+      body: JSON.stringify({ credential: "signed-id-token" }),
+    });
+  const claims = (
+    nonce,
+    email = "newuser@gmail.com",
+    sub = "new-google-user",
+  ) => ({
+    iss: "https://accounts.google.com",
+    aud: clientId,
+    email,
+    email_verified: true,
+    sub,
+    nonce,
+    name: "New User",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 300,
+  });
+  let value = await challenge();
+  tokenClaims = claims(value.nonce);
+  assert.equal(
+    (await authenticate(value, "https://other.example")).status,
+    403,
+  );
+  tokenClaims.nonce = "wrong";
+  assert.equal((await authenticate(value)).status, 401);
+  tokenClaims.nonce = value.nonce;
+  assert.equal(
+    (await authenticate(value)).status,
+    401,
+    "failed challenge cannot be reused",
+  );
+  value = await challenge("login");
+  tokenClaims = claims(value.nonce);
+  assert.equal(
+    (await authenticate(value)).status,
+    403,
+    "login does not silently register accounts",
+  );
+  value = await challenge();
+  tokenClaims = claims(value.nonce);
+  const signup = await authenticate(value);
+  assert.equal(signup.status, 200);
+  assert.equal(signup.body.pendingOrganization, true);
+  const cookie = signup.headers
+    .get("set-cookie")
+    .match(/tomatoes_session=[^; ,]+/)[0];
+  let status = (
+    await f.request("/api/team/status", { headers: { Cookie: cookie } })
+  ).body;
+  assert.equal(status.authenticated, true);
+  assert.equal(status.pendingOrganization, true);
+  assert.equal(status.organization, null);
+  assert.deepEqual(status.organizations, []);
+  assert.equal(status.canCreateOrganization, false);
+  assert.deepEqual(status.accessibleProjects, []);
+  assert.equal(status.user.email, "newuser@gmail.com");
+  const pending = {
+    Origin: f.origin,
+    Cookie: cookie,
+    "X-CSRF-Token": status.csrf,
+  };
+  for (const route of [
+    "/api/runs",
+    "/api/projects",
+    "/api/users",
+    "/api/preferences",
+  ])
+    assert.equal((await f.request(route, { headers: pending })).status, 403);
+  assert.equal(
+    (
+      await f.request("/api/organizations", {
+        method: "POST",
+        headers: pending,
+        body: JSON.stringify({ name: "No" }),
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await authenticate(value)).status,
+    401,
+    "successful token cannot be replayed",
+  );
+  const ownerLogin = await f.request("/api/login", {
+    method: "POST",
+    headers: { Origin: f.origin },
+    body: JSON.stringify({ username: "owner", password }),
+  });
+  const owner = {
+    Origin: f.origin,
+    Cookie: ownerLogin.headers.get("set-cookie").split(";")[0],
+    "X-CSRF-Token": ownerLogin.body.csrf,
+  };
+  assert.equal(
+    (
+      await f.request("/api/organization/members", {
+        method: "POST",
+        headers: owner,
+        body: JSON.stringify({
+          username: "newuser@gmail.com",
+          role: "viewer",
+          projects: ["web"],
+        }),
+      })
+    ).status,
+    201,
+  );
+  status = (await f.request("/api/team/status", { headers: pending })).body;
+  assert.equal(status.pendingOrganization, false);
+  assert.equal(status.user.role, "viewer");
+  assert.equal(status.organization.id, "default");
+  assert.equal(status.canCreateOrganization, false);
+  value = await challenge("login");
+  tokenClaims = claims(value.nonce, "member@gmail.com", "member-sub");
+  const linked = await authenticate(value);
+  const linkedCookie = linked.headers
+    .get("set-cookie")
+    .match(/tomatoes_session=[^; ,]+/)[0];
+  status = (
+    await f.request("/api/team/status", { headers: { Cookie: linkedCookie } })
+  ).body;
+  assert.equal(status.user.username, "member");
+  assert.equal(status.user.role, "editor");
+  assert.deepEqual(status.user.projects, ["web"]);
+  // Binding is by stable Google subject; a different Google identity cannot claim it.
+  value = await challenge("login");
+  tokenClaims = claims(value.nonce, "member@gmail.com", "different-sub");
+  assert.equal((await authenticate(value)).status, 401);
+});

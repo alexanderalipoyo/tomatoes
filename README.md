@@ -431,3 +431,7 @@ Login attempts are limited per address and account identifier, using shared Post
 Run `npm run db:migrate` for local PostgreSQL, or `npm run db:migrate:production` with your private production environment **before deploying this version**. Migration 011 adds membership storage; existing accounts keep their original organization, role, projects, and saved preferences. No report data is moved. File-store mode needs no migration.
 
 Organization switching requires an active membership and a valid session/CSRF token. Projects, report access, user administration, and role policies use the selected membership. Preferences are stored per account and organization; the original organization keeps the existing preference profile. Browser report copies are filtered against the selected organization's permitted projects. Organization creation is unavailable in anonymous local mode; enable sign-in to create memberships for an account.
+
+### Gmail signup and Google login
+
+Google Identity Services sign-in is available alongside password login. Set `TOMATOES_GOOGLE_CLIENT_ID`, enable team sign-in, and apply database migration 012. New Gmail signups wait for organization membership; admins assign their Gmail address through Users / Add an existing account. Existing verified Gmail members retain their roles and projects. See [Google sign-in setup](docs/google-sign-in.md) for Google Cloud origins, local and Vercel configuration, validations, and account approval.

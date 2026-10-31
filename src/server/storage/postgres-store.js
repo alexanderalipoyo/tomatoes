@@ -46,7 +46,7 @@ function createPostgresStore({
     );
   const insertUser = (client, user, skip = false) =>
     client.query(
-      `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,organization_id,memberships) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) ${skip ? "ON CONFLICT(username) DO NOTHING" : ""}`,
+      `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,organization_id,memberships,google_auth) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb) ${skip ? "ON CONFLICT(username) DO NOTHING" : ""}`,
       [
         user.username,
         user.role,
@@ -58,6 +58,7 @@ function createPostgresStore({
         Boolean(user.disabled),
         user.organizationId || UserManagement.ORGANIZATION_ID,
         JSON.stringify(user.memberships || []),
+        JSON.stringify(user.googleAuth || null),
       ],
     );
   const insertToken = (client, token, skip = false) =>
@@ -110,7 +111,7 @@ function createPostgresStore({
       return transaction(async (client) => {
         const user = (
           await client.query(
-            `SELECT username,role,projects,disabled,full_name AS "fullName",email,organization_id AS "organizationId",memberships FROM ${ns}.users WHERE username=$1 FOR UPDATE`,
+            `SELECT username,role,projects,disabled,full_name AS "fullName",email,organization_id AS "organizationId",memberships,google_auth AS "googleAuth" FROM ${ns}.users WHERE username=$1 FOR UPDATE`,
             [username],
           )
         ).rows[0];
@@ -196,7 +197,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=11`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=12`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {
@@ -236,10 +237,32 @@ function createPostgresStore({
       );
       return result.rows[0]?.preferences || (await this.getPreferences(owner));
     },
+    async saveAuthChallenge(key, record) {
+      await transaction(async (client) => {
+        await client.query(
+          `DELETE FROM ${ns}.auth_challenges WHERE expires <= $1`,
+          [Date.now()],
+        );
+        await client.query(
+          `INSERT INTO ${ns}.auth_challenges(key,record,expires) VALUES($1,$2::jsonb,$3)`,
+          [key, JSON.stringify(record), record.expires],
+        );
+      });
+    },
+    async consumeAuthChallenge(key, clock) {
+      return (
+        (
+          await pool.query(
+            `DELETE FROM ${ns}.auth_challenges WHERE key=$1 AND expires>$2 RETURNING record`,
+            [key, clock],
+          )
+        ).rows[0]?.record || null
+      );
+    },
     async getUsers() {
       return (
         await pool.query(
-          `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires",memberships FROM ${ns}.users`,
+          `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires",memberships,google_auth AS "googleAuth" FROM ${ns}.users`,
         )
       ).rows;
     },
@@ -250,12 +273,12 @@ function createPostgresStore({
         );
         const users = (
           await client.query(
-            `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires",memberships FROM ${ns}.users`,
+            `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires",memberships,google_auth AS "googleAuth" FROM ${ns}.users`,
           )
         ).rows;
         const next = mutate(users);
         await client.query(
-          `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,reset_hash,reset_expires,organization_id,memberships) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) ON CONFLICT(username) DO UPDATE SET role=EXCLUDED.role,projects=EXCLUDED.projects,full_name=EXCLUDED.full_name,email=EXCLUDED.email,disabled=EXCLUDED.disabled,salt=EXCLUDED.salt,password_hash=EXCLUDED.password_hash,reset_hash=EXCLUDED.reset_hash,reset_expires=EXCLUDED.reset_expires,organization_id=EXCLUDED.organization_id,memberships=EXCLUDED.memberships`,
+          `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,reset_hash,reset_expires,organization_id,memberships,google_auth) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb) ON CONFLICT(username) DO UPDATE SET role=EXCLUDED.role,projects=EXCLUDED.projects,full_name=EXCLUDED.full_name,email=EXCLUDED.email,disabled=EXCLUDED.disabled,salt=EXCLUDED.salt,password_hash=EXCLUDED.password_hash,reset_hash=EXCLUDED.reset_hash,reset_expires=EXCLUDED.reset_expires,organization_id=EXCLUDED.organization_id,memberships=EXCLUDED.memberships,google_auth=EXCLUDED.google_auth`,
           [
             username,
             next.role,
@@ -269,6 +292,7 @@ function createPostgresStore({
             next.resetExpires || null,
             next.organizationId || UserManagement.ORGANIZATION_ID,
             JSON.stringify(next.memberships || []),
+            JSON.stringify(next.googleAuth || null),
           ],
         );
         return next;

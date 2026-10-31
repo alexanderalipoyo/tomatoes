@@ -68,7 +68,7 @@ function record(id = "a".repeat(64)) {
     passRate: report.passRate,
   };
 }
-async function fixture(t, { teamMode = false } = {}) {
+async function fixture(t, { teamMode = false, googleAuth = null } = {}) {
   const schema = "tomatoes_test_" + crypto.randomBytes(8).toString("hex");
   const pool = new Pool(databaseConfig());
   const store = createPostgresStore({ pool, schema });
@@ -96,7 +96,7 @@ async function fixture(t, { teamMode = false } = {}) {
   });
   await store.migrate();
   await store.ready();
-  const service = createTeamService({ store, dataDir, teamMode });
+  const service = createTeamService({ store, dataDir, teamMode, googleAuth });
   server = http.createServer(async (req, res) => {
     if (
       !(await service.handle(req, res, new URL(req.url, "http://localhost")))
@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    11,
+    12,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -1155,5 +1155,93 @@ test("PostgreSQL persists admin-created organization memberships without replaci
     (await api.request("/api/team/status", { headers: owner })).body
       .organizations.length,
     2,
+  );
+});
+
+test("PostgreSQL Google signup persists stable identities and consumes challenges once across requests", async (t) => {
+  const { createGoogleAuth } = require("../../src/server/google-auth");
+  const clientId = "1234567890-test.apps.googleusercontent.com";
+  let claims;
+  const googleAuth = createGoogleAuth(
+    { TOMATOES_GOOGLE_CLIENT_ID: clientId },
+    { verifyToken: async () => claims },
+  );
+  const api = await fixture(t, { teamMode: true, googleAuth });
+  const value = await api.request("/api/auth/google/challenge", {
+    method: "POST",
+    headers: { Origin: api.origin },
+    body: { mode: "signup" },
+  });
+  assert.equal(value.status, 200);
+  claims = {
+    iss: "https://accounts.google.com",
+    aud: clientId,
+    sub: "persisted-google-sub",
+    email: "pgmember@gmail.com",
+    email_verified: true,
+    nonce: value.body.nonce,
+    name: "Gmail Member",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 300,
+  };
+  const headers = {
+    Origin: api.origin,
+    Cookie: value.headers.get("set-cookie").split(";")[0],
+  };
+  const responses = await Promise.all(
+    [1, 2].map(() =>
+      api.request("/api/auth/google", {
+        method: "POST",
+        headers,
+        body: { credential: "signed-token" },
+      }),
+    ),
+  );
+  assert.deepEqual(
+    responses.map((response) => response.status).sort(),
+    [200, 401],
+  );
+  const signedIn = responses.find((response) => response.status === 200);
+  const cookie = signedIn.headers
+    .get("set-cookie")
+    .match(/tomatoes_session=[^; ,]+/)[0];
+  const users = await api.store.getUsers();
+  assert.equal(users.length, 1);
+  assert.deepEqual(users[0].googleAuth, {
+    sub: "persisted-google-sub",
+    only: true,
+    hasHomeMembership: false,
+  });
+  assert.deepEqual(
+    require("../../src/server/user-management").memberships(users[0]),
+    [],
+  );
+  let status = (
+    await api.request("/api/team/status", { headers: { Cookie: cookie } })
+  ).body;
+  assert.equal(status.pendingOrganization, true);
+  assert.equal(status.organization, null);
+  assert.equal(
+    (await api.request("/api/projects", { headers: { Cookie: cookie } }))
+      .status,
+    403,
+  );
+  await api.store.manageUser(users[0].username, (rows) =>
+    require("../../src/server/user-management").updateMembership(rows[0], {
+      ...rows[0],
+      organizationId: "default",
+      role: "viewer",
+      projects: ["web"],
+      disabled: false,
+    }),
+  );
+  status = (
+    await api.request("/api/team/status", { headers: { Cookie: cookie } })
+  ).body;
+  assert.equal(status.pendingOrganization, false);
+  assert.equal(status.user.role, "viewer");
+  assert.equal(
+    (await api.store.getUsers())[0].googleAuth.sub,
+    "persisted-google-sub",
   );
 });

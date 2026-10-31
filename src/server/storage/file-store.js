@@ -30,6 +30,27 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
     kind: "files",
     ready: async () => {},
     close: async () => {},
+    async saveAuthChallenge(key, record) {
+      return serial(async () => {
+        const rows = (await readJSON(file("auth-challenges"), [])).filter(
+          (row) => row.expires > Date.now(),
+        );
+        await writeJSON(file("auth-challenges"), [...rows, { key, ...record }]);
+      });
+    },
+    async consumeAuthChallenge(key, clock) {
+      return serial(async () => {
+        const rows = await readJSON(file("auth-challenges"), []);
+        const record = rows.find(
+          (row) => row.key === key && row.expires > clock,
+        );
+        await writeJSON(
+          file("auth-challenges"),
+          rows.filter((row) => row.key !== key && row.expires > clock),
+        );
+        return record || null;
+      });
+    },
     async getPreferences(owner) {
       const rows = await readJSON(file("preferences"), []);
       return rows.find((row) => row.owner === owner)?.preferences || null;

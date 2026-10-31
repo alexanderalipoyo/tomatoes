@@ -7,7 +7,11 @@ function memberships(user) {
     projects: user.projects || [],
     disabled: Boolean(user.disabled),
   };
-  const rows = new Map([[home.organizationId, home]]);
+  const rows = new Map(
+    user.googleAuth?.hasHomeMembership === false
+      ? []
+      : [[home.organizationId, home]],
+  );
   for (const member of user.memberships || [])
     rows.set(member.organizationId, member);
   return [...rows.values()];
@@ -28,6 +32,7 @@ const belongsToOrganization = (user, organizationId = ORGANIZATION_ID) =>
   Boolean(forOrganization(user, organizationId));
 function updateMembership(user, value) {
   if (
+    user.googleAuth?.hasHomeMembership !== false &&
     !(user.memberships || []).length &&
     (user.organizationId || ORGANIZATION_ID) === value.organizationId
   )

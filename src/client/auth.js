@@ -30,10 +30,15 @@ function authRoute() {
   return location.hash.slice(1).split("?")[0];
 }
 function isAuthRoute() {
-  return ["login", "forgot-password", "reset-password"].includes(authRoute());
+  return ["login", "signup", "forgot-password", "reset-password"].includes(
+    authRoute(),
+  );
 }
 function authRequiresLogin() {
-  return Boolean(authStatus?.enabled && !authStatus.authenticated);
+  return Boolean(
+    authStatus?.enabled &&
+    (!authStatus.authenticated || authStatus.pendingOrganization),
+  );
 }
 async function initializeAuth() {
   try {
@@ -102,7 +107,31 @@ function renderAuthScreen(message = "") {
   screen.hidden = false;
   const route = isAuthRoute() ? authRoute() : "login";
   globalThis.TomatoesReact.renderAuth(screen, {
-    route,
+    route: authStatus?.pendingOrganization ? "pending" : route,
+    google: authStatus?.google,
+    user: authStatus?.user,
+    onGoogleChallenge: (mode) =>
+      authRequest("/api/auth/google/challenge", {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+      }),
+    onGoogleCredential: async (credential) => {
+      if (version !== authRenderVersion) return;
+      await authRequest("/api/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ credential }),
+      });
+      if (version !== authRenderVersion) return;
+      await finishGoogleSignIn();
+    },
+    onRefreshAccess: finishGoogleSignIn,
+    onSignOut: async () => {
+      teamState = await teamRequest("/api/team/status", { cache: "no-store" });
+      await authRequest("/api/logout", { method: "POST", body: "{}" });
+      await initializeAuth();
+      history.replaceState(null, "", location.pathname + "#login");
+      renderAuthScreen("Signed out.");
+    },
     message: message || authStatus?.error || "",
     delivery: authStatus?.recoveryDelivery,
     onSubmit: (fields) => submitAuth(fields, route, version),
@@ -209,3 +238,22 @@ document.addEventListener(
   "visibilitychange",
   () => void refreshSessionAccess(),
 );
+
+async function finishGoogleSignIn() {
+  await initializeAuth();
+  teamState = authStatus;
+  if (!authStatus.authenticated)
+    throw new Error(
+      "Could not confirm your Google session. Please sign in again.",
+    );
+  if (authStatus.pendingOrganization) {
+    renderAuthScreen();
+    return;
+  }
+  await reloadUserPreferences();
+  await refreshHistory();
+  hideAuthScreen();
+  history.replaceState(null, "", location.pathname + "#projects");
+  await navigateReportLocation();
+  showToast("Signed in successfully.", "success");
+}
