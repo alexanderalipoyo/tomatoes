@@ -999,3 +999,51 @@ test("workspace menu exposes a direct permission-gated Projects route independen
     "workspace-settings",
   );
 });
+
+test("custom dashboard honors saved metrics and does not offer unauthorized setup", () => {
+  const { GroupDashboard, GroupWidgetEditor } = loadComponent(
+    "components/GroupWidgets.jsx",
+  );
+  const report = normalizeReport(fixture);
+  const props = {
+    report,
+    sourceName: "report.json",
+    duration: String,
+    onSpec: () => {},
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(GroupDashboard, {
+      ...props,
+      groups: [
+        {
+          id: "mine",
+          name: "My preferred widget",
+          paths: [report.specs[0].file],
+          metrics: ["passRate"],
+        },
+      ],
+    }),
+  );
+  assert.match(html, /My preferred widget/);
+  assert.match(html, /Pass rate/);
+  assert.doesNotMatch(html, /Cumulative test time/);
+  const empty = renderToStaticMarkup(
+    React.createElement(GroupDashboard, {
+      ...props,
+      groups: [],
+      canManage: false,
+    }),
+  );
+  assert.doesNotMatch(empty, /href="#settings"/);
+  const unavailable = renderToStaticMarkup(
+    React.createElement(GroupWidgetEditor, {
+      ...props,
+      initialGroups: [],
+      ready: false,
+      preferenceError: "Preferences unavailable",
+      can: () => false,
+    }),
+  );
+  assert.match(unavailable, /Preferences unavailable/);
+  assert.match(unavailable, /inert/);
+});

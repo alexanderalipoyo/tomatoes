@@ -283,3 +283,36 @@ test("workspace branding rejects executable logos, unsafe links, duplicates, and
     brand,
   );
 });
+
+test("each user's widget paths and metrics persist independently across account switches", async () => {
+  const f = fixture({ signedIn: true });
+  await f.client.initialize();
+  await f.client.save({ dashboardGroups: [group] });
+  f.setStatus({
+    enabled: true,
+    authenticated: true,
+    user: { username: "justine" },
+  });
+  assert.deepEqual(
+    (await f.client.initialize()).preferences.dashboardGroups,
+    [],
+  );
+  const own = {
+    id: "portal",
+    name: "Portal tests",
+    paths: ["cypress/e2e/portal"],
+    metrics: ["passRate", "duration"],
+  };
+  await f.client.save({ dashboardGroups: [own] });
+  assert.deepEqual((await f.client.initialize()).preferences.dashboardGroups, [
+    own,
+  ]);
+  f.setStatus({
+    enabled: true,
+    authenticated: true,
+    user: { username: "alex" },
+  });
+  assert.deepEqual((await f.client.initialize()).preferences.dashboardGroups, [
+    group,
+  ]);
+});

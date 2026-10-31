@@ -100,7 +100,13 @@ export const applicationBridge = {
     this.renderPage(host, <ReportSettingsPage {...props} />);
   },
   renderGroups(host, props) {
-    render("#custom-dashboard-content", <GroupDashboard {...props} />);
+    render(
+      "#custom-dashboard-content",
+      <GroupDashboard
+        key={props.profileId + JSON.stringify(props.groups)}
+        {...props}
+      />,
+    );
   },
   renderGroupEditor(host, props) {
     this.renderPage(host, <GroupWidgetEditor {...props} />);

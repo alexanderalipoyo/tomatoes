@@ -49,6 +49,7 @@ export function GroupDashboard({
   sourceName,
   duration,
   onSpec,
+  canManage = false,
 }) {
   const [selected, setSelected] = useState(null);
   return (
@@ -64,9 +65,11 @@ export function GroupDashboard({
             Group specs by folder or file path and choose the metrics you want
             to see.
           </p>
-          <a className="button" href="#settings">
-            Create a group widget
-          </a>
+          {canManage && (
+            <a className="button" href="#settings">
+              Set up your widgets
+            </a>
+          )}
         </div>
       ) : (
         <>
@@ -190,6 +193,8 @@ export function GroupDashboard({
 }
 export function GroupWidgetEditor({
   initialGroups,
+  ready = true,
+  preferenceError = "",
   report,
   sourceName,
   duration,
@@ -232,7 +237,7 @@ export function GroupWidgetEditor({
   }
   async function submit(event) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || !ready) return;
     setPending(true);
     setError("");
     try {
@@ -263,7 +268,7 @@ export function GroupWidgetEditor({
     }
   }
   async function remove(group) {
-    if (pending) return;
+    if (pending || !ready) return;
     setPending(true);
     try {
       setGroups(await save(groups.filter((item) => item.id !== group.id)));
@@ -294,10 +299,16 @@ export function GroupWidgetEditor({
         </a>
       </div>
       <p>
-        Settings are saved to your server profile and reused for future imports.
-        Results always use the report you are viewing.
+        Your widget names, paths, metrics, and order are saved to your own user
+        preferences. Other users keep their own setup. Results use the report
+        you are viewing.
       </p>
-      <div className="custom-widget-editor">
+      {preferenceError && (
+        <p className="notice" role="status">
+          {preferenceError}
+        </p>
+      )}
+      <div className="custom-widget-editor" inert={!ready}>
         <form id="custom-widget-form" onSubmit={submit} inert={pending}>
           <h3 id="custom-widget-editor-title">
             {editing ? "Edit group widget" : "New group widget"}
