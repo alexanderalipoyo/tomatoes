@@ -173,6 +173,27 @@ function renderComparisonOutput() {
     return;
   }
   const result = comparison.result;
+  const accessFor = {
+    regressions: "compare-runs.identify-regressions",
+    fixed: "compare-runs.identify-fixes",
+    added: "compare-runs.identify-added-and-missing-tests",
+    missing: "compare-runs.identify-added-and-missing-tests",
+    stateChanges: "compare-runs.compare-outcome-changes",
+    stillFailing: "compare-runs.compare-outcome-changes",
+    slower: "compare-runs.compare-test-durations",
+  };
+  if (
+    typeof hasAccess === "function" &&
+    !hasAccess(accessFor[comparisonFilter])
+  )
+    comparisonFilter = Object.keys(comparisonLabels).find((key) =>
+      hasAccess(accessFor[key]),
+    );
+  if (!comparisonFilter) {
+    output.innerHTML =
+      '<p class="notice">Your role cannot view these comparison categories.</p>';
+    return;
+  }
   const rows = result[comparisonFilter].filter((row) =>
     `${(row.current || row.previous).fullTitle} ${(row.current || row.previous).file}`
       .toLowerCase()
@@ -279,7 +300,7 @@ function renderFailureGroups() {
       .slice(0, expandedFailureGroups ? groups.length : 8)
       .map(
         (group, index) =>
-          `<details class="failure-group"><summary><span class="group-number">${group.tests.length}</span><span><strong>${esc(group.fingerprint)}</strong><small>${group.specs.length} ${group.specs.length === 1 ? "spec" : "specs"} · ${duration(group.duration)} recorded test time</small></span></summary><div class="failure-group-evidence"><h3>Representative error</h3><pre>${esc(group.message)}</pre><h3>Affected tests</h3>${group.tests.map((test) => `<button class="analysis-row" data-group-test="${test.id}"><span>${esc(test.title)}<small>${esc(test.file)}</small></span><strong>Inspect →</strong></button>`).join("")}</div></details>`,
+          `<details class="failure-group"><summary><span class="group-number">${group.tests.length}</span><span><strong>${esc(group.fingerprint)}</strong><small>${group.specs.length} ${group.specs.length === 1 ? "spec" : "specs"} · ${duration(group.duration)} recorded test time</small></span></summary><div class="failure-group-evidence"><h3 data-feature="failed-tests.inspect-detailed-errors">Representative error</h3><pre data-feature="failed-tests.inspect-detailed-errors">${esc(group.message)}</pre><h3>Affected tests</h3>${group.tests.map((test) => `<button class="analysis-row" data-group-test="${test.id}"><span>${esc(test.title)}<small>${esc(test.file)}</small></span><strong>Inspect →</strong></button>`).join("")}</div></details>`,
       )
       .join("") || '<p class="widget-empty">No failures to group.</p>'
   }</div>`;

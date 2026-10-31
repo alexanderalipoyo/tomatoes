@@ -24,6 +24,10 @@ test("Justine sees organization identity independently of permitted project sele
     },
   ];
   const context = {
+    AccessPolicy: require("../../src/shared/access-policy"),
+    authRequiresLogin: () => false,
+    MutationObserver: dom.window.MutationObserver,
+    requestAnimationFrame: () => {},
     document: dom.window.document,
     URL,
     location: { href: "https://example.com/#projects" },
@@ -47,6 +51,13 @@ test("Justine sees organization identity independently of permitted project sele
     esc: (value) => String(value),
     openWorkspaceProject: () => {},
   };
+  vm.runInNewContext(
+    fs.readFileSync(
+      path.join(__dirname, "../../src/client/access-control.js"),
+      "utf8",
+    ),
+    context,
+  );
   vm.runInNewContext(source.slice(start, end), context);
   context.renderWorkspaceIdentity();
   assert.equal(
@@ -64,7 +75,9 @@ test("Justine sees organization identity independently of permitted project sele
   assert.equal(dom.window.document.querySelector("select").value, "portal-a");
   assert.equal(dom.window.document.querySelectorAll("option").length, 1);
   assert.equal(
-    dom.window.document.querySelector('[data-view="users"]').hidden,
+    dom.window.document
+      .querySelector('[data-view="users"]')
+      .classList.contains("access-restricted"),
     true,
   );
   context.authStatus.organization.logo =

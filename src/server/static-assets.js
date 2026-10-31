@@ -9,6 +9,8 @@ add("/index.html", "public/index.html");
 add("/js/react-app.js", ".tomatoes-data/client-build/react-app.js");
 for (const name of [
   "app",
+  "access-control",
+  "role-access",
   "notifications",
   "appearance",
   "report-navigation",
@@ -38,6 +40,7 @@ for (const name of [
 }
 for (const name of [
   "report-data",
+  "access-policy",
   "report-transfer-client",
   "report-links",
   "project-catalog",

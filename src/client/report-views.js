@@ -31,6 +31,7 @@ if (typeof document !== "undefined") {
     document.querySelector("#evidence-file").onchange = async (event) => {
       const file = event.target.files[0];
       if (!file) return;
+      requireAccess("test-results.attach-screenshots-and-recordings");
       await investigationBusy(
         "Validating test evidence",
         async () => {

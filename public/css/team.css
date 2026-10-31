@@ -402,3 +402,165 @@ main input::placeholder {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+
+.access-restricted {
+  display: none !important;
+}
+.role-access-table input {
+  accent-color: var(--accent, #16866b);
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.role-access-table td {
+  text-align: center;
+}
+.role-access-table small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.account-menu-fallback,
+.role-mobile-navigation {
+  display: none;
+}
+.limited-workspace-identity .account-menu-fallback {
+  display: inline;
+}
+@media (max-width: 1024px) {
+  .limited-mobile-navigation .role-mobile-navigation {
+    display: block;
+    max-width: 12rem;
+    min-width: 0;
+  }
+}
+
+.role-access-page .settings-buttons {
+  align-items: flex-end;
+}
+.role-access-page .settings-buttons > label {
+  flex: 1 1 220px;
+  margin: 0;
+}
+.role-access-page .settings-buttons > button {
+  flex: 0 0 auto;
+  height: 38px;
+}
+.role-access-table {
+  min-width: 560px;
+}
+
+.role-access-help {
+  margin: 16px 0 22px;
+  color: var(--muted);
+}
+.role-access-help summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.role-access-filters {
+  display: grid;
+  grid-template-columns:
+    minmax(160px, 1fr) minmax(200px, 1.6fr) minmax(150px, 1fr)
+    auto;
+  gap: 14px;
+  align-items: end;
+}
+.role-access-filters label {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+}
+.role-access-filters :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+}
+.role-access-filters button {
+  min-height: 40px;
+}
+.role-access-results {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 12px 0;
+}
+#role-access-changes {
+  color: var(--green);
+}
+.role-access-page .role-access-actions {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+.role-access-page .users-table-wrap {
+  max-height: 65vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.role-access-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--theme-surface, #fff);
+}
+.role-access-table .role-access-group th {
+  background: var(--theme-surface-raised, #f8fafb);
+  color: var(--theme-accent-text, #167555);
+  font-size: 12px;
+  padding: 13px 16px;
+}
+.role-access-group span {
+  margin-left: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.role-access-badge {
+  display: inline-block;
+  margin: 4px 0 4px 8px;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 10px;
+}
+.role-access-changed {
+  background: var(--theme-accent-surface, #edf8f2);
+}
+.role-access-empty {
+  text-align: center;
+  padding: 32px !important;
+}
+@media (max-width: 1024px) {
+  .role-access-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .role-access-filters {
+    grid-template-columns: 1fr;
+  }
+  .role-access-page .users-table-wrap {
+    max-height: 60vh;
+  }
+}
+
+.role-access-table thead th:not(:first-child) {
+  text-align: center;
+  min-width: 85px;
+}
+
+.role-access-table {
+  table-layout: fixed;
+}
+.role-access-table thead th:first-child {
+  width: 55%;
+}
+.role-access-table td input {
+  display: inline-block;
+  margin: 0;
+  vertical-align: middle;
+}

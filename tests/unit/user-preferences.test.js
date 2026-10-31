@@ -93,6 +93,11 @@ test("signed-in users start with their database preferences and never inherit br
     },
   });
   await f.client.initialize();
+  assert.equal(f.client.getState().ready, true);
+  assert.equal(
+    f.calls.some((call) => call.method === "PUT"),
+    false,
+  );
   assert.deepEqual(f.client.getState().preferences.dashboardGroups, []);
   await f.client.save({ dashboardGroups: [group] });
   assert.equal(f.rows.get("user:alex").dashboardGroups.length, 1);

@@ -422,7 +422,7 @@ test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and l
   );
   assert.equal(
     (
-      await api.request("/api/runs", {
+      await api.request("/api/imports", {
         method: "POST",
         headers: {
           Cookie: cookie,
@@ -431,7 +431,7 @@ test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and l
         },
         body: JSON.stringify({
           report: fixture(),
-          metadata: { project: "web" },
+          metadata: { project: "web", branch: "main" },
         }),
       })
     ).status,
@@ -445,12 +445,12 @@ test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and l
   const editorCookie = editor.headers.get("set-cookie").split(";")[0];
   assert.equal(
     (
-      await api.request("/api/runs", {
+      await api.request("/api/imports", {
         method: "POST",
         headers: { Cookie: editorCookie, Origin: api.origin },
         body: JSON.stringify({
           report: fixture(),
-          metadata: { project: "web" },
+          metadata: { project: "web", branch: "main" },
         }),
       })
     ).status,
@@ -458,7 +458,7 @@ test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and l
   );
   assert.equal(
     (
-      await api.request("/api/runs", {
+      await api.request("/api/imports", {
         method: "POST",
         headers: {
           Cookie: editorCookie,
@@ -467,7 +467,7 @@ test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and l
         },
         body: JSON.stringify({
           report: fixture(),
-          metadata: { project: "web" },
+          metadata: { project: "web", branch: "main" },
         }),
       })
     ).status,
@@ -997,11 +997,17 @@ test("user administration enforces global admin scope, CSRF, self-protection, an
     };
   };
   assert.equal((await f.request("/api/users")).status, 401);
-  for (const username of ["scoped", "editor", "reader"])
+  for (const username of ["reader"])
     assert.equal(
       (await f.request("/api/users", { headers: await login(username) }))
         .status,
       403,
+    );
+  for (const username of ["scoped", "editor"])
+    assert.equal(
+      (await f.request("/api/users", { headers: await login(username) }))
+        .status,
+      200,
     );
   const root = await login("root");
   const reader = await login("reader");
@@ -1271,9 +1277,9 @@ test("run archiving is reversible, scoped, permission-checked, and survives reim
   const password = "test-password-only";
   await writeJSON(path.join(f.dataDir, "users.json"), [
     ...[
-      ["editor", "editor", "web"],
+      ["editor", "admin", "web"],
       ["reader", "viewer", "web"],
-      ["other", "editor", "other"],
+      ["other", "admin", "other"],
     ].map(([username, role, project]) => ({
       username,
       role,
@@ -2190,7 +2196,7 @@ test("report list pagination stays bounded, stable and scoped with archives and 
   await writeJSON(path.join(f.dataDir, "users.json"), [
     {
       username: "reader",
-      role: "viewer",
+      role: "admin",
       projects: ["web"],
       organizationId: "default",
       ...hashPassword("temporary-pagination-password"),
@@ -2463,4 +2469,208 @@ test("distributed login attempts are limited by account identifier as well as ad
     ).status,
     429,
   );
+});
+
+test("organization access policies enforce the supplied matrix and refresh live sessions", async (t) => {
+  const Policy = require("../../src/shared/access-policy");
+  const f = await serviceFixture(t, {
+    teamMode: true,
+    ciToken: "policy-ci",
+    ciProject: "web",
+  });
+  const password = "test-policy-password-123";
+  await writeJSON(
+    path.join(f.dataDir, "users.json"),
+    [
+      { username: "owner", role: "admin", projects: ["*"] },
+      { username: "editor", role: "editor", projects: ["web"] },
+      { username: "viewer", role: "viewer", projects: ["web"] },
+      { username: "scoped", role: "admin", projects: ["web"] },
+    ].map((user) => ({ ...user, ...hashPassword(password) })),
+  );
+  const login = async (username) => {
+    const r = await f.request("/api/login", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ username, password }),
+    });
+    return {
+      Origin: f.origin,
+      Cookie: r.headers.get("set-cookie").split(";")[0],
+      "X-CSRF-Token": r.body.csrf,
+    };
+  };
+  const owner = await login("owner"),
+    editor = await login("editor"),
+    viewer = await login("viewer"),
+    scoped = await login("scoped");
+  for (const headers of [
+    editor,
+    viewer,
+    scoped,
+    { Authorization: "Bearer policy-ci" },
+  ])
+    assert.equal(
+      (await f.request("/api/role-access", { headers })).status,
+      403,
+    );
+  const policy = (await f.request("/api/role-access", { headers: owner })).body;
+  assert.equal(policy.features.length, 136);
+  assert.equal(policy.revision, 0);
+  const save = (permissions, revision = 0, headers = owner) =>
+    f.request("/api/role-access", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ permissions, revision }),
+    });
+  for (const headers of [editor, viewer, scoped])
+    assert.equal((await save(policy.permissions, 0, headers)).status, 403);
+  assert.equal(
+    (await save(policy.permissions, 0, { ...owner, "X-CSRF-Token": "bad" }))
+      .status,
+    403,
+  );
+  assert.equal((await save({ viewer: {} }, 0)).status, 400);
+  assert.equal(
+    (await f.request("/api/users", { headers: editor })).status,
+    200,
+  );
+  assert.equal(
+    (await f.request("/api/users", { headers: viewer })).status,
+    403,
+  );
+  const prefs = (patch, headers) =>
+    f.request("/api/preferences", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(patch),
+    });
+  assert.equal(
+    (await prefs({ appearance: { colorMode: "dark" } }, editor)).status,
+    200,
+  );
+  assert.equal(
+    (await prefs({ appearance: { colorMode: "dark" } }, viewer)).status,
+    403,
+  );
+  assert.equal(
+    (await prefs({ display: { timeZone: "UTC", rows: 30 } }, editor)).status,
+    403,
+  );
+  assert.equal(
+    (
+      await prefs(
+        {
+          profile: {
+            firstName: "Test",
+            lastName: "Viewer",
+            email: "viewer@example.com",
+          },
+        },
+        viewer,
+      )
+    ).status,
+    200,
+  );
+  const payload = {
+    report: fixture(),
+    metadata: { project: "web", branch: "main" },
+  };
+  const upload = (route, headers) =>
+    f.request(route, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  assert.equal((await upload("/api/runs", editor)).status, 403);
+  assert.equal((await upload("/api/imports", viewer)).status, 403);
+  const imported = await upload("/api/imports", editor);
+  assert.equal(imported.status, 201);
+  assert.equal(
+    (
+      await f.request(`/api/runs/${imported.body.run.id}/archive`, {
+        method: "POST",
+        headers: editor,
+        body: JSON.stringify({ archived: true }),
+      })
+    ).status,
+    403,
+  );
+  // Revoke appearance on the already authenticated Editor and grant it to Viewer.
+  const draft = structuredClone(policy.permissions);
+  draft.editor["settings-appearance.save-appearance-preferences"] = false;
+  for (const feature of Policy.features.filter((f) =>
+    f.id.startsWith("settings-appearance."),
+  ))
+    draft.viewer[feature.id] = true;
+  const saved = await save(draft);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.revision, 1);
+  assert.equal((await save(draft)).status, 409);
+  assert.equal(
+    (await prefs({ appearance: { colorMode: "light" } }, editor)).status,
+    403,
+  );
+  assert.equal(
+    (await prefs({ appearance: { colorMode: "light" } }, viewer)).status,
+    200,
+  );
+  const status = (await f.request("/api/team/status", { headers: viewer }))
+    .body;
+  assert.equal(status.canManageRoleAccess, false);
+  assert.equal(
+    status.permissions["settings-appearance.save-appearance-preferences"],
+    true,
+  );
+  assert.equal(status.organization.rolePermissions, undefined);
+  assert.equal(
+    (
+      await f.request("/api/organization", {
+        method: "PATCH",
+        headers: owner,
+        body: JSON.stringify({ name: "Renamed organization" }),
+      })
+    ).status,
+    200,
+  );
+  const reopened = (await f.request("/api/role-access", { headers: owner }))
+    .body;
+  assert.equal(
+    reopened.permissions.editor[
+      "settings-appearance.save-appearance-preferences"
+    ],
+    false,
+  );
+  assert.equal(reopened.revision, 1);
+  draft.editor["settings-sharing-access.browse-shared-reports"] = true;
+  draft.editor["settings-sharing-access.save-browser-imports-to-the-server"] =
+    true;
+  draft.viewer["projects.view-projects-within-the-current-organization"] = true;
+  draft.viewer["projects.archive-runs-with-confirmation"] = true;
+  assert.equal((await save(draft, 1)).status, 200);
+  assert.equal((await upload("/api/history-imports", editor)).status, 201);
+  assert.equal((await upload("/api/runs", editor)).status, 403);
+  assert.equal(
+    (
+      await f.request(`/api/runs/${imported.body.run.id}/archive`, {
+        method: "POST",
+        headers: viewer,
+        body: JSON.stringify({ archived: true }),
+      })
+    ).status,
+    200,
+  );
+  // Removing every report permission blocks the source endpoint as well as listings.
+  for (const feature of Policy.features)
+    if (!feature.locked && !feature.adminOnly) draft.viewer[feature.id] = false;
+  assert.equal((await save(draft, 2)).status, 200);
+  assert.equal(
+    (
+      await f.request(`/api/runs/${imported.body.run.id}/source`, {
+        headers: viewer,
+      })
+    ).status,
+    403,
+  );
+  assert.equal((await f.request("/api/runs", { headers: viewer })).status, 403);
 });

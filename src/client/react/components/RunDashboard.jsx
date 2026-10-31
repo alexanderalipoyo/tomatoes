@@ -43,7 +43,7 @@ export function RunSummary({
           Finished {formatDate(report.end)}
         </p>
       </div>
-      <div className="run-summary-stats">
+      <div className="run-summary-stats" data-feature="latest-run.run-duration">
         <strong>{duration(report.duration)}</strong>
         <span>Reported run duration</span>
         <span>
@@ -55,7 +55,14 @@ export function RunSummary({
 }
 function MetricCard({ label, children, note, glyph }) {
   return (
-    <article className="metric">
+    <article
+      className="metric"
+      data-feature={
+        label === "Pass rate"
+          ? "latest-run.pass-rate"
+          : "latest-run.test-outcome-totals"
+      }
+    >
       <div className="metric-label">
         <Icon name={glyph} />
         {label}
@@ -123,7 +130,19 @@ function Widget({
   className = "",
 }) {
   return (
-    <article className={`dashboard-widget ${className}`}>
+    <article
+      className={`dashboard-widget ${className}`}
+      data-feature={
+        {
+          "Test outcomes": "latest-run.test-outcome-totals",
+          "Failure hotspots": "latest-run.failure-hotspots",
+          "Spec health": "latest-run.failed-spec-summary",
+          "Slowest tests": "latest-run.slow-test-widgets",
+          "Execution coverage": "latest-run.test-outcome-totals",
+          "Run timing": "latest-run.run-duration",
+        }[heading]
+      }
+    >
       <div className="widget-heading">
         <div>
           <h2>{heading}</h2>

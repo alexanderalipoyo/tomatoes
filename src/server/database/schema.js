@@ -21,6 +21,7 @@ async function migrateSchema(client, schema) {
     [7, "007-user-organization.sql"],
     [8, "008-organizations.sql"],
     [9, "009-organization-logo.sql"],
+    [10, "010-role-permissions.sql"],
   ]) {
     const applied = await client.query(
       `SELECT version FROM ${ns}.schema_migrations WHERE version=$1`,

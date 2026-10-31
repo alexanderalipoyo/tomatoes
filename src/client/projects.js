@@ -114,6 +114,9 @@ async function renderProjects(host) {
     directory.find((item) => item.id === id)?.name ||
     workspaceBranding(id).name;
   function editProject(project = null) {
+    requireAccess(
+      project ? "projects.rename-projects" : "projects.create-projects",
+    );
     globalThis.TomatoesReact.openProjectEditor({
       project: project
         ? {
@@ -243,7 +246,7 @@ async function renderProjects(host) {
       );
       const runs = archived ? archives : active;
       dialog.querySelector("[data-project-dialog-body]").innerHTML =
-        `<h2 id="project-runs-title">Runs in ${esc(displayName(projectName))}</h2><p class="projects-source-note">Server and browser copies are listed separately. Archived reports remain recoverable.</p>${nextCursor ? '<p class="notice">Counts cover loaded shared reports. Load older reports to see more runs.</p><button type="button" class="button" id="project-runs-more">Load older shared reports</button>' : ""}<div class="workspace-settings-tabs" role="tablist" aria-label="Project run status"><button role="tab" data-run-tab="active" aria-selected="${!archived}" tabindex="${!archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-active-tab">Active runs (${active.length})</button><button role="tab" data-run-tab="archived" aria-selected="${archived}" tabindex="${archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-archived-tab">Archived runs (${archives.length})</button></div><div id="project-run-panel" role="tabpanel" aria-labelledby="project-${archived ? "archived" : "active"}-tab"><div class="project-runs-list">${runs.map((run, index) => `<article class="shared-run"><div>${badge(run.status || "unknown")}<strong>${esc(run.label || run.name)}</strong><p><span class="project-run-source">${run.source === "server" ? "Server run" : "Browser import"}</span> · ${esc(run.metadata?.branch || "Branch not provided")}</p><small>${run.start ? esc(date(run.start)) : "Run date not provided"}${run.archivedAt ? `<br/>Archived ${esc(date(new Date(run.archivedAt).toISOString()))}` : ""}</small></div><div class="project-run-actions"><a class="button" data-open-project-run href="${esc(reportLink(run))}">Open results</a><button class="button ${archived ? "primary" : ""}" type="button" data-archive-run="${index}" ${run.source === "server" && !canArchive ? 'disabled title="Editor or Admin access is required to change shared runs."' : ""}>${archived ? "Restore run" : "Archive run"}</button></div></article>`).join("") || `<div class="project-runs-empty"><h3>${archived ? "No archived runs" : "No active runs"}</h3><p>${archived ? "Runs archived in this project will appear here for recovery." : "Check Archived runs to restore a previous report."}</p></div>`}</div></div>`;
+        `<h2 id="project-runs-title">Runs in ${esc(displayName(projectName))}</h2><p class="projects-source-note">Server and browser copies are listed separately. Archived reports remain recoverable.</p>${nextCursor ? '<p class="notice">Counts cover loaded shared reports. Load older reports to see more runs.</p><button type="button" class="button" id="project-runs-more">Load older shared reports</button>' : ""}<div class="workspace-settings-tabs" role="tablist" aria-label="Project run status"><button role="tab" data-run-tab="active" aria-selected="${!archived}" tabindex="${!archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-active-tab">Active runs (${active.length})</button><button role="tab" data-run-tab="archived" aria-selected="${archived}" tabindex="${archived ? "0" : "-1"}" aria-controls="project-run-panel" id="project-archived-tab">Archived runs (${archives.length})</button></div><div id="project-run-panel" role="tabpanel" aria-labelledby="project-${archived ? "archived" : "active"}-tab"><div class="project-runs-list">${runs.map((run, index) => `<article class="shared-run"><div>${badge(run.status || "unknown")}<strong>${esc(run.label || run.name)}</strong><p><span class="project-run-source">${run.source === "server" ? "Server run" : "Browser import"}</span> · ${esc(run.metadata?.branch || "Branch not provided")}</p><small>${run.start ? esc(date(run.start)) : "Run date not provided"}${run.archivedAt ? `<br/>Archived ${esc(date(new Date(run.archivedAt).toISOString()))}` : ""}</small></div><div class="project-run-actions"><a class="button" data-open-project-run href="${esc(reportLink(run))}">Open results</a><button class="button ${archived ? "primary" : ""}" type="button" data-archive-run="${index}" ${run.source === "server" && !canArchive ? 'disabled title="Admin access is required to change shared runs."' : ""}>${archived ? "Restore run" : "Archive run"}</button></div></article>`).join("") || `<div class="project-runs-empty"><h3>${archived ? "No archived runs" : "No active runs"}</h3><p>${archived ? "Runs archived in this project will appear here for recovery." : "Check Archived runs to restore a previous report."}</p></div>`}</div></div>`;
       const more = dialog.querySelector("#project-runs-more");
       if (more) more.onclick = () => void loadMoreRuns(render);
       dialog.querySelectorAll("[data-run-tab]").forEach((button) => {
@@ -380,6 +383,11 @@ function projectRunDialog() {
   return dialog;
 }
 function confirmProjectRunAction(run, archived, action) {
+  requireAccess(
+    archived
+      ? "projects.restore-runs-with-confirmation"
+      : "projects.archive-runs-with-confirmation",
+  );
   let dialog = document.querySelector("#project-run-confirm");
   if (!dialog) {
     dialog = document.createElement("dialog");

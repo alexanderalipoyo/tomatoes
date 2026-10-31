@@ -44,7 +44,7 @@
           throw new Error(
             "Your account changed. Reload preferences to continue.",
           );
-        if (!payload.preferences) {
+        if (!payload.preferences && payload.profileId === "local") {
           const initial = Model.withDefaults(
             payload.profileId === "local" ? legacy() : {},
           );
@@ -61,7 +61,7 @@
           state = {
             ...payload,
             user: status.authenticated ? status.user : null,
-            preferences: Model.withDefaults(payload.preferences),
+            preferences: Model.withDefaults(payload.preferences || {}),
             ready: true,
             error: "",
           };
@@ -96,7 +96,7 @@
           state = {
             ...payload,
             user: status.authenticated ? status.user : null,
-            preferences: Model.withDefaults(payload.preferences),
+            preferences: Model.withDefaults(payload.preferences || {}),
             ready: true,
             error: "",
           };

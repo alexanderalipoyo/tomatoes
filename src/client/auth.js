@@ -54,6 +54,7 @@ async function initializeAuth() {
     workspaceProjects = authStatus.accessibleProjects;
   if (typeof invalidateOutOfScopeReports === "function")
     invalidateOutOfScopeReports();
+  if (typeof applyFeatureAccess === "function") applyFeatureAccess();
   syncLogoutControl();
   document.body.classList.remove("auth-checking");
   return authStatus;

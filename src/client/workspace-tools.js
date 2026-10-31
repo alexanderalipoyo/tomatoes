@@ -42,6 +42,8 @@ if (typeof document !== "undefined") {
     document.querySelector("#show-trash").onclick = showHistoryTrash;
   }
   async function backupHistory() {
+    if (typeof requireAccess === "function")
+      requireAccess("import-history.download-browser-backups");
     if (authStatus?.enabled) await initializeAuth();
     await investigationBusy(
       "Preparing browser backup",
@@ -99,6 +101,8 @@ if (typeof document !== "undefined") {
     );
   }
   async function restoreHistory(file) {
+    if (typeof requireAccess === "function")
+      requireAccess("import-history.restore-browser-backups");
     await investigationBusy(
       "Validating backup",
       async () => {
@@ -134,6 +138,12 @@ if (typeof document !== "undefined") {
     );
   }
   function editHistoryEntry(id) {
+    if (
+      typeof hasAccess === "function" &&
+      !hasAccess("import-history.edit-report-names") &&
+      !hasAccess("import-history.edit-report-notes")
+    )
+      return;
     const entry = historyEntries.find((item) => item.id === id);
     if (!entry) return;
     document.querySelector("#detail-content").innerHTML =
@@ -144,7 +154,16 @@ if (typeof document !== "undefined") {
         notes = document.querySelector("#history-notes").value.trim();
       if (!label) return;
       try {
-        await ImportHistory.updateDetails(id, { label, notes });
+        await ImportHistory.updateDetails(id, {
+          ...(typeof hasAccess !== "function" ||
+          hasAccess("import-history.edit-report-names")
+            ? { label }
+            : {}),
+          ...(typeof hasAccess !== "function" ||
+          hasAccess("import-history.edit-report-notes")
+            ? { notes }
+            : {}),
+        });
         if (id === activeHistoryId) {
           sourceName = label;
           renderSummary();
@@ -165,6 +184,8 @@ if (typeof document !== "undefined") {
     document.querySelector("#detail").showModal();
   }
   async function trashHistoryEntry(id) {
+    if (typeof requireAccess === "function")
+      requireAccess("import-history.move-imports-to-trash");
     await investigationBusy(
       "Moving report to trash",
       async () => {
@@ -191,6 +212,8 @@ if (typeof document !== "undefined") {
     );
   }
   async function restoreTrashedEntry(id) {
+    if (typeof requireAccess === "function")
+      requireAccess("import-history.restore-trashed-imports");
     try {
       await ImportHistory.updateDetails(id, { deletedAt: null });
       if (id === trashedActiveId && !activeHistoryId) {
@@ -206,6 +229,8 @@ if (typeof document !== "undefined") {
     }
   }
   async function showHistoryTrash() {
+    if (typeof requireAccess === "function")
+      requireAccess("import-history.restore-trashed-imports");
     try {
       const entries = (await ImportHistory.list(true)).filter(
         (entry) => entry.deletedAt,

@@ -177,6 +177,7 @@ function showUserDialog(title, body, trigger) {
   return userDialog;
 }
 function openUserEditor(data, user, host, trigger) {
+  requireAccess(user ? "users.edit-users" : "users.add-users");
   const self = user?.username === data.currentUsername;
   const dialog = showUserDialog(
     user ? "Edit user" : "Add user",
@@ -228,6 +229,9 @@ function openUserEditor(data, user, host, trigger) {
   };
 }
 function openUserStatus(user, host, trigger) {
+  requireAccess(
+    user.disabled ? "users.restore-users" : "users.deactivate-users",
+  );
   const dialog = showUserDialog(
     user.disabled ? "Restore user" : "Deactivate user",
     `<form class="users-editor-form"><p>${user.disabled ? "Restore sign-in and the saved permissions for" : "Revoke sign-in and end active sessions for"} <strong>${esc(user.fullName)}</strong>?</p><p>${user.disabled ? "You can edit the account’s role and project access before restoring it." : "Reports and account details are retained. You can restore this account later."}</p><p class="users-form-error" role="alert"></p><footer><button class="button" type="button" data-user-cancel>Cancel</button><button class="button primary" type="submit">${user.disabled ? "Restore user" : "Deactivate user"}</button></footer></form>`,

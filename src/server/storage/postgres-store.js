@@ -92,7 +92,7 @@ function createPostgresStore({
       return (
         (
           await pool.query(
-            `SELECT id,name,logo,created_at AS "createdAt" FROM ${ns}.organizations WHERE id=$1`,
+            `SELECT id,name,logo,role_permissions AS "rolePermissions",permissions_revision AS "permissionsRevision",created_at AS "createdAt" FROM ${ns}.organizations WHERE id=$1`,
             [id],
           )
         ).rows[0] || null
@@ -104,6 +104,16 @@ function createPostgresStore({
         ? `INSERT INTO ${ns}.organizations(id,name,created_at,updated_at,logo) VALUES($1,$2,$3,$3,COALESCE($4,'')) RETURNING id,name,logo`
         : `UPDATE ${ns}.organizations SET name=COALESCE($2,name),updated_at=$3,logo=COALESCE($4,logo) WHERE id=$1 RETURNING id,name,logo`;
       return (await pool.query(sql, [id, name, clock, logo])).rows[0] || null;
+    },
+    async saveRolePermissions(id, permissions, revision) {
+      return (
+        (
+          await pool.query(
+            `UPDATE ${ns}.organizations SET role_permissions=$2::jsonb,permissions_revision=permissions_revision+1 WHERE id=$1 AND permissions_revision=$3 RETURNING permissions_revision AS revision`,
+            [id, JSON.stringify(permissions), revision],
+          )
+        ).rows[0] || null
+      );
     },
     async getProject(id) {
       return (
@@ -158,7 +168,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=9`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=10`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {

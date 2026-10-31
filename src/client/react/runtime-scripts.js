@@ -1,6 +1,9 @@
 // Ordered compatibility modules; do not bundle them into a module scope.
 export const runtimeScripts = [
   "/js/notifications.js",
+  "/js/access-policy.js",
+  "/js/access-control.js",
+  "/js/role-access.js",
   "/js/report-data.js",
   "/js/report-transfer-client.js",
   "/js/project-access.js",

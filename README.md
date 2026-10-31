@@ -271,11 +271,13 @@ The PostgreSQL tests use the configured local connection, create uniquely named 
 
 Open **Manage profile → Users** to search local accounts, filter by role or status, and add or edit users. Accounts have a full name, optional contact email, a unique username, and explicit project access. Choose **Specific projects** and select one or more projects, or explicitly choose **All projects** to include future projects. Search the picker by name or project identifier. Creating an account does not send an invitation email; share its initial password securely.
 
-- **Viewer:** read reports in assigned projects and save personal preferences.
-- **Editor:** Viewer access plus publishing reports and updating report notes and attachments in assigned projects.
-- **Admin:** Editor access; admins with `*` project access can administer users.
+- **Viewer:** read reports in assigned projects, export PDFs from Import history, and manage their own profile and account security.
+- **Editor:** import reports, edit browser report names and notes, attach evidence, choose appearance, and browse a read-only Users directory. Sharing, archiving, and workspace administration are denied by default.
+- **Admin:** manage reports and workspace settings; admins with `*` project access can administer organization users, projects, and **Role access**.
 
 Deactivating an account blocks sign-in and ends its active sessions. Its reports and account details are retained, and the account can be restored from the deactivated-account filter. Previously saved browser copies remain on their devices, but signed-in users can only open, list, or back up copies in their assigned projects. The server prevents removing the last active admin with all-project access and prevents administrators from deactivating themselves or changing their own access.
+
+The organization-specific [role access matrix](docs/role-access.md) uses your supplied 0/1 defaults. Open **Manage profile > Role access** as an organization admin to manage Editor and Viewer capabilities. Denying Shared reports browsing also denies filtering and paging in that section. Apply migration 010 before deploying this version.
 
 Local mode allows the operator of the local installation to manage accounts without signing in. To enforce account roles and project restrictions, enable the existing team sign-in mode after creating an all-project admin. Run `npm run db:migrate` when upgrading a PostgreSQL installation to add the user-management columns.
 
@@ -297,7 +299,7 @@ Run `npm run db:migrate` when upgrading PostgreSQL to install password-recovery 
 
 From **Manage profile → Projects**, open a project's **Active runs** and choose **Archive run**. Confirm the project, branch, and copy being changed. Recover it from the same project's **Archived runs** with **Restore run** and confirm again. Projects remain visible even when all their runs are archived.
 
-Archiving keeps the report, notes, and attachments. Archived copies leave active report lists; their direct links remain available. Shared server runs require Editor or Admin access in the report's project. Browser imports are separate device-local copies with their own archive state. Backups preserve browser archive status, and reimporting an identical report keeps its archive state until it is restored.
+Archiving keeps the report, notes, and attachments. Archived copies leave active report lists; their direct links remain available. Archiving and restoring shared runs require Admin access in the report's project by default. Browser imports are separate device-local copies with their own archive state. Backups preserve browser archive status, and reimporting an identical report keeps its archive state until it is restored.
 
 ### Supabase production database
 

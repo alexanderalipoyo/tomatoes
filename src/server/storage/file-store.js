@@ -69,6 +69,8 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
           id,
           name: name ?? previous?.name ?? "Tomatoes organization",
           logo: logo ?? previous?.logo ?? "",
+          rolePermissions: previous?.rolePermissions || {},
+          permissionsRevision: previous?.permissionsRevision || 0,
           createdAt: previous?.createdAt || Date.now(),
           updatedAt: Date.now(),
         };
@@ -77,6 +79,28 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
           next,
         ]);
         return next;
+      });
+    },
+    async saveRolePermissions(id, permissions, revision) {
+      return serial(async () => {
+        const rows = await readJSON(file("organizations"), []);
+        const previous =
+          rows.find((row) => row.id === id) ||
+          (id === "default"
+            ? { id, name: "Tomatoes organization", logo: "" }
+            : null);
+        if (!previous || (previous.permissionsRevision || 0) !== revision)
+          return null;
+        const next = {
+          ...previous,
+          rolePermissions: permissions,
+          permissionsRevision: revision + 1,
+        };
+        await writeJSON(file("organizations"), [
+          ...rows.filter((row) => row.id !== id),
+          next,
+        ]);
+        return { revision: next.permissionsRevision };
       });
     },
     async getProject(id) {

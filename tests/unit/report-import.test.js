@@ -236,3 +236,33 @@ test("mandatory import fields block both the file picker and dropped files", () 
   assert.equal(pickerOpened, 1);
   assert.equal(f.elements["import-selection-error"].hidden, true);
 });
+
+test("import role capabilities distinguish browse and drag while denying imports entirely to a restricted role", async () => {
+  const denied = fixture(async () => {}, {
+    canImport: () => false,
+    canBrowse: () => false,
+    canDrop: () => false,
+  });
+  denied.elements["import-report"].click();
+  assert.equal(denied.elements["import-dialog"].open, false);
+  denied.elements["import-dialog"].open = true;
+  denied.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
+  assert.equal(denied.imports.length, 0);
+  const drag = fixture(async () => {}, {
+    canBrowse: () => false,
+    canDrop: () => true,
+  });
+  drag.elements["import-report"].click();
+  drag.elements["report-file"].files = [{ name: "blocked.json" }];
+  drag.elements["report-file"].dispatchEvent(new Event("change"));
+  assert.equal(drag.imports.length, 0);
+  drag.fire("report-drop-zone", "drop", [{ name: "allowed.json" }]);
+  assert.equal(drag.imports.length, 1);
+  const browse = fixture(async () => {}, {
+    canBrowse: () => true,
+    canDrop: () => false,
+  });
+  browse.elements["import-report"].click();
+  browse.fire("report-drop-zone", "drop", [{ name: "blocked.json" }]);
+  assert.equal(browse.imports.length, 0);
+});

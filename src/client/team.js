@@ -21,7 +21,7 @@ async function teamRequest(route, options = {}) {
   }
   if (
     limit &&
-    route === "/api/runs" &&
+    ["/api/runs", "/api/imports", "/api/history-imports"].includes(route) &&
     options.method === "POST" &&
     typeof options.body === "string" &&
     new TextEncoder().encode(options.body).length > limit
@@ -181,6 +181,7 @@ async function renderTeam(alt) {
             const saved = await uploadBrowserReport(
               entry,
               entry.metadata?.project || "tomatoes",
+              "history",
             );
             ids.add(saved.id);
             paintProgress(
@@ -327,7 +328,11 @@ function reportIdentityMarkup() {
       )}${metadata.buildUrl ? `<a class="button" href="${esc(metadata.buildUrl)}" target="_blank" rel="noopener noreferrer">Open build →</a>` : ""}</div>`,
   );
 }
-async function uploadBrowserReport(entry, projectOverride = null) {
+async function uploadBrowserReport(
+  entry,
+  projectOverride = null,
+  imported = false,
+) {
   const text = entry
     ? (await ImportHistory.get(entry.id)).text
     : await originalReportText();
@@ -339,17 +344,24 @@ async function uploadBrowserReport(entry, projectOverride = null) {
       report.metadata?.project ||
       "tomatoes",
   };
-  const saved = await teamRequest("/api/runs", {
-    method: "POST",
-    body: JSON.stringify({
-      reportText: text,
-      name: entry?.name || sourceName,
-      label: entry?.label || "",
-      notes: entry?.notes || "",
-      importedAt: entry?.lastImportedAt || report.importedAt || Date.now(),
-      metadata,
-    }),
-  });
+  const saved = await teamRequest(
+    imported === "history"
+      ? "/api/history-imports"
+      : imported
+        ? "/api/imports"
+        : "/api/runs",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        reportText: text,
+        name: entry?.name || sourceName,
+        label: entry?.label || "",
+        notes: entry?.notes || "",
+        importedAt: entry?.lastImportedAt || report.importedAt || Date.now(),
+        metadata,
+      }),
+    },
+  );
   const attachments = entry ? await ImportHistory.listEvidence(entry.id) : [];
   for (const attachment of attachments) {
     const bytes = new Uint8Array(await attachment.blob.arrayBuffer());
@@ -410,7 +422,7 @@ async function syncImportedReport(entry) {
         notice:
           "Saved in this browser. Your account has read-only database access.",
       };
-    const run = await uploadBrowserReport(entry);
+    const run = await uploadBrowserReport(entry, null, true);
     return { saved: true, run };
   } catch (error) {
     return {

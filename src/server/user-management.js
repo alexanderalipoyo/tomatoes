@@ -6,19 +6,19 @@ const roles = [
     id: "viewer",
     name: "Viewer",
     description:
-      "View reports in assigned projects and manage personal preferences.",
+      "View reports and export history PDFs in assigned projects. Manage personal details and account security.",
   },
   {
     id: "editor",
     name: "Editor",
     description:
-      "Viewer permissions, plus publish reports and update report notes and attachments in assigned projects.",
+      "View reports, import results, edit browser report details, attach evidence, and choose appearance in assigned projects. Browse users without changing accounts.",
   },
   {
     id: "admin",
     name: "Admin",
     description:
-      "Editor permissions. Admins with all-project access can manage user accounts and permissions.",
+      "Manage reports and workspace settings. Admins with all-project access can manage organization users, projects, and role access.",
   },
 ];
 function validateUser(

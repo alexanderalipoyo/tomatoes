@@ -115,7 +115,14 @@
     for (const branch of result.branches)
       select.append(option("branch:" + branch, branch));
     select.append(option("__new__", "Create a new branch..."));
-    select.value = result.selected === null ? "" : "branch:" + result.selected;
+    select.value =
+      result.selected === null ||
+      (typeof hasAccess === "function" &&
+        !hasAccess(
+          "import-report-modal.restore-a-valid-remembered-branch-default",
+        ))
+        ? ""
+        : "branch:" + result.selected;
     select.disabled = false;
     const input = document.querySelector("#import-new-branch");
     input.value = "";
@@ -133,6 +140,12 @@
     if (select.disabled)
       throw new Error("Wait for branch options to finish loading.");
     const selected = select.value;
+    if (typeof requireAccess === "function")
+      requireAccess(
+        selected === "__new__"
+          ? "import-report-modal.create-a-new-branch"
+          : "import-report-modal.select-an-existing-branch",
+      );
     if (selected !== "__new__" && !selected.startsWith("branch:")) {
       select.focus?.();
       throw new Error(

@@ -9,6 +9,16 @@ const { createFileStore } = require("./storage/index");
 const { readJSON, writeJSON } = require("./storage/json-store");
 const UserManagement = require("./user-management");
 const PasswordPolicy = require("./password-policy");
+const AccessPolicy = require("../shared/access-policy");
+const publicOrganization = (organization) =>
+  organization
+    ? {
+        id: organization.id,
+        name: organization.name,
+        logo: organization.logo || "",
+        createdAt: organization.createdAt,
+      }
+    : null;
 const Features = require("../shared/report-features");
 const Investigations = require("../shared/investigation-model");
 const hashToken = (value) =>
@@ -165,6 +175,10 @@ function createTeamService({
     return {
       ...saved,
       organization,
+      permissions: AccessPolicy.resolve(
+        organization.rolePermissions,
+        user.role,
+      ),
       accessibleProjects,
       projectScopes: accessibleProjects.map((project) => project.id),
       key,
@@ -191,6 +205,7 @@ function createTeamService({
       const project = await store.getProject(token.project);
       return {
         role: "ci",
+        permissions: {},
         projects: [token.project],
         projectScopes: [token.project],
         organizationId: project?.organizationId || "default",
@@ -200,6 +215,7 @@ function createTeamService({
     if (!teamMode)
       return {
         role: "admin",
+        permissions: AccessPolicy.resolve({}, "admin"),
         projects: ["*"],
         projectScopes: ["*"],
         organizationId: "default",
@@ -212,6 +228,21 @@ function createTeamService({
   function canAccess(user, project) {
     const scopes = user.projectScopes || user.projects;
     return scopes.includes("*") || scopes.includes(project);
+  }
+  function hasFeature(user, id) {
+    return user.kind === "token" || AccessPolicy.can(user.permissions, id);
+  }
+  function requireFeature(user, id) {
+    if (!hasFeature(user, id))
+      throw apiError(403, "Your role does not have access to this feature.");
+  }
+  function requireAnyFeature(user, ids) {
+    if (!ids.some((id) => hasFeature(user, id)))
+      throw apiError(403, "Your role does not have access to this feature.");
+  }
+  function featureWrite(req, user, id) {
+    requireFeature(user, id);
+    canWrite(req, { ...user, role: "editor" });
   }
   function canWrite(req, user) {
     if (user.role === "viewer")
@@ -295,9 +326,18 @@ function createTeamService({
         const tokens = await store.getTokens();
         send(res, 200, {
           enabled: teamMode,
-          organization:
+          organization: publicOrganization(
             user?.organization ||
-            (!teamMode ? await store.getOrganization("default") : null),
+              (!teamMode ? await store.getOrganization("default") : null),
+          ),
+          permissions:
+            user?.permissions ||
+            (!teamMode ? AccessPolicy.resolve({}, "admin") : {}),
+          canManageRoleAccess:
+            !teamMode ||
+            Boolean(
+              user && UserManagement.isGlobalAdmin(user, user.organizationId),
+            ),
           accessibleProjects:
             user?.accessibleProjects ||
             (!teamMode ? await store.listProjects(["*"], "default") : []),
@@ -640,6 +680,7 @@ function createTeamService({
       }
       const user = await principal(req);
       if (url.pathname === "/api/change-password") {
+        requireFeature(await principal(req), "my-profile.change-password");
         if (req.method !== "POST")
           throw apiError(405, "Use POST to change your password.");
         if (user.kind !== "session")
@@ -706,12 +747,64 @@ function createTeamService({
         );
         return true;
       }
+      if (url.pathname === "/api/role-access") {
+        if (
+          user.kind === "token" ||
+          !UserManagement.isGlobalAdmin(user, user.organizationId)
+        )
+          throw apiError(
+            403,
+            "Only organization admins can manage role access.",
+          );
+        const organization = (await store.getOrganization(
+          user.organizationId,
+        )) || { id: user.organizationId, name: "Tomatoes organization" };
+        if (req.method === "GET") {
+          send(res, 200, {
+            features: AccessPolicy.features,
+            permissions: {
+              editor: AccessPolicy.configured(
+                organization.rolePermissions,
+                "editor",
+              ),
+              viewer: AccessPolicy.configured(
+                organization.rolePermissions,
+                "viewer",
+              ),
+            },
+            revision: organization.permissionsRevision || 0,
+            organization: publicOrganization(organization),
+          });
+          return true;
+        }
+        if (req.method !== "PUT")
+          throw apiError(405, "Use GET or PUT for role access.");
+        canWrite(req, user);
+        const body = await bodyJSON(req, 128 * 1024);
+        if (!body || !Number.isSafeInteger(body.revision) || body.revision < 0)
+          throw apiError(400, "Reload role access before saving.");
+        const permissions = AccessPolicy.validate(body.permissions);
+        const saved = await store.saveRolePermissions(
+          user.organizationId,
+          permissions,
+          body.revision,
+        );
+        if (!saved)
+          throw apiError(
+            409,
+            "Role access changed in another session. Reload before saving.",
+          );
+        send(res, 200, { revision: saved.revision });
+        return true;
+      }
       if (url.pathname === "/api/organization") {
         if (user.kind === "token")
           throw apiError(403, "CI tokens cannot manage organizations.");
         if (req.method === "GET") {
           send(res, 200, {
-            organization: await store.getOrganization(user.organizationId),
+            organization: publicOrganization(
+              await store.getOrganization(user.organizationId),
+            ),
             projects: await store.listProjects(
               user.projects,
               user.organizationId,
@@ -738,13 +831,17 @@ function createTeamService({
           false,
           changes.logo,
         );
-        send(res, 200, { organization });
+        send(res, 200, { organization: publicOrganization(organization) });
         return true;
       }
       const branchesMatch = url.pathname.match(
         /^\/api\/projects\/([a-zA-Z0-9][a-zA-Z0-9_.-]{0,79})\/branches$/,
       );
       if (req.method === "GET" && branchesMatch) {
+        requireAnyFeature(user, [
+          "projects.view-branch-summaries",
+          "import-report-modal.select-an-existing-branch",
+        ]);
         const project = branchesMatch[1];
         if (!canAccess(user, project))
           throw apiError(403, "This project is outside your access scope.");
@@ -782,7 +879,9 @@ function createTeamService({
               user.projects,
               user.organizationId,
             ),
-            organization: await store.getOrganization(user.organizationId),
+            organization: publicOrganization(
+              await store.getOrganization(user.organizationId),
+            ),
             canManage,
           });
           return true;
@@ -804,6 +903,10 @@ function createTeamService({
           );
         canWrite(req, user);
         const body = await bodyJSON(req, 4096);
+        requireFeature(
+          user,
+          creating ? "projects.create-projects" : "projects.rename-projects",
+        );
         const project = await store.manageProject(
           body,
           creating ? null : match[1],
@@ -817,22 +920,29 @@ function createTeamService({
         url.pathname === "/api/users" ||
         url.pathname.startsWith("/api/users/")
       ) {
+        if (user.kind === "token")
+          throw apiError(403, "CI tokens cannot access users.");
         if (
-          user.kind === "token" ||
+          req.method !== "GET" &&
           !UserManagement.isGlobalAdmin(user, user.organizationId)
         )
-          throw apiError(
-            403,
-            "Only admins with all-project access can manage users.",
-          );
+          throw apiError(403, "Only organization admins can manage users.");
         if (req.method === "GET" && url.pathname === "/api/users") {
+          requireAnyFeature(user, [
+            "users.search-users",
+            "users.filter-users",
+            "users.sort-users",
+            "users.add-users",
+          ]);
           send(res, 200, {
             users: (await store.getUsers())
               .filter((row) =>
                 UserManagement.belongsToOrganization(row, user.organizationId),
               )
               .map(UserManagement.publicUser),
-            organization: await store.getOrganization(user.organizationId),
+            organization: publicOrganization(
+              await store.getOrganization(user.organizationId),
+            ),
             projects: await store.listProjects(["*"], user.organizationId),
             roles: UserManagement.roles,
             currentUsername: user.username || null,
@@ -865,6 +975,14 @@ function createTeamService({
           body.username !== username
         )
           throw apiError(400, "Usernames cannot be changed.");
+        requireFeature(
+          user,
+          creating
+            ? "users.add-users"
+            : req.method === "DELETE"
+              ? "users.deactivate-users"
+              : "users.edit-users",
+        );
         const target = creating ? changes.username : username;
         const credentials = creating
           ? hashPassword(body.password, changes)
@@ -923,6 +1041,17 @@ function createTeamService({
               409,
               "This username already exists. Restore the account if it is deactivated.",
             );
+          if (changes && previous && changes.role !== previous.role)
+            requireFeature(user, "users.assign-roles");
+          if (
+            changes &&
+            previous &&
+            JSON.stringify(changes.projects) !==
+              JSON.stringify(previous.projects)
+          )
+            requireFeature(user, "users.assign-multiple-projects");
+          if (changes && previous?.disabled && !changes.disabled)
+            requireFeature(user, "users.restore-users");
           const next = creating
             ? { ...changes, ...credentials }
             : req.method === "DELETE"
@@ -995,6 +1124,68 @@ function createTeamService({
           } catch (error) {
             throw apiError(error.status || 400, error.message);
           }
+          if (patch.profile)
+            requireFeature(user, "my-profile.edit-personal-details");
+          if (patch.appearance) {
+            requireFeature(
+              user,
+              "settings-appearance.save-appearance-preferences",
+            );
+            const modes = {
+              light: "select-light-mode",
+              dark: "select-dark-mode",
+              system: "follow-system-appearance",
+            };
+            requireFeature(
+              user,
+              "settings-appearance." + modes[patch.appearance.colorMode],
+            );
+          }
+          if (patch.display) {
+            const previous = UserPreferences.withDefaults(
+              (await store.getPreferences(owner)) || {},
+            ).display;
+            if (patch.display.timeZone !== previous.timeZone)
+              requireFeature(user, "report-settings.configure-time-zone");
+            if (patch.display.rows !== previous.rows)
+              requireFeature(
+                user,
+                "report-settings.configure-results-per-page",
+              );
+          }
+          if (patch.workspaces) {
+            requireFeature(user, "settings-general.configure-project-website");
+            requireFeature(
+              user,
+              "settings-general.configure-fallback-project-logo",
+            );
+          }
+          if (patch.dashboardGroups) {
+            const old =
+              (await store.getPreferences(owner))?.dashboardGroups || [];
+            for (const group of patch.dashboardGroups) {
+              const previous = old.find((item) => item.id === group.id);
+              if (!previous)
+                requireFeature(
+                  user,
+                  "report-settings.create-custom-spec-group-widgets",
+                );
+              else if (JSON.stringify(previous) !== JSON.stringify(group))
+                requireFeature(user, "report-settings.edit-custom-widgets");
+            }
+            if (
+              old.some(
+                (item) =>
+                  !patch.dashboardGroups.some((group) => group.id === item.id),
+              )
+            )
+              requireFeature(user, "report-settings.remove-custom-widgets");
+          }
+          if (patch.importBranches)
+            requireAnyFeature(user, [
+              "import-report-modal.browse-for-a-json-file",
+              "import-report-modal.drag-and-drop-a-json-file",
+            ]);
           const saved = await store.savePreferences(
             owner,
             patch,
@@ -1010,6 +1201,31 @@ function createTeamService({
         }
         throw apiError(405, "Use GET or PUT for preferences.");
       }
+      if (
+        req.method === "GET" &&
+        /^\/api\/runs\/[a-f0-9]{64}(?:\/|$)/.test(url.pathname)
+      ) {
+        requireAnyFeature(
+          user,
+          AccessPolicy.features
+            .filter(
+              (f) =>
+                [
+                  "Latest run",
+                  "Test results",
+                  "Failed tests",
+                  "Import history",
+                  "Projects",
+                  "Compare runs",
+                  "Analytics",
+                  "Flaky tests",
+                  "Report settings",
+                ].includes(f.tab) ||
+                f.id === "settings-sharing-access.open-server-reports",
+            )
+            .map((f) => f.id),
+        );
+      }
       const archiveMatch = url.pathname.match(
         /^\/api\/runs\/([a-f0-9]{64})\/archive$/,
       );
@@ -1018,7 +1234,7 @@ function createTeamService({
           throw apiError(405, "Use POST to archive or restore a run.");
         if (user.kind === "token")
           throw apiError(403, "CI tokens cannot archive or restore reports.");
-        canWrite(req, user);
+        canWrite(req, { ...user, role: "editor" });
         const body = await bodyJSON(req, 1024);
         if (
           !body ||
@@ -1026,6 +1242,12 @@ function createTeamService({
           Object.keys(body).some((key) => key !== "archived")
         )
           throw apiError(400, "Choose whether to archive or restore this run.");
+        requireFeature(
+          user,
+          body.archived
+            ? "projects.archive-runs-with-confirmation"
+            : "projects.restore-runs-with-confirmation",
+        );
         const run = await store.setRunArchived(
           archiveMatch[1],
           user.projectScopes,
@@ -1037,16 +1259,41 @@ function createTeamService({
         return true;
       }
       if (req.method === "GET" && url.pathname === "/api/runs") {
+        requireAnyFeature(
+          user,
+          AccessPolicy.features
+            .filter(
+              (f) =>
+                [
+                  "Latest run",
+                  "Import history",
+                  "Projects",
+                  "Compare runs",
+                  "Analytics",
+                  "Flaky tests",
+                ].includes(f.tab) ||
+                f.id === "settings-sharing-access.browse-shared-reports",
+            )
+            .map((f) => f.id),
+        );
         const project = url.searchParams.get("project");
         if (project && !canAccess(user, project))
           throw apiError(403, "This project is outside your access scope.");
         const Pagination = require("./run-pagination");
         const page = Pagination.read(url, user.organizationId);
+        if (page.cursor)
+          requireAnyFeature(user, [
+            "projects.load-older-shared-reports",
+            "settings-sharing-access.load-older-reports",
+          ]);
         const records = await store.listRunsPage(user.projectScopes, page);
         const runs = records.slice(0, page.limit);
         const hasMore = records.length > page.limit;
         send(res, 200, {
-          canArchive: user.kind !== "token" && user.role !== "viewer",
+          canArchive:
+            user.kind !== "token" &&
+            (hasFeature(user, "projects.archive-runs-with-confirmation") ||
+              hasFeature(user, "projects.restore-runs-with-confirmation")),
           runs,
           hasMore,
           nextCursor: hasMore
@@ -1055,8 +1302,24 @@ function createTeamService({
         });
         return true;
       }
-      if (req.method === "POST" && url.pathname === "/api/runs") {
-        canWrite(req, user);
+      if (
+        req.method === "POST" &&
+        ["/api/runs", "/api/imports", "/api/history-imports"].includes(
+          url.pathname,
+        )
+      ) {
+        if (url.pathname === "/api/imports")
+          requireAnyFeature(user, [
+            "import-report-modal.browse-for-a-json-file",
+            "import-report-modal.drag-and-drop-a-json-file",
+          ]);
+        else if (url.pathname === "/api/history-imports")
+          requireFeature(
+            user,
+            "settings-sharing-access.save-browser-imports-to-the-server",
+          );
+        else requireFeature(user, "settings-sharing-access.publish-reports");
+        canWrite(req, { ...user, role: "editor" });
         const body = await ReportTransfer.unpack(
           await bodyJSON(req, ReportData.MAX_REPORT_BYTES * 2 + 65536),
         );
@@ -1088,6 +1351,14 @@ function createTeamService({
         } catch (error) {
           throw apiError(400, error.message);
         }
+        if (
+          url.pathname === "/api/imports" &&
+          (!wrapped || !body.metadata?.project || !metadata.branch)
+        )
+          throw apiError(
+            400,
+            "Select a project and branch before importing a report.",
+          );
         if (!canAccess(user, metadata.project))
           throw apiError(403, "This project is outside your access scope.");
         const text = JSON.stringify(raw);
@@ -1234,7 +1505,11 @@ function createTeamService({
           return true;
         }
         if (req.method === "POST" && !evidenceMatch[2]) {
-          canWrite(req, user);
+          featureWrite(
+            req,
+            user,
+            "test-results.attach-screenshots-and-recordings",
+          );
           const body = await bodyJSON(req, 36 * 1024 * 1024);
           if (
             typeof body?.testKey !== "string" ||

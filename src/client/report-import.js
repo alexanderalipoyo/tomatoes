@@ -4,6 +4,9 @@
     isBusy,
     importFile,
     prepareImport = null,
+    canImport = () => true,
+    canBrowse = () => true,
+    canDrop = () => true,
     getImportOptions = () => ({}),
   }) {
     const get = (id) => document.getElementById(id);
@@ -60,7 +63,7 @@
       }
     }
     get("import-report").addEventListener("click", async () => {
-      if (busy() || dialog.open) return;
+      if (busy() || dialog.open || !canImport()) return;
       clearError();
       resetDrag();
       dialog.showModal();
@@ -81,13 +84,13 @@
     get("close-import").addEventListener("click", () => dialog.close());
     dialog.addEventListener("close", resetDrag);
     get("browse-report").addEventListener("click", () => {
-      if (!busy() && validateOptions() !== null) {
+      if (canBrowse() && !busy() && validateOptions() !== null) {
         clearError();
         input.click();
       }
     });
     input.addEventListener("change", () => {
-      if (input.files.length) void selectFiles(input.files);
+      if (canBrowse() && input.files.length) void selectFiles(input.files);
       input.value = "";
     });
     zone.addEventListener("dragenter", (event) => {
@@ -110,7 +113,7 @@
       if (!isFileDrag(event)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (dialog.open) void selectFiles(event.dataTransfer.files);
+      if (dialog.open && canDrop()) void selectFiles(event.dataTransfer.files);
       else resetDrag();
     });
     // Keep a missed drop from navigating away from the dashboard or interrupting rendering.

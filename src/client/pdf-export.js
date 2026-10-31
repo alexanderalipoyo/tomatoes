@@ -140,6 +140,12 @@ if (typeof document !== "undefined") {
     });
   else initializePDFPreviewCleanup();
   async function exportReportPDF(historyId = null, initialOptions = {}) {
+    if (typeof requireAccess === "function")
+      requireAccess(
+        historyId
+          ? "import-history.export-pdf-reports"
+          : "report-settings.export-pdf-reports",
+      );
     if (loading) return;
     const entry = historyEntries.find(
       (item) => item.id === (historyId || activeHistoryId),
@@ -171,12 +177,30 @@ if (typeof document !== "undefined") {
       initialOptions.failureSearch || "";
     document.querySelector("#pdf-failure-spec").value =
       initialOptions.failureSpec || "";
+    if (
+      typeof hasAccess === "function" &&
+      !hasAccess("pdf-export-dialog.preview-the-pdf")
+    )
+      document.querySelector("#pdf-options button[type=submit]").textContent =
+        "Download PDF";
     document.querySelector("#pdf-options").onsubmit = (event) => {
       event.preventDefault();
       generatePDFPreview(historyId, {
-        mode: document.querySelector("#pdf-mode").value,
-        failureSearch: document.querySelector("#pdf-failure-search").value,
-        failureSpec: document.querySelector("#pdf-failure-spec").value.trim(),
+        mode:
+          typeof hasAccess !== "function" ||
+          hasAccess("pdf-export-dialog.choose-summary-or-detailed-format")
+            ? document.querySelector("#pdf-mode").value
+            : "summary",
+        failureSearch:
+          typeof hasAccess !== "function" ||
+          hasAccess("pdf-export-dialog.filter-failure-details")
+            ? document.querySelector("#pdf-failure-search").value
+            : "",
+        failureSpec:
+          typeof hasAccess !== "function" ||
+          hasAccess("pdf-export-dialog.filter-failure-details")
+            ? document.querySelector("#pdf-failure-spec").value.trim()
+            : "",
       });
     };
     document.querySelector("#detail").showModal();
@@ -202,15 +226,23 @@ if (typeof document !== "undefined") {
         );
         const importedAt =
           entry?.lastImportedAt ?? entry?.importedAt ?? selected?.importedAt;
-        const outputName = ReportPDF.filename(importedAt, preferences.timeZone);
+        const outputName =
+          typeof hasAccess !== "function" ||
+          hasAccess("pdf-export-dialog.generate-filenames-using-import-time")
+            ? ReportPDF.filename(importedAt, preferences.timeZone)
+            : "report.pdf";
         if (!selected)
           throw new Error("Import or open a report before exporting.");
         paintProgress(15, "Loading PDF tools");
         const [jsPDF, fontData] = await loadPDFResources();
         const doc = await ReportPDF.createDocument(selected, name, {
-          branding: workspaceBranding(
-            selected.metadata?.project || currentWorkspaceProject,
-          ),
+          branding:
+            typeof hasAccess !== "function" ||
+            hasAccess("pdf-export-dialog.apply-organization-branding")
+              ? workspaceBranding(
+                  selected.metadata?.project || currentWorkspaceProject,
+                )
+              : {},
           jsPDF,
           fontData,
           groups: Investigations.failureGroups(selected),
@@ -220,6 +252,14 @@ if (typeof document !== "undefined") {
           onProgress: paintProgress,
           yieldControl: allowPaint,
         });
+        if (
+          typeof hasAccess === "function" &&
+          !hasAccess("pdf-export-dialog.preview-the-pdf")
+        ) {
+          await doc.save(outputName, { returnPromise: true });
+          historyNotice("PDF download started.", "success");
+          return;
+        }
         const blob = doc.output("blob");
         pdfPreviewURL = URL.createObjectURL(blob);
         document.querySelector("#detail-content").innerHTML =

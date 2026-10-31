@@ -73,6 +73,7 @@ function showReportLinkError(error) {
 function isReportIndependentView() {
   return [
     "projects",
+    "role-access",
     "integrations",
     "users",
     "profile",
@@ -150,7 +151,17 @@ async function navigateReportLocation() {
       !hasBrowserHistory
     ) {
       const url = new URL(location.href);
-      url.hash = "projects";
+      if (!canAccessView("projects")) {
+        const latest = await teamRequest("/api/runs?limit=1");
+        if (latest.runs.length) {
+          url.searchParams.set("server", latest.runs[0].id);
+          url.hash = "runs";
+          history.replaceState(null, "", url);
+          await navigateReportLocation();
+          return;
+        }
+        url.hash = "profile";
+      } else url.hash = "projects";
       history.replaceState(null, "", url);
       navigate();
       return;

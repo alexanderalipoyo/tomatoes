@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    9,
+    10,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -388,12 +388,12 @@ test("real PostgreSQL file migration is repeatable, preserves sources, and rolls
   );
 });
 
-test("PostgreSQL preferences isolate accounts, allow viewers' own settings, and enforce CSRF", async (t) => {
+test("PostgreSQL preferences isolate accounts, enforce role-based settings, and enforce CSRF", async (t) => {
   const api = await fixture(t, { teamMode: true });
   for (const username of ["alice", "bob"])
     await api.store.addUser({
       username,
-      role: "viewer",
+      role: username === "alice" ? "admin" : "viewer",
       projects: ["web"],
       ...hashPassword("test-preference-password"),
     });
@@ -1011,5 +1011,33 @@ test("PostgreSQL password changes rotate hashes and revoke stored sessions", asy
       })
     ).status,
     200,
+  );
+});
+
+test("real PostgreSQL role policies persist per organization and reject stale concurrent updates", async (t) => {
+  const { store } = await fixture(t);
+  const Policy = require("../../src/shared/access-policy");
+  const permissions = {
+    editor: Policy.configured({}, "editor"),
+    viewer: Policy.configured({}, "viewer"),
+  };
+  assert.equal((await store.getOrganization("default")).permissionsRevision, 0);
+  await store.saveOrganization("second", "Second organization", true);
+  permissions.editor["settings-appearance.save-appearance-preferences"] = false;
+  const writes = await Promise.all([
+    store.saveRolePermissions("default", permissions, 0),
+    store.saveRolePermissions("default", permissions, 0),
+  ]);
+  assert.equal(writes.filter(Boolean).length, 1);
+  assert.equal((await store.getOrganization("default")).permissionsRevision, 1);
+  await store.saveOrganization("default", "New org name", false);
+  assert.deepEqual(
+    (await store.getOrganization("default")).rolePermissions,
+    permissions,
+  );
+  assert.deepEqual((await store.getOrganization("second")).rolePermissions, {});
+  assert.equal(
+    await store.saveRolePermissions("missing", permissions, 0),
+    null,
   );
 });

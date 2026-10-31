@@ -1,6 +1,14 @@
 function insightMetric(label, value, note) {
-  return `<article class="insight-metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
+  const feature = {
+    "95th percentile test": "analytics.review-performance-percentiles",
+    "New regressions": "compare-runs.identify-regressions",
+    "Fixed tests": "compare-runs.identify-fixes",
+    "Added tests": "compare-runs.identify-added-and-missing-tests",
+    "Missing tests": "compare-runs.identify-added-and-missing-tests",
+  }[label];
+  return `<article class="insight-metric" ${feature ? `data-feature="${feature}"` : ""}><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
 }
+
 function renderAnalytics(alt) {
   const data = ReportData.insightStats(report);
   const trends = [...filteredTrendEntries()]

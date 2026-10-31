@@ -27,6 +27,7 @@ export function MobileNavigation() {
         aria-controls="workspace-menu"
         aria-expanded="false"
       >
+        <span className="account-menu-fallback">Account</span>
         <span data-organization-initials></span>
         <span data-organization-name>{"Organization"}</span>
         <small data-workspace-user>{"Alex Ali"}</small>
@@ -93,6 +94,10 @@ export function MobileNavigation() {
         <a href="#settings" data-view="settings">
           <span data-icon="chart"></span>
           {"Report settings"}
+        </a>
+        <a href="#role-access" data-view="role-access">
+          <span data-icon="users"></span>
+          {"Role access"}
         </a>
         <a href="#integrations" data-view="integrations">
           <span data-icon="integration"></span>

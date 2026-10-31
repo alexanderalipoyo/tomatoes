@@ -9,6 +9,7 @@ function fixture(hash, search = "?import=invalid") {
   const elements = {};
   const context = {
     location: { hash, search, href: "http://localhost/" + search + hash },
+    canAccessView: () => true,
     authRequiresLogin: () => false,
     isAuthRoute: () => false,
     renderAuthScreen: () => calls.push("auth"),

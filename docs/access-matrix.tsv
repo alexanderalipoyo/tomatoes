@@ -1,0 +1,137 @@
+Tab / Page	Feature	Admin 	Editor	Viewer
+Latest run	Test outcome totals	1	1	1
+Latest run	Pass rate	1	1	1
+Latest run	Run duration	1	1	1
+Latest run	Failed spec summary	1	1	1
+Latest run	Slow test widgets	1	1	1
+Latest run	Failure hotspots	1	1	1
+Latest run	Custom widgets grouped by spec paths	1	1	1
+Test results	Switch between spec and test views	1	1	1
+Test results	Search tests, paths, and errors	1	1	1
+Test results	Filter by outcome	1	1	1
+Test results	Filter by spec	1	1	1
+Test results	Paginate results	1	1	1
+Test results	View test details	1	1	1
+Test results	Inspect errors and stack traces	1	1	1
+Test results	View recorded test code	1	1	1
+Test results	Attach screenshots and recordings	1	1	0
+Failed tests	Group matching failure messages	1	1	1
+Failed tests	View affected tests	1	1	1
+Failed tests	Inspect detailed errors	1	1	1
+Failed tests	Analyze recurring failures across comparable imports	1	1	1
+Import history	Reopen saved imports	1	1	1
+Import history	Open a unique report URL	1	1	1
+Import history	Copy report links	1	1	1
+Import history	Edit report names	1	1	0
+Import history	Edit report notes	1	1	0
+Import history	Export PDF reports	1	1	1
+Import history	Move imports to trash	1	1	0
+Import history	Restore trashed imports	1	1	0
+Import history	Download browser backups	1	1	0
+Import history	Restore browser backups	1	1	0
+Compare runs	Select baseline and target reports	1	1	1
+Compare runs	Identify regressions	1	1	1
+Compare runs	Identify fixes	1	1	1
+Compare runs	Identify added and missing tests	1	1	1
+Compare runs	Compare outcome changes	1	1	1
+Compare runs	Compare test durations	1	1	1
+Compare runs	Export comparison summaries	1	1	1
+Analytics	Analyze failure patterns	1	1	1
+Analytics	Identify affected directories	1	1	1
+Analytics	View duration distributions	1	1	1
+Analytics	Review performance percentiles	1	1	1
+Analytics	View saved-run trends	1	1	1
+Analytics	Filter trends by project	1	1	1
+Analytics	Filter trends by environment	1	1	1
+Analytics	Filter trends by branch	1	1	1
+Flaky tests	Review explicit retry-recovery evidence	1	1	1
+Flaky tests	Investigate cross-run pass/fail changes	1	1	1
+Projects	View projects within the current organization	1	1	0
+Projects	Search projects	1	1	0
+Projects	Create projects	1	0	0
+Projects	Rename projects	1	0	0
+Projects	View branch summaries	1	1	0
+Projects	Open latest results	1	1	0
+Projects	View active runs	1	1	0
+Projects	View archived runs	1	1	0
+Projects	Archive runs with confirmation	1	0	0
+Projects	Restore runs with confirmation	1	0	0
+Projects	Load older shared reports	1	0	0
+My profile	Edit personal details	1	1	1
+My profile	View organization membership	1	1	1
+My profile	View assigned projects	1	1	1
+My profile	Change password	1	1	1
+My profile	Revoke existing sessions after a password change	1	1	1
+Users	Add users	1	0	0
+Users	Edit users	1	0	0
+Users	Assign roles	1	0	0
+Users	Assign multiple projects	1	0	0
+Users	Search users	1	1	0
+Users	Filter users	1	1	0
+Users	Sort users	1	1	0
+Users	Deactivate users	1	0	0
+Users	Restore users	1	0	0
+Users	Enforce organization membership and project access	1	0	0
+Settings — General	Update organization name	1	0	0
+Settings — General	Upload organization logo	1	0	0
+Settings — General	Preview organization logo	1	0	0
+Settings — General	Remove organization logo	1	0	0
+Settings — General	Save shared organization branding	1	0	0
+Settings — General	Configure project website	1	0	0
+Settings — General	Configure fallback project logo	1	0	0
+Settings — Appearance	Select Light mode	1	1	0
+Settings — Appearance	Select Dark mode	1	1	0
+Settings — Appearance	Follow system appearance	1	1	0
+Settings — Appearance	Save appearance preferences	1	1	0
+Settings — Sharing & access	Browse shared reports	1	0	0
+Settings — Sharing & access	Filter reports by project	1	1	0
+Settings — Sharing & access	Open server reports	1	0	0
+Settings — Sharing & access	Publish reports	1	0	0
+Settings — Sharing & access	Save browser imports to the server	1	0	0
+Settings — Sharing & access	View connection status	1	0	0
+Settings — Sharing & access	Load older reports	1	1	0
+Report settings	Configure time zone	1	0	0
+Report settings	Configure results per page	1	0	0
+Report settings	Create custom spec-group widgets	1	0	0
+Report settings	Edit custom widgets	1	0	0
+Report settings	Remove custom widgets	1	0	0
+Report settings	View report information	1	1	0
+Report settings	Review validation and data-quality warnings	1	0	0
+Report settings	Export original JSON	1	1	0
+Report settings	Export Markdown summaries	1	1	0
+Report settings	Export PDF reports	1	1	0
+Integration	Open setup/configuration dialogs	1	0	0
+Integration	Configure CI report uploads	1	0	0
+Integration	View project-scoped API setup	1	0	0
+Integration	Configure Slack import notifications	1	0	0
+Integration	View GitHub Actions setup instructions	1	0	0
+Integration	View GitLab CI setup instructions	1	0	0
+Integration	View Bitbucket runner setup instructions	1	0	0
+Login	Sign in using email or username	1	1	1
+Login	Show or hide the password field	1	1	1
+Login	Limit repeated sign-in attempts	1	1	1
+Login	Establish secure cookie sessions	1	1	1
+Login	Recommend changing passwords matching account identifiers	1	1	1
+Forgot / Reset password	Request password recovery	1	1	1
+Forgot / Reset password	Use expiring, single-use reset links	1	1	1
+Forgot / Reset password	Confirm the new password	1	1	1
+Forgot / Reset password	Invalidate existing sessions after reset	1	1	1
+Import report modal	Browse for a JSON file	1	1	0
+Import report modal	Drag and drop a JSON file	1	1	0
+Import report modal	Require a project selection	1	1	0
+Import report modal	Require a branch selection	1	1	0
+Import report modal	Select an existing branch	1	1	0
+Import report modal	Create a new branch	1	1	0
+Import report modal	Restore a valid remembered branch default	1	1	0
+Import report modal	Validate report format	1	1	0
+Import report modal	Display blocking import progress	1	1	0
+Organization / project navigation	Display dynamic organization identity	1	0	0
+Organization / project navigation	Display organization logo	1	0	0
+Organization / project navigation	Display current user name	1	0	0
+Organization / project navigation	Select permitted projects	1	0	0
+Organization / project navigation	Use responsive mobile navigation	1	0	0
+PDF export dialog	Choose summary or detailed format	1	1	1
+PDF export dialog	Filter failure details	1	1	1
+PDF export dialog	Preview the PDF	1	1	1
+PDF export dialog	Apply organization branding	1	1	1
+PDF export dialog	Generate filenames using import time	1	1	1

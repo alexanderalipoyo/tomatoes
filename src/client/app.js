@@ -180,15 +180,7 @@ function renderWorkspaceIdentity() {
       : workspaceProjects[0]?.id) ||
     (authStatus?.enabled ? "" : "tomatoes");
   const organizationName = authStatus?.organization?.name || "Organization";
-  document.querySelectorAll('nav a[data-view="users"]').forEach((link) => {
-    link.hidden = Boolean(
-      authStatus?.enabled &&
-      !(
-        authStatus.user?.role === "admin" &&
-        authStatus.user.projects.includes("*")
-      ),
-    );
-  });
+  applyFeatureAccess();
   document.querySelectorAll("[data-organization-name]").forEach((element) => {
     element.textContent = organizationName;
     element.title = organizationName;
@@ -375,9 +367,10 @@ function openTests(spec, status = "all") {
   $("#results-section").scrollIntoView({ behavior: "smooth" });
 }
 function showTest(id) {
+  if (!hasAccess("test-results.view-test-details")) return;
   const test = report.tests[id];
   $("#detail-content").innerHTML =
-    `<div class="dialog-heading">${badge(test.status)}<h2 id="detail-title">${esc(test.title)}</h2><p>${esc(test.fullTitle)}</p></div><div class="detail-grid"><div><small>Spec</small>${esc(test.file)}</div><div><small>Duration</small>${duration(test.duration)}</div><div><small>Suite</small>${esc(test.suite || "Root suite")}</div><div><small>Status</small>${esc(test.status)}</div></div>${test.error ? `<h2>Failure message</h2><pre class="failure-message">${esc(test.error)}</pre>` : '<p class="notice">No failure message recorded for this test.</p>'}${test.stack ? `<details><summary>Stack trace</summary><pre>${esc(test.stack)}</pre></details>` : ""}${test.code ? `<details><summary>Test code</summary><pre>${esc(test.code)}</pre></details>` : ""}${test.context ? `<details><summary>Reported context</summary><pre>${esc(test.context)}</pre></details>` : ""}`;
+    `<div class="dialog-heading">${badge(test.status)}<h2 id="detail-title">${esc(test.title)}</h2><p>${esc(test.fullTitle)}</p></div><div class="detail-grid"><div><small>Spec</small>${esc(test.file)}</div><div><small>Duration</small>${duration(test.duration)}</div><div><small>Suite</small>${esc(test.suite || "Root suite")}</div><div><small>Status</small>${esc(test.status)}</div></div>${test.error && hasAccess("test-results.inspect-errors-and-stack-traces") ? `<h2>Failure message</h2><pre class="failure-message">${esc(test.error)}</pre>` : '<p class="notice">No failure message recorded for this test.</p>'}${test.stack && hasAccess("test-results.inspect-errors-and-stack-traces") ? `<details><summary>Stack trace</summary><pre>${esc(test.stack)}</pre></details>` : ""}${test.code && hasAccess("test-results.view-recorded-test-code") ? `<details><summary>Test code</summary><pre>${esc(test.code)}</pre></details>` : ""}${test.context ? `<details><summary>Reported context</summary><pre>${esc(test.context)}</pre></details>` : ""}`;
   $("#detail-content").insertAdjacentHTML(
     "beforeend",
     `<div class="test-history-action"><button class="button primary" id="view-test-history">View test history</button><p class="widget-footnote">Follow this exact test across saved reports.</p></div>`,
@@ -394,19 +387,6 @@ function navigate(force = false) {
   hideAuthScreen();
   if (loading && force !== true) return;
   view = location.hash.slice(1) || "runs";
-  if (
-    view === "users" &&
-    authStatus?.enabled &&
-    !(
-      authStatus.user?.role === "admin" &&
-      authStatus.user.projects.includes("*")
-    )
-  ) {
-    view = "projects";
-    const url = new URL(location.href);
-    url.hash = "projects";
-    history.replaceState(null, "", url);
-  }
   if (view === "team") {
     const url = new URL(location.href);
     url.hash = "workspace-settings";
@@ -424,6 +404,7 @@ function navigate(force = false) {
       "flaky",
       "settings",
       "workspace-settings",
+      "role-access",
       "users",
       "profile",
       "projects",
@@ -434,6 +415,7 @@ function navigate(force = false) {
   )
     view = "runs";
   const workspaceContext = [
+    "role-access",
     "integrations",
     "projects",
     "users",
@@ -459,6 +441,10 @@ function navigate(force = false) {
     else link.removeAttribute("aria-current");
   });
   const labels = {
+    "role-access": [
+      "Role access",
+      "Manage role permissions for your organization.",
+    ],
     integrations: [
       "Integrations",
       "Connect report collection and notifications to your workspace.",
@@ -534,6 +520,28 @@ function navigate(force = false) {
   $("#custom-dashboard").hidden = view !== "runs";
   $(".dashboard-actions").hidden = view !== "runs";
   $("#history-section").hidden = view !== "history";
+  applyFeatureAccess();
+  if (!canAccessView(view)) {
+    [
+      "#overview",
+      "#results-section",
+      "#dashboard-widgets",
+      "#custom-dashboard",
+      ".dashboard-actions",
+      "#history-section",
+      "#failure-groups",
+    ].forEach((selector) => ($(selector).hidden = true));
+    $("#report-content").hidden = false;
+    $("#alternate").hidden = false;
+    $("#alternate").innerHTML =
+      '<article class="settings-card"><h2>Access denied</h2><p>Your role cannot open this page. Contact your organization administrator.</p><a class="button" href="#runs">Latest run</a> <a class="button" href="#profile">My profile</a></article>';
+    return;
+  }
+  if (view === "role-access") {
+    $("#report-content").hidden = false;
+    renderRoleAccess($("#alternate"));
+    return;
+  }
   if (view === "history") renderHistory();
   $("#failure-groups").hidden = view !== "failures";
   if (view === "integrations") {
@@ -660,6 +668,14 @@ function populateSpecFilter() {
       .join("");
 }
 async function loadReport(file = currentFile, options = {}) {
+  if (
+    file &&
+    !hasAccess("import-report-modal.browse-for-a-json-file") &&
+    !hasAccess("import-report-modal.drag-and-drop-a-json-file")
+  ) {
+    showToast("Your role cannot import reports.", "warning");
+    return false;
+  }
   if (loading) return;
   const previous = {
     report,
@@ -997,6 +1013,11 @@ $("#refresh").onclick = () => {
 $("#load-bundled").onclick = () => loadReport(null, { openDashboard: true });
 ReportImport.setup({
   document,
+  canImport: () =>
+    hasAccess("import-report-modal.browse-for-a-json-file") ||
+    hasAccess("import-report-modal.drag-and-drop-a-json-file"),
+  canBrowse: () => hasAccess("import-report-modal.browse-for-a-json-file"),
+  canDrop: () => hasAccess("import-report-modal.drag-and-drop-a-json-file"),
   isBusy: () => loading || document.body.classList.contains("is-rendering"),
   prepareImport: async () => {
     await ImportProjects.prepare();
@@ -1120,14 +1141,24 @@ function isSharingSettingsView() {
 }
 function renderWorkspaceSettings(alt) {
   const requested = new URL(location.href).searchParams.get("settingsTab");
-  const section = ["general", "sharing"].includes(requested)
-    ? requested
-    : "appearance";
-  alt.innerHTML = `<div class="workspace-settings-page"><div class="workspace-settings-tabs" role="tablist" aria-label="Settings sections">${[
+  const sections = [
     ["general", "General"],
     ["appearance", "Appearance"],
     ["sharing", "Sharing & access"],
-  ]
+  ].filter(([id]) =>
+    AccessPolicy.features.some(
+      (f) =>
+        f.id.startsWith(
+          "settings-" + ({ sharing: "sharing-access" }[id] || id) + ".",
+        ) && hasAccess(f.id),
+    ),
+  );
+  const section = sections.some(([id]) => id === requested)
+    ? requested
+    : sections.some(([id]) => id === "appearance")
+      ? "appearance"
+      : sections[0]?.[0];
+  alt.innerHTML = `<div class="workspace-settings-page"><div class="workspace-settings-tabs" role="tablist" aria-label="Settings sections">${sections
     .map(
       ([id, label]) =>
         `<button type="button" role="tab" id="settings-tab-${id}" data-settings-section="${id}" aria-controls="workspace-settings-panel" aria-selected="${section === id}" tabindex="${section === id ? "0" : "-1"}">${label}</button>`,
@@ -1151,15 +1182,16 @@ function renderWorkspaceSettings(alt) {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
         return;
       event.preventDefault();
-      const tabs = ["general", "appearance", "sharing"];
+      const tabs = sections.map(([id]) => id);
       selectSection(
         event.key === "Home"
           ? tabs[0]
           : event.key === "End"
-            ? tabs[2]
+            ? tabs[tabs.length - 1]
             : tabs[
-                (tabs.indexOf(section) + (event.key === "ArrowRight" ? 1 : 2)) %
-                  3
+                (tabs.indexOf(section) +
+                  (event.key === "ArrowRight" ? 1 : tabs.length - 1)) %
+                  tabs.length
               ],
         true,
       );

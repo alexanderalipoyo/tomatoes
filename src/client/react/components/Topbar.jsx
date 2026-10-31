@@ -29,6 +29,13 @@ export function Topbar() {
         <strong data-workspace-name>{"Select a project"}</strong>
         <span className="private">{"Local"}</span>
       </div>
+      <select
+        id="role-mobile-navigation"
+        className="role-mobile-navigation"
+        aria-label="Navigate pages"
+      >
+        <option value="runs">Latest run</option>
+      </select>
       <div className="topbar-actions">
         <span className="source-label" id="source-label">
           {"Loading report…"}
