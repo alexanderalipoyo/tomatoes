@@ -964,3 +964,52 @@ test("PostgreSQL paginates reports with stable timestamp ties and filters before
   ]);
   assert.deepEqual(await store.listBranchesPage(["web"], "secret"), []);
 });
+
+test("PostgreSQL password changes rotate hashes and revoke stored sessions", async (t) => {
+  const f = await fixture(t, { teamMode: true });
+  const oldPassword = "old database test password",
+    newPassword = "new database test password";
+  const initial = hashPassword(oldPassword);
+  await f.store.addUser({
+    username: "changing",
+    email: "changing@example.com",
+    role: "viewer",
+    projects: ["*"],
+    ...initial,
+  });
+  const login = await f.request("/api/login", {
+    method: "POST",
+    headers: { Origin: f.origin },
+    body: { username: "changing", password: oldPassword },
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const key = hashToken(cookie.split("=")[1]);
+  assert.ok(await f.store.getSession(key));
+  const response = await f.request("/api/change-password", {
+    method: "POST",
+    headers: {
+      Origin: f.origin,
+      Cookie: cookie,
+      "X-CSRF-Token": login.body.csrf,
+    },
+    body: { currentPassword: oldPassword, password: newPassword },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(await f.store.getSession(key), null);
+  const changed = (await f.store.getUsers()).find(
+    (user) => user.username === "changing",
+  );
+  assert.notEqual(changed.hash, initial.hash);
+  assert.notEqual(changed.salt, initial.salt);
+  assert.equal(
+    (
+      await f.request("/api/login", {
+        method: "POST",
+        headers: { Origin: f.origin },
+        body: { username: "changing", password: newPassword },
+      })
+    ).status,
+    200,
+  );
+});

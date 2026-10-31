@@ -96,6 +96,8 @@ test("React auth submits once while pending and renders server errors as text", 
       reject(new Error("<script>server validation</script>")),
     );
     assert.equal(state.host.querySelector("fieldset").disabled, false);
+    assert.equal(form.elements.password.value, "");
+    assert.equal(form.elements.email.value, "tester@example.com");
     assert.equal(
       state.host.querySelector("#auth-error").lastElementChild.textContent,
       "<script>server validation</script>",

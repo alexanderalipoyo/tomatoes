@@ -152,6 +152,15 @@ export function AuthPage({ route, message, delivery, onSubmit }) {
     } catch (reason) {
       if (alive.current) setError(reason.message || "Please try again.");
     } finally {
+      fields.delete("password");
+      fields.delete("confirm");
+      form
+        .querySelectorAll(
+          'input[type="password"], input[name="password"], input[name="confirm"]',
+        )
+        .forEach((input) => {
+          input.value = "";
+        });
       busy.current = false;
       if (alive.current) setPending(false);
     }

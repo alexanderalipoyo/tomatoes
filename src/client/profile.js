@@ -44,9 +44,11 @@ function renderUserProfile(host) {
       </fieldset>
       <div class="profile-form-actions"><p id="profile-feedback" role="status">${hasUnsavedProfile() ? "Unsaved changes" : state.ready ? "" : esc(state.error)}</p><button class="button" type="button" id="profile-reset">Reset</button><button class="button primary" type="submit" ${state.ready ? "" : "disabled"}>Save changes</button></div>
     </form>
+    ${authStatus?.enabled && authStatus.authenticated ? `<form class="settings-card account-password" id="change-password-form"><h2>Change password</h2><p>Use a unique password of 12-256 characters, different from your email and username. Updating it signs you out on every device.</p>${authStatus.passwordChangeRecommended ? '<p class="notice data-warning">Your current password matches your account identifier. Choose a unique password.</p>' : ""}<label for="account-current-password">Current password</label><input id="account-current-password" name="currentPassword" type="password" autocomplete="current-password" maxlength="256" required/><label for="account-new-password">New password</label><input id="account-new-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required/><label for="account-confirm-password">Confirm new password</label><input id="account-confirm-password" name="confirm" type="password" autocomplete="new-password" minlength="12" maxlength="256" required/><div class="profile-form-actions"><button class="button primary" type="submit">Update password</button></div></form>` : ""}
     <section class="settings-card account-project-access"><h2>Organization and project access</h2><p><strong>${esc(authStatus?.organization?.name || "Current organization")}</strong></p><p>Role: ${esc(state.user?.role || "Local administrator")}</p><p>Your account can access ${authStatus?.user?.projects?.includes("*") ? "all projects in this organization" : "the projects listed below"}.</p><ul>${workspaceProjects.map((project) => `<li>${esc(project.name)} <small>(${esc(project.id)})</small></li>`).join("") || "<li>No assigned projects.</li>"}</ul></section>
     ${preferenceStatusMarkup()}
   </div>`;
+  setupPasswordChange(host);
   const form = document.querySelector("#profile-form");
   const button = form.querySelector('button[type="submit"]');
   function updateState() {
@@ -113,6 +115,63 @@ function renderUserProfile(host) {
     } finally {
       draft.saving = false;
       if (view === "profile" && host.isConnected) renderUserProfile(host);
+    }
+  };
+}
+
+function setupPasswordChange(host) {
+  const form = host.querySelector("#change-password-form");
+  if (!form) return;
+  const save = form.querySelector('[type="submit"]');
+  const expectedUsername = authStatus.user.username;
+  let pending = false;
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (pending) return;
+    const fields = new FormData(form);
+    if (fields.get("password") !== fields.get("confirm")) {
+      showToast("Passwords do not match.", "error");
+      form.elements.confirm.focus();
+      return;
+    }
+    pending = true;
+    save.disabled = true;
+    form.inert = true;
+    try {
+      teamState = await teamRequest("/api/team/status");
+      if (
+        !teamState.authenticated ||
+        teamState.user?.username !== expectedUsername
+      )
+        throw new Error(
+          "Your account changed. Reload your profile before changing its password.",
+        );
+      await authRequest("/api/change-password", {
+        method: "POST",
+        body: JSON.stringify({
+          currentPassword: fields.get("currentPassword"),
+          password: fields.get("password"),
+        }),
+      });
+      teamState = null;
+      await initializeAuth();
+      await reloadUserPreferences();
+      location.hash = "login";
+      renderAuthScreen("Password updated. Sign in with your new password.");
+      showToast(
+        "Password updated. All existing sessions have ended.",
+        "success",
+      );
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      fields.delete("password");
+      fields.delete("confirm");
+      fields.delete("currentPassword");
+      form.reset();
+      pending = false;
+      save.disabled = false;
+      form.inert = false;
     }
   };
 }

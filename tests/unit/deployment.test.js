@@ -331,3 +331,30 @@ test("deployment verification explains an outdated public origin", async () => {
     ),
   );
 });
+
+test("hosted applications require HTTPS origins and declare HSTS", () => {
+  const { createApplication } = require("../../src/server/app");
+  assert.throws(
+    () =>
+      createApplication({
+        store: { kind: "postgres" },
+        env: {
+          VERCEL: "1",
+          VERCEL_ENV: "production",
+          TOMATOES_TEAM_MODE: "1",
+          TOMATOES_PUBLIC_ORIGIN: "http://reports.example.com",
+        },
+      }),
+    /HTTPS/,
+  );
+  const config = require("../../vercel.json");
+  assert.ok(
+    config.headers.some((rule) =>
+      rule.headers.some(
+        (header) =>
+          header.key === "Strict-Transport-Security" &&
+          header.value.includes("max-age="),
+      ),
+    ),
+  );
+});

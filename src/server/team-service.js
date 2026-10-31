@@ -8,17 +8,13 @@ const UserPreferences = require("../shared/user-preferences");
 const { createFileStore } = require("./storage/index");
 const { readJSON, writeJSON } = require("./storage/json-store");
 const UserManagement = require("./user-management");
+const PasswordPolicy = require("./password-policy");
 const Features = require("../shared/report-features");
 const Investigations = require("../shared/investigation-model");
 const hashToken = (value) =>
   crypto.createHash("sha256").update(value).digest("hex");
-function hashPassword(password) {
-  if (
-    typeof password !== "string" ||
-    password.length < 12 ||
-    password.length > 256
-  )
-    throw new Error("Passwords must be 12–256 characters.");
+function hashPassword(password, identity = {}) {
+  PasswordPolicy.validatePassword(password, identity);
   const salt = crypto.randomBytes(16).toString("hex");
   return { salt, hash: crypto.scryptSync(password, salt, 64).toString("hex") };
 }
@@ -54,6 +50,27 @@ function createTeamService({
   const recoveryAttempts = new Map();
   let recoveryDeliveryQueue = Promise.resolve();
   const maxRequestBytes = hosted ? 4 * 1024 * 1024 : Infinity;
+  const loginRateLimits = new Map();
+  async function consumeLoginLimit(key, limit) {
+    const digest = hashToken(key);
+    if (store.consumeAuthAttempt)
+      return store.consumeAuthAttempt(digest, limit, 15 * 60 * 1000, now());
+    for (const [id, value] of loginRateLimits)
+      if (value.expires <= now()) loginRateLimits.delete(id);
+    if (!loginRateLimits.has(digest) && loginRateLimits.size >= 1000)
+      return false;
+    const record = loginRateLimits.get(digest) || {
+      count: 0,
+      expires: now() + 15 * 60 * 1000,
+    };
+    record.count++;
+    loginRateLimits.set(digest, record);
+    return record.count <= limit;
+  }
+  const clearSessionCookie = () =>
+    "tomatoes_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" +
+    (hosted || publicOrigin.startsWith("https:") ? "; Secure" : "");
+
   const saveSession = async (key, value) =>
     store.setSession
       ? store.setSession(key, value, now())
@@ -296,6 +313,7 @@ function createTeamService({
               }
             : null,
           csrf: user?.csrf || null,
+          passwordChangeRecommended: Boolean(user?.passwordChangeRecommended),
           ciConfigured: Boolean(ciToken || tokens.length),
           slackConfigured: Boolean(slackNotifier?.enabled),
           storage: store.kind === "postgres" ? "postgres" : "local-server",
@@ -320,6 +338,16 @@ function createTeamService({
           typeof (body?.email ?? body?.username) === "string"
             ? (body.email ?? body.username).trim().toLowerCase()
             : "";
+        if (!(await consumeLoginLimit("login-ip:" + clientAddress(req), 30)))
+          throw apiError(
+            429,
+            "Too many sign-in attempts. Try again in 15 minutes.",
+          );
+        if (!(await consumeLoginLimit("login-account:" + identifier, 20)))
+          throw apiError(
+            429,
+            "Too many sign-in attempts. Try again in 15 minutes.",
+          );
         const key = clientAddress(req) + ":" + identifier;
         const persistentAttemptKey = hashToken("login:" + key);
         if (
@@ -374,6 +402,11 @@ function createTeamService({
         attempts.delete(key);
         if (store.clearAuthAttempt)
           await store.clearAuthAttempt(persistentAttemptKey);
+        if (store.clearAuthAttempt)
+          await store.clearAuthAttempt(
+            hashToken("login-account:" + identifier),
+          );
+        else loginRateLimits.delete(hashToken("login-account:" + identifier));
         const token = crypto.randomBytes(32).toString("base64url"),
           csrf = crypto.randomBytes(24).toString("base64url");
         for (const [key, value] of sessions)
@@ -382,11 +415,16 @@ function createTeamService({
           sessions.delete(sessions.keys().next().value);
         await saveSession(hashToken(token), {
           passwordHash: user.hash,
+          passwordChangeRecommended: PasswordPolicy.matchesIdentity(
+            body.password,
+            user,
+          ),
           username,
           csrf,
           expires: now() + 8 * 60 * 60 * 1000,
         });
-        const secure = publicOrigin.startsWith("https:") ? "; Secure" : "";
+        const secure =
+          hosted || publicOrigin.startsWith("https:") ? "; Secure" : "";
         send(
           res,
           200,
@@ -399,6 +437,10 @@ function createTeamService({
                 user.organizationId || UserManagement.ORGANIZATION_ID,
             },
             csrf,
+            passwordChangeRecommended: PasswordPolicy.matchesIdentity(
+              body.password,
+              user,
+            ),
           },
           {
             "Set-Cookie": `tomatoes_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${secure}`,
@@ -548,6 +590,7 @@ function createTeamService({
             400,
             "This reset link is invalid or expired. Request a new one.",
           );
+        PasswordPolicy.validatePassword(body.password, target);
         await store.manageUser(target.username, (rows) => {
           const user = rows.find((item) => item.username === target.username);
           if (
@@ -576,8 +619,7 @@ function createTeamService({
           200,
           { message: "Password updated. Sign in with your new password." },
           {
-            "Set-Cookie":
-              "tomatoes_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+            "Set-Cookie": clearSessionCookie(),
           },
         );
         return true;
@@ -591,13 +633,79 @@ function createTeamService({
           200,
           { ok: true },
           {
-            "Set-Cookie":
-              "tomatoes_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+            "Set-Cookie": clearSessionCookie(),
           },
         );
         return true;
       }
       const user = await principal(req);
+      if (url.pathname === "/api/change-password") {
+        if (req.method !== "POST")
+          throw apiError(405, "Use POST to change your password.");
+        if (user.kind !== "session")
+          throw apiError(
+            403,
+            "Sign in with your account to change its password.",
+          );
+        canWrite(req, { ...user, role: "editor" });
+        if (!(await consumeLoginLimit("password-change:" + user.username, 5)))
+          throw apiError(
+            429,
+            "Too many password-change attempts. Try again in 15 minutes.",
+          );
+        const body = await bodyJSON(req, 4096);
+        if (
+          !body ||
+          typeof body !== "object" ||
+          Array.isArray(body) ||
+          Object.keys(body).some(
+            (key) => !["currentPassword", "password"].includes(key),
+          )
+        )
+          throw apiError(
+            400,
+            "Provide your current password and a new password.",
+          );
+        const current = (await store.getUsers()).find(
+          (item) => item.username === user.username,
+        );
+        if (!verifyPassword(body.currentPassword, current))
+          throw apiError(400, "Your current password is incorrect.");
+        PasswordPolicy.validatePassword(body.password, current);
+        if (body.password === body.currentPassword)
+          throw apiError(
+            400,
+            "Choose a password different from your current password.",
+          );
+        const credentials = hashPassword(body.password, current);
+        await store.manageUser(user.username, (rows) => {
+          const latest = rows.find((item) => item.username === user.username);
+          if (
+            !latest ||
+            latest.disabled ||
+            latest.hash !== current.hash ||
+            !UserManagement.belongsToOrganization(latest, user.organizationId)
+          )
+            throw apiError(
+              409,
+              "Your account changed. Sign in again before changing its password.",
+            );
+          return {
+            ...latest,
+            ...credentials,
+            resetHash: null,
+            resetExpires: null,
+          };
+        });
+        await revokeSessions(user.username);
+        send(
+          res,
+          200,
+          { message: "Password updated. Sign in again on each device." },
+          { "Set-Cookie": clearSessionCookie() },
+        );
+        return true;
+      }
       if (url.pathname === "/api/organization") {
         if (user.kind === "token")
           throw apiError(403, "CI tokens cannot manage organizations.");
@@ -758,7 +866,9 @@ function createTeamService({
         )
           throw apiError(400, "Usernames cannot be changed.");
         const target = creating ? changes.username : username;
-        const credentials = creating ? hashPassword(body.password) : null;
+        const credentials = creating
+          ? hashPassword(body.password, changes)
+          : null;
         const availableProjects = new Set(
           (await store.listProjects(["*"], user.organizationId)).map(
             (project) => project.id,

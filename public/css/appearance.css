@@ -1871,3 +1871,15 @@ select.project-picker {
   color: var(--theme-muted, #657784);
   font-size: 12px;
 }
+
+.account-password {
+  margin-top: 20px;
+}
+.account-password > label {
+  display: block;
+  margin: 14px 0 7px;
+}
+.account-password > input {
+  width: 100%;
+  max-width: 480px;
+}

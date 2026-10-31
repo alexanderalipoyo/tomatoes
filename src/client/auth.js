@@ -5,9 +5,16 @@ function canAccessBrowserImport(entry) {
 let authStatus = null;
 let authRenderVersion = 0;
 async function authRequest(route, options) {
+  if (
+    location.protocol === "http:" &&
+    !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
+  )
+    throw new Error("Open Tomatoes over HTTPS before signing in.");
   try {
     return await teamRequest(route, {
       ...options,
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
       signal: AbortSignal.timeout(15000),
     });
   } catch (error) {
@@ -113,7 +120,7 @@ async function submitAuth(fields, route, version) {
     showToast("Password updated successfully.", "success");
     return;
   }
-  await authRequest("/api/login", {
+  const login = await authRequest("/api/login", {
     method: "POST",
     body: JSON.stringify({
       username: fields.get("email").trim(),
@@ -135,8 +142,13 @@ async function submitAuth(fields, route, version) {
   if (version !== authRenderVersion) return;
   hideAuthScreen();
   const url = new URL(location.href);
-  url.hash = authReturnHash;
+  url.hash = login.passwordChangeRecommended ? "profile" : authReturnHash;
   history.replaceState(null, "", url);
   await navigateReportLocation();
-  showToast("Signed in successfully.", "success");
+  showToast(
+    login.passwordChangeRecommended
+      ? "Your password matches your account identifier. Change it from My profile."
+      : "Signed in successfully.",
+    login.passwordChangeRecommended ? "warning" : "success",
+  );
 }

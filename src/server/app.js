@@ -31,10 +31,13 @@ function createApplication({
     : [];
   if (
     hosted &&
-    (store.kind !== "postgres" || env.TOMATOES_TEAM_MODE !== "1" || !origin)
+    (store.kind !== "postgres" ||
+      env.TOMATOES_TEAM_MODE !== "1" ||
+      !origin ||
+      new URL(origin).protocol !== "https:")
   )
     throw new Error(
-      "Hosted deployments require PostgreSQL, sign-in, and an application origin.",
+      "Hosted deployments require PostgreSQL, sign-in, and an HTTPS application origin.",
     );
   const team = createTeamService({
     store,

@@ -93,7 +93,7 @@ async function main() {
         username,
         role,
         projects,
-        ...hashPassword(password),
+        ...hashPassword(password, { username }),
       });
       console.log(
         `Created ${role} account ${username} for ${projects.join(", ")}.`,

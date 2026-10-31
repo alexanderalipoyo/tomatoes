@@ -2288,3 +2288,179 @@ test("report list pagination stays bounded, stable and scoped with archives and 
     403,
   );
 });
+
+test("self-service password changes require current credentials and CSRF and invalidate every session", async (t) => {
+  const { createFileStore } = require("../../src/server/storage/index");
+  const f = await serviceFixture(t, { teamMode: true });
+  const store = createFileStore(f.dataDir);
+  const oldPassword = "temporary-old-passphrase",
+    newPassword = "temporary-new-passphrase";
+  await store.addUser({
+    username: "member",
+    fullName: "Member",
+    email: "member@example.com",
+    role: "viewer",
+    projects: ["*"],
+    organizationId: "default",
+    ...hashPassword(oldPassword),
+  });
+  const login = async (password) =>
+    f.request("/api/login", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ username: "member@example.com", password }),
+    });
+  const first = await login(oldPassword),
+    second = await login(oldPassword);
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.match(first.headers.get("cache-control"), /no-store/);
+  assert.match(first.headers.get("set-cookie"), /HttpOnly/);
+  assert.match(first.headers.get("set-cookie"), /SameSite=Strict/);
+  assert.ok(!JSON.stringify(first.body).includes(oldPassword));
+  assert.ok(!JSON.stringify(first.body).includes('"hash"'));
+  const cookie = first.headers.get("set-cookie").split(";")[0];
+  const secondCookie = second.headers.get("set-cookie").split(";")[0];
+  const headers = {
+    Cookie: cookie,
+    Origin: f.origin,
+    "X-CSRF-Token": first.body.csrf,
+  };
+  const change = (body, override = headers) =>
+    f.request("/api/change-password", {
+      method: "POST",
+      headers: override,
+      body: JSON.stringify(body),
+    });
+  assert.equal(
+    (
+      await change(
+        { currentPassword: oldPassword, password: newPassword },
+        { Cookie: cookie, Origin: f.origin },
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await change({
+        currentPassword: "incorrect-password",
+        password: newPassword,
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await f.request("/api/team/status", { headers: { Cookie: cookie } })).body
+      .authenticated,
+    true,
+  );
+  assert.equal(
+    (
+      await change({
+        currentPassword: oldPassword,
+        password: "member@example.com",
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await change({ currentPassword: oldPassword, password: oldPassword }))
+      .status,
+    400,
+  );
+  const updated = await change({
+    currentPassword: oldPassword,
+    password: newPassword,
+  });
+  assert.equal(updated.status, 200);
+  assert.match(updated.headers.get("set-cookie"), /Max-Age=0/);
+  for (const session of [cookie, secondCookie])
+    assert.equal(
+      (await f.request("/api/team/status", { headers: { Cookie: session } }))
+        .body.authenticated,
+      false,
+    );
+  assert.equal((await login(oldPassword)).status, 401);
+  assert.equal((await login(newPassword)).status, 200);
+  const stored = JSON.stringify(await store.getUsers());
+  assert.ok(!stored.includes(oldPassword));
+  assert.ok(!stored.includes(newPassword));
+});
+
+test("rotating login identifiers cannot bypass the per-IP attempt limit", async (t) => {
+  const f = await serviceFixture(t, { teamMode: true });
+  for (let i = 0; i < 30; i++)
+    assert.equal(
+      (
+        await f.request("/api/login", {
+          method: "POST",
+          headers: { Origin: f.origin },
+          body: JSON.stringify({ username: "missing-" + i, password: "" }),
+        })
+      ).status,
+      401,
+    );
+  assert.equal(
+    (
+      await f.request("/api/login", {
+        method: "POST",
+        headers: { Origin: f.origin },
+        body: JSON.stringify({ username: "another-account", password: "" }),
+      })
+    ).status,
+    429,
+  );
+});
+
+test("legacy email-as-password accounts can sign in and are prompted to rotate their password", async (t) => {
+  const { createFileStore } = require("../../src/server/storage/index");
+  const f = await serviceFixture(t, { teamMode: true });
+  const store = createFileStore(f.dataDir);
+  const email = "legacy-sample@example.com";
+  await store.addUser({
+    username: "legacy",
+    email,
+    role: "viewer",
+    projects: ["*"],
+    ...hashPassword(email),
+  });
+  const login = await f.request("/api/login", {
+    method: "POST",
+    headers: { Origin: f.origin },
+    body: JSON.stringify({ username: email, password: email }),
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.body.passwordChangeRecommended, true);
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  assert.equal(
+    (await f.request("/api/team/status", { headers: { Cookie: cookie } })).body
+      .passwordChangeRecommended,
+    true,
+  );
+});
+
+test("distributed login attempts are limited by account identifier as well as address", async (t) => {
+  const f = await serviceFixture(t, { teamMode: true, hosted: true });
+  for (let index = 0; index < 20; index++)
+    assert.equal(
+      (
+        await f.request("/api/login", {
+          method: "POST",
+          headers: { Origin: f.origin, "x-real-ip": "192.0.2." + index },
+          body: JSON.stringify({ username: "missing-account", password: "" }),
+        })
+      ).status,
+      401,
+    );
+  assert.equal(
+    (
+      await f.request("/api/login", {
+        method: "POST",
+        headers: { Origin: f.origin, "x-real-ip": "192.0.2.100" },
+        body: JSON.stringify({ username: "missing-account", password: "" }),
+      })
+    ).status,
+    429,
+  );
+});
