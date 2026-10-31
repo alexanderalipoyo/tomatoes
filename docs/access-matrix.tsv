@@ -125,9 +125,9 @@ Import report modal	Create a new branch	1	1	0
 Import report modal	Restore a valid remembered branch default	1	1	0
 Import report modal	Validate report format	1	1	0
 Import report modal	Display blocking import progress	1	1	0
-Organization / project navigation	Display dynamic organization identity	1	0	0
-Organization / project navigation	Display organization logo	1	0	0
-Organization / project navigation	Display current user name	1	0	0
+Organization / project navigation	Display dynamic organization identity	1	1	1
+Organization / project navigation	Display organization logo	1	1	1
+Organization / project navigation	Display current user name	1	1	1
 Organization / project navigation	Select permitted projects	1	0	0
 Organization / project navigation	Use responsive mobile navigation	1	0	0
 PDF export dialog	Choose summary or detailed format	1	1	1

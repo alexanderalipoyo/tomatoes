@@ -142,5 +142,15 @@ test("Justine sees organization identity independently of permitted project sele
     dom.window.document.querySelector("[data-workspace-name]").textContent,
     "No assigned project",
   );
+  context.userPreferences.getState = () => ({
+    user: null,
+    preferences: { profile: {} },
+  });
+  context.authStatus.user.fullName = "Justine Lopez";
+  context.renderWorkspaceIdentity();
+  assert.equal(
+    dom.window.document.querySelector("[data-workspace-user]").textContent,
+    "Justine Lopez",
+  );
   dom.window.close();
 });

@@ -72,3 +72,25 @@ test("policy edits require a complete boolean matrix and protect account adminis
   );
   assert.equal(Policy.can({}, "missing"), false);
 });
+
+test("own organization and user identity remain enabled despite old saved denials", () => {
+  const ids = [
+    "organization-project-navigation.display-dynamic-organization-identity",
+    "organization-project-navigation.display-organization-logo",
+    "organization-project-navigation.display-current-user-name",
+  ];
+  for (const role of ["viewer", "editor"]) {
+    const permissions = Policy.resolve(
+      { [role]: Object.fromEntries(ids.map((id) => [id, false])) },
+      role,
+    );
+    for (const id of ids) {
+      assert.equal(permissions[id], true);
+      assert.equal(
+        Policy.features.find((feature) => feature.id === id).locked,
+        true,
+      );
+    }
+    assert.equal(permissions["users.edit-users"], false);
+  }
+});

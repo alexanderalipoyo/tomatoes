@@ -953,6 +953,17 @@
       locked: false,
     },
   ];
+  // Members always see their own organization and account identity. Stored legacy
+  // false values must not hide this context or make the account menu anonymous.
+  for (const feature of features)
+    if (
+      /^organization-project-navigation\.(display-dynamic-organization-identity|display-organization-logo|display-current-user-name)$/.test(
+        feature.id,
+      )
+    ) {
+      feature.defaults = { admin: true, editor: true, viewer: true };
+      feature.locked = true;
+    }
   // Organization administration stays restricted to organization admins. Other feature
   // switches may narrow a role without elevating its tenant or account authority.
   for (const feature of features)

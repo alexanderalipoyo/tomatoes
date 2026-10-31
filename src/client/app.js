@@ -179,8 +179,10 @@ function renderWorkspaceIdentity() {
   const profile = userPreferences.getState().preferences.profile;
   const fullName =
     [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
+    authStatus?.user?.fullName ||
     user?.fullName ||
     user?.displayName ||
+    authStatus?.user?.username ||
     "Alex Ali";
   document.querySelectorAll("[data-workspace-name]").forEach((element) => {
     element.textContent = workspaceName;

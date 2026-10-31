@@ -186,3 +186,33 @@ test("returning to a signed-in tab refreshes permissions and assigned projects w
   await context.refreshSessionAccess();
   assert.equal(requests, 2, "focus and visibility events share a cooldown");
 });
+
+for (const role of ["viewer", "editor"]) {
+  test(`${role} always sees own organization and full name even with legacy false permissions`, (t) => {
+    const { dom, context } = fixture(t, role);
+    const doc = dom.window.document;
+    doc.querySelector("main").innerHTML =
+      '<button data-workspace-trigger><span data-organization-initials>CO</span><span data-organization-name>Current organization</span><small data-workspace-user>Justine Lopez</small></button><div class="workspace-menu-organizations"><strong data-organization-name>Current organization</strong></div><div>Signed in as <span data-workspace-user>Justine Lopez</span></div>';
+    // Reproduce a response from an older deployment or saved role policy.
+    for (const id of Object.keys(context.authStatus.permissions))
+      if (id.startsWith("organization-project-navigation."))
+        context.authStatus.permissions[id] = false;
+    context.applyFeatureAccess();
+    for (const element of doc.querySelectorAll(
+      "[data-organization-name], [data-organization-initials], [data-workspace-user], .workspace-menu-organizations",
+    ))
+      assert.equal(element.classList.contains("access-restricted"), false);
+    assert.equal(
+      doc.body.classList.contains("limited-workspace-identity"),
+      false,
+    );
+    assert.equal(
+      context.hasAccess(
+        "organization-project-navigation.select-permitted-projects",
+      ),
+      false,
+    );
+    assert.equal(context.canAccessView("role-access"), false);
+    assert.equal(context.hasAccess("users.edit-users"), false);
+  });
+}

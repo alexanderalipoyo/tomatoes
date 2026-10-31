@@ -2,13 +2,9 @@
 function accessPermissions() {
   if (typeof authStatus === "undefined" || !authStatus || authRequiresLogin())
     return {};
-  return (
-    authStatus.permissions ||
-    AccessPolicy.resolve(
-      {},
-      authStatus.enabled ? authStatus.user?.role : "admin",
-    )
-  );
+  const role = authStatus.enabled ? authStatus.user?.role || "viewer" : "admin";
+  // Normalize even older server snapshots so mandatory identity stays visible.
+  return AccessPolicy.resolve({ [role]: authStatus.permissions || {} }, role);
 }
 function hasAccess(id) {
   return AccessPolicy.can(accessPermissions(), id);
