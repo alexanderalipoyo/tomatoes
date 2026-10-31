@@ -352,6 +352,7 @@ function UserDialog({
     busy = useRef(false),
     [pending, setPending] = useState(false),
     [error, setError] = useState("");
+  const [existingAccount, setExistingAccount] = useState(false);
   const self = user?.username === data.currentUsername,
     title =
       kind === "status"
@@ -381,7 +382,7 @@ function UserDialog({
       body = {
         username: fields.get("username"),
         fullName: fields.get("fullName"),
-        email: fields.get("email").trim(),
+        email: fields.get("email")?.trim() || "",
         role: self ? user.role : fields.get("role"),
         organizationId: data.organization.id,
         projects: self ? user.projects : fields.getAll("projects"),
@@ -395,6 +396,14 @@ function UserDialog({
       if (user) {
         route += "/" + encodeURIComponent(user.username);
         method = "PUT";
+      }
+      if (!user && existingAccount) {
+        route = "/api/organization/members";
+        body = {
+          username: body.username,
+          role: body.role,
+          projects: body.projects,
+        };
       }
     }
     busy.current = true;
@@ -413,7 +422,9 @@ function UserDialog({
             : "User deactivated."
           : user
             ? "User updated."
-            : "User created. No invitation email was sent.",
+            : existingAccount
+              ? "User added to this organization."
+              : "User created. No invitation email was sent.",
         "success",
       );
       onSaved();
@@ -465,26 +476,45 @@ function UserDialog({
           </>
         ) : (
           <>
-            <label>
-              Full name
-              <input
-                name="fullName"
-                defaultValue={user?.fullName || ""}
-                maxLength="160"
-                required
-                autoComplete="name"
-              />
-            </label>
-            <label>
-              Email <small>Optional; no invitation email is sent.</small>
-              <input
-                name="email"
-                type="email"
-                defaultValue={user?.email || ""}
-                maxLength="254"
-                autoComplete="off"
-              />
-            </label>
+            {!user && (
+              <label>
+                Account type
+                <select
+                  value={existingAccount ? "existing" : "new"}
+                  onChange={(event) =>
+                    setExistingAccount(event.target.value === "existing")
+                  }
+                >
+                  <option value="new">Create a new account</option>
+                  <option value="existing">Add an existing account</option>
+                </select>
+              </label>
+            )}
+            {!existingAccount && (
+              <>
+                {" "}
+                <label>
+                  Full name
+                  <input
+                    name="fullName"
+                    defaultValue={user?.fullName || ""}
+                    maxLength="160"
+                    required
+                    autoComplete="name"
+                  />
+                </label>
+                <label>
+                  Email <small>Optional; no invitation email is sent.</small>
+                  <input
+                    name="email"
+                    type="email"
+                    defaultValue={user?.email || ""}
+                    maxLength="254"
+                    autoComplete="off"
+                  />
+                </label>
+              </>
+            )}
             <label>
               Username
               <input
@@ -497,7 +527,7 @@ function UserDialog({
                 autoComplete="off"
               />
             </label>
-            {!user && (
+            {!user && !existingAccount && (
               <label>
                 Initial password{" "}
                 <small>12-256 characters. Share securely with the user.</small>

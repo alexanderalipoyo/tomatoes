@@ -55,6 +55,15 @@ async function initializeAuth() {
     workspaceProjects = authStatus.accessibleProjects;
   if (typeof invalidateOutOfScopeReports === "function")
     invalidateOutOfScopeReports();
+  if (
+    authStatus?.authenticated &&
+    authStatus.preferenceProfileId &&
+    typeof userPreferences !== "undefined" &&
+    userPreferences.getState().ready &&
+    userPreferences.getState().profileId !== authStatus.preferenceProfileId &&
+    typeof reloadUserPreferences === "function"
+  )
+    await reloadUserPreferences();
   if (typeof applyFeatureAccess === "function") applyFeatureAccess();
   if (typeof renderWorkspaceIdentity === "function") renderWorkspaceIdentity();
   syncLogoutControl();

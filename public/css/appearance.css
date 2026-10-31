@@ -2050,3 +2050,53 @@ select.project-picker {
     min-height: 0;
   }
 }
+
+.workspace-menu-action-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+}
+.workspace-menu-action-icon svg {
+  width: 18px;
+  height: 18px;
+}
+#workspace-menu .workspace-menu-add-organization {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-weight: 400;
+}
+.workspace-menu-add-organization > span:last-child {
+  flex: 1;
+}
+.workspace-menu-add-organization small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+#workspace-menu-other-organizations .workspace-menu-organization {
+  margin-block: 6px;
+}
+#workspace-menu-other-organizations .workspace-menu-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+}
+#workspace-menu-other-organizations .workspace-menu-organization strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#workspace-menu-other-organizations .workspace-menu-organization {
+  background: transparent;
+}
+#workspace-menu-other-organizations .workspace-menu-organization:hover {
+  background: var(--theme-accent-surface, #e8f4ee);
+}

@@ -2717,3 +2717,204 @@ test("organization access policies enforce the supplied matrix and refresh live 
   );
   assert.equal((await f.request("/api/runs", { headers: viewer })).status, 403);
 });
+
+test("admin-only organization creation preserves memberships and isolates switching, projects, policies and preferences", async (t) => {
+  const f = await serviceFixture(t, { teamMode: true });
+  const password = "test-organizations-password-123";
+  await writeJSON(
+    path.join(f.dataDir, "users.json"),
+    [
+      { username: "owner", role: "admin", projects: ["*"] },
+      { username: "editor", role: "editor", projects: ["web"] },
+      { username: "viewer", role: "viewer", projects: ["web"] },
+      { username: "scoped", role: "admin", projects: ["web"] },
+    ].map((user) => ({
+      ...user,
+      fullName: user.username,
+      email: "",
+      ...hashPassword(password),
+    })),
+  );
+  const login = async (username) => {
+    const r = await f.request("/api/login", {
+      method: "POST",
+      headers: { Origin: f.origin },
+      body: JSON.stringify({ username, password }),
+    });
+    return {
+      Origin: f.origin,
+      Cookie: r.headers.get("set-cookie").split(";")[0],
+      "X-CSRF-Token": r.body.csrf,
+    };
+  };
+  const owner = await login("owner"),
+    editor = await login("editor"),
+    viewer = await login("viewer"),
+    scoped = await login("scoped");
+  const create = (headers, name = "Organization Two") =>
+    f.request("/api/organizations", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name }),
+    });
+  const switchTo = (headers, id) =>
+    f.request(`/api/organizations/${id}/switch`, {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+  for (const headers of [editor, viewer, scoped]) {
+    assert.equal((await create(headers)).status, 403);
+    assert.equal(
+      (await f.request("/api/team/status", { headers })).body
+        .canCreateOrganization,
+      false,
+    );
+  }
+  assert.equal(
+    (await create({ ...owner, "X-CSRF-Token": "wrong" })).status,
+    403,
+  );
+  assert.equal((await create(owner, "")).status, 400);
+  const created = await create(owner);
+  assert.equal(created.status, 201);
+  const id = created.body.organization.id;
+  assert.notEqual(id, "default");
+  let status = (await f.request("/api/team/status", { headers: owner })).body;
+  assert.equal(status.organization.id, "default");
+  assert.deepEqual(
+    new Set(status.organizations.map((org) => org.id)),
+    new Set(["default", id]),
+  );
+  await f.request("/api/preferences", {
+    method: "PUT",
+    headers: owner,
+    body: JSON.stringify({ appearance: { colorMode: "dark" } }),
+  });
+  assert.equal((await switchTo(viewer, id)).status, 403);
+  assert.equal((await switchTo(owner, "missing")).status, 403);
+  assert.equal(
+    (await switchTo({ ...owner, "X-CSRF-Token": "wrong" }, id)).status,
+    403,
+  );
+  assert.equal((await switchTo(owner, id)).status, 200);
+  status = (await f.request("/api/team/status", { headers: owner })).body;
+  assert.equal(status.organization.id, id);
+  assert.equal(status.user.organizationId, id);
+  assert.equal(status.user.role, "admin");
+  assert.equal(
+    (
+      await f.request("/api/organizations", {
+        method: "POST",
+        headers: { ...owner, "X-Tomatoes-Organization": "default" },
+        body: JSON.stringify({ name: "Wrong tab" }),
+      })
+    ).status,
+    409,
+  );
+  assert.equal(status.canCreateOrganization, true);
+  assert.equal(status.preferenceProfileId, `user:owner:org:${id}`);
+  assert.deepEqual(status.accessibleProjects, []);
+  assert.equal(
+    (await f.request("/api/preferences", { headers: owner })).body.preferences,
+    null,
+  );
+  const project = await f.request("/api/projects", {
+    method: "POST",
+    headers: owner,
+    body: JSON.stringify({ name: "New Org Project" }),
+  });
+  assert.equal(project.status, 201);
+  assert.equal(project.body.project.organizationId, id);
+  assert.deepEqual(
+    (await f.request("/api/projects", { headers: viewer })).body.projects.some(
+      (row) => row.id === project.body.project.id,
+    ),
+    false,
+  );
+  const users = (await f.request("/api/users", { headers: owner })).body.users;
+  assert.deepEqual(
+    users.map((row) => row.username),
+    ["owner"],
+  );
+  assert.equal(
+    (
+      await f.request("/api/users/owner", {
+        method: "PUT",
+        headers: owner,
+        body: JSON.stringify({ ...users[0], email: "changed@example.com" }),
+      })
+    ).status,
+    403,
+  );
+  assert.equal((await switchTo(owner, "default")).status, 200);
+  assert.equal(
+    (await f.request("/api/preferences", { headers: owner })).body.preferences
+      .appearance.colorMode,
+    "dark",
+  );
+  assert.equal(
+    (await f.request("/api/team/status", { headers: owner })).body
+      .preferenceProfileId,
+    "user:owner",
+  );
+  // Add an existing account without changing its credentials or home membership.
+  await switchTo(owner, id);
+  const addMember = (headers, username = "viewer") =>
+    f.request("/api/organization/members", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        username,
+        role: "viewer",
+        projects: [project.body.project.id],
+      }),
+    });
+  assert.equal((await addMember(viewer)).status, 403);
+  assert.equal(
+    (await addMember({ ...owner, "X-CSRF-Token": "wrong" })).status,
+    403,
+  );
+  assert.equal((await addMember(owner)).status, 201);
+  assert.equal((await addMember(owner)).status, 409);
+  assert.equal((await addMember(owner, "editor")).status, 201);
+  const otherMember = (
+    await f.request("/api/users", { headers: owner })
+  ).body.users.find((row) => row.username === "editor");
+  assert.equal(otherMember.role, "viewer");
+  const changedMember = await f.request("/api/users/editor", {
+    method: "PUT",
+    headers: owner,
+    body: JSON.stringify({ ...otherMember, role: "editor" }),
+  });
+  assert.equal(changedMember.status, 200);
+  assert.equal(changedMember.body.user.role, "editor");
+  assert.equal(
+    (await f.request("/api/users/editor", { method: "DELETE", headers: owner }))
+      .status,
+    200,
+  );
+  // The editor's original organization membership is still active.
+  assert.equal(
+    (await f.request("/api/team/status", { headers: editor })).body.user.role,
+    "editor",
+  );
+  assert.equal((await switchTo(editor, id)).status, 403);
+  await switchTo(owner, "default");
+  const file = path.join(f.dataDir, "users.json");
+  const rows = JSON.parse(await fs.readFile(file, "utf8"));
+  assert.equal((await switchTo(viewer, id)).status, 200);
+  status = (await f.request("/api/team/status", { headers: viewer })).body;
+  assert.equal(status.user.role, "viewer");
+  assert.equal(status.canCreateOrganization, false);
+  assert.deepEqual(
+    status.accessibleProjects.map((row) => row.id),
+    [project.body.project.id],
+  );
+  assert.equal((await create(viewer)).status, 403);
+  assert.equal((await switchTo(viewer, "default")).status, 200);
+  // Membership revocation takes effect on the next request.
+  rows.find((row) => row.username === "viewer").memberships[0].disabled = true;
+  await writeJSON(file, rows);
+  assert.equal((await switchTo(viewer, id)).status, 403);
+});

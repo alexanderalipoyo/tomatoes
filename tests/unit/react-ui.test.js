@@ -1047,3 +1047,103 @@ test("custom dashboard honors saved metrics and does not offer unauthorized setu
   assert.match(unavailable, /Preferences unavailable/);
   assert.match(unavailable, /inert/);
 });
+
+test("organization settings and adding an organization are separate menu actions", () => {
+  const { WorkspaceMenu } = loadComponent("components/WorkspaceMenu.jsx");
+  const host = document.createElement("div");
+  host.innerHTML = renderToStaticMarkup(React.createElement(WorkspaceMenu));
+  const settings = host.querySelector("[data-workspace-menu-link]");
+  const add = host.querySelector("#workspace-menu-add-organization");
+  assert.match(settings.textContent, /Organization settings/);
+  assert.ok(settings.querySelector("svg"));
+  assert.equal(settings.querySelector(".workspace-menu-plus"), null);
+  assert.match(add.textContent, /Add organization/);
+  assert.equal(add.tagName, "BUTTON");
+  assert.equal(add.disabled, false);
+  assert.equal(add.hasAttribute("data-organization-create"), true);
+  assert.doesNotMatch(add.textContent, /Coming soon/);
+  assert.notEqual(settings, add);
+});
+
+test("Add organization form prevents duplicate creation and opens the created organization separately", async () => {
+  const { OrganizationCreateForm } = loadComponent(
+    "components/Organizations.jsx",
+  );
+  let resolveCreate,
+    calls = 0,
+    switched;
+  const state = await mount(
+    React.createElement(OrganizationCreateForm, {
+      onCreate: async (name) => {
+        calls++;
+        assert.equal(name, "New workspace");
+        return new Promise((resolve) => {
+          resolveCreate = resolve;
+        });
+      },
+      onSwitch: async (id) => {
+        switched = id;
+      },
+      onToast: () => {},
+    }),
+  );
+  try {
+    const input = state.host.querySelector("input");
+    const setter = Object.getOwnPropertyDescriptor(
+      dom.window.HTMLInputElement.prototype,
+      "value",
+    ).set;
+    await act(async () => {
+      setter.call(input, "New workspace");
+      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+    const form = state.host.querySelector("form");
+    await act(async () => {
+      form.dispatchEvent(
+        new dom.window.Event("submit", { bubbles: true, cancelable: true }),
+      );
+      form.dispatchEvent(
+        new dom.window.Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+    assert.equal(calls, 1);
+    assert.equal(state.host.querySelector("fieldset").disabled, true);
+    await act(async () =>
+      resolveCreate({ id: "second", name: "New workspace" }),
+    );
+    assert.equal(state.host.querySelector("form"), null);
+    assert.match(
+      state.host.textContent,
+      /existing organization and projects remain/,
+    );
+    await act(async () => state.host.querySelector("button").click());
+    assert.equal(switched, "second");
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("organization list shows only additional memberships and switches the chosen identity", async () => {
+  const { OrganizationList } = loadComponent("components/Organizations.jsx");
+  let selected;
+  const state = await mount(
+    React.createElement(OrganizationList, {
+      organizations: [
+        { id: "first", name: "Current" },
+        { id: "second", name: "Second" },
+      ],
+      currentId: "first",
+      onSwitch: async (id) => {
+        selected = id;
+      },
+    }),
+  );
+  try {
+    assert.equal(state.host.querySelectorAll("button").length, 1);
+    assert.match(state.host.textContent, /Second/);
+    await act(async () => state.host.querySelector("button").click());
+    assert.equal(selected, "second");
+  } finally {
+    await state.cleanup();
+  }
+});

@@ -1,3 +1,7 @@
+import {
+  OrganizationList,
+  OrganizationCreateForm,
+} from "./components/Organizations";
 import { ViewBoundary } from "./components/ViewBoundary";
 import {
   HistoryTools,
@@ -65,6 +69,12 @@ function render(selector, component) {
 let projectEditorKey = 0;
 const pageRoots = new Map();
 export const applicationBridge = {
+  renderOrganizations(host, props) {
+    render(host, <OrganizationList {...props} />);
+  },
+  renderOrganizationCreate(host, props) {
+    this.renderPage(host, <OrganizationCreateForm {...props} />);
+  },
   clearPage() {
     for (const root of [...pageRoots.values()].reverse()) root.unmount();
     pageRoots.clear();

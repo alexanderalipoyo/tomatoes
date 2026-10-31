@@ -8,10 +8,12 @@ function readCustomWidgets() {
         ? "user:" + authStatus.user.username
         : null
       : "local";
-  const ready = state.ready && owner !== null && state.profileId === owner;
+  const profileOwner = authStatus?.preferenceProfileId || owner;
+  const ready =
+    state.ready && owner !== null && state.profileId === profileOwner;
   return {
     groups: ready ? state.preferences.dashboardGroups : [],
-    profileId: ready ? owner : "unavailable",
+    profileId: ready ? profileOwner : "unavailable",
     ready,
     error: ready
       ? ""

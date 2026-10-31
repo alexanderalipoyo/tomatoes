@@ -46,7 +46,7 @@ function createPostgresStore({
     );
   const insertUser = (client, user, skip = false) =>
     client.query(
-      `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,organization_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ${skip ? "ON CONFLICT(username) DO NOTHING" : ""}`,
+      `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,organization_id,memberships) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) ${skip ? "ON CONFLICT(username) DO NOTHING" : ""}`,
       [
         user.username,
         user.role,
@@ -57,6 +57,7 @@ function createPostgresStore({
         user.email || "",
         Boolean(user.disabled),
         user.organizationId || UserManagement.ORGANIZATION_ID,
+        JSON.stringify(user.memberships || []),
       ],
     );
   const insertToken = (client, token, skip = false) =>
@@ -104,6 +105,33 @@ function createPostgresStore({
         ? `INSERT INTO ${ns}.organizations(id,name,created_at,updated_at,logo) VALUES($1,$2,$3,$3,COALESCE($4,'')) RETURNING id,name,logo`
         : `UPDATE ${ns}.organizations SET name=COALESCE($2,name),updated_at=$3,logo=COALESCE($4,logo) WHERE id=$1 RETURNING id,name,logo`;
       return (await pool.query(sql, [id, name, clock, logo])).rows[0] || null;
+    },
+    async createOrganizationForUser(username, id, name, currentOrganizationId) {
+      return transaction(async (client) => {
+        const user = (
+          await client.query(
+            `SELECT username,role,projects,disabled,full_name AS "fullName",email,organization_id AS "organizationId",memberships FROM ${ns}.users WHERE username=$1 FOR UPDATE`,
+            [username],
+          )
+        ).rows[0];
+        const next = UserManagement.addOrganizationMembership(
+          user,
+          id,
+          currentOrganizationId,
+        );
+        const clock = Date.now();
+        const organization = (
+          await client.query(
+            `INSERT INTO ${ns}.organizations(id,name,created_at,updated_at) VALUES($1,$2,$3,$3) RETURNING id,name,logo,created_at AS "createdAt"`,
+            [id, name, clock],
+          )
+        ).rows[0];
+        await client.query(
+          `UPDATE ${ns}.users SET memberships=$2::jsonb WHERE username=$1`,
+          [username, JSON.stringify(next.memberships)],
+        );
+        return organization;
+      });
     },
     async saveRolePermissions(id, permissions, revision) {
       return (
@@ -168,7 +196,7 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=10`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=11`,
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {
@@ -211,7 +239,7 @@ function createPostgresStore({
     async getUsers() {
       return (
         await pool.query(
-          `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires" FROM ${ns}.users`,
+          `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires",memberships FROM ${ns}.users`,
         )
       ).rows;
     },
@@ -222,12 +250,12 @@ function createPostgresStore({
         );
         const users = (
           await client.query(
-            `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires" FROM ${ns}.users`,
+            `SELECT username,role,projects,salt,password_hash AS hash,full_name AS "fullName",email,disabled,organization_id AS "organizationId",reset_hash AS "resetHash",reset_expires AS "resetExpires",memberships FROM ${ns}.users`,
           )
         ).rows;
         const next = mutate(users);
         await client.query(
-          `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,reset_hash,reset_expires,organization_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(username) DO UPDATE SET role=EXCLUDED.role,projects=EXCLUDED.projects,full_name=EXCLUDED.full_name,email=EXCLUDED.email,disabled=EXCLUDED.disabled,salt=EXCLUDED.salt,password_hash=EXCLUDED.password_hash,reset_hash=EXCLUDED.reset_hash,reset_expires=EXCLUDED.reset_expires,organization_id=EXCLUDED.organization_id`,
+          `INSERT INTO ${ns}.users(username,role,projects,salt,password_hash,full_name,email,disabled,reset_hash,reset_expires,organization_id,memberships) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) ON CONFLICT(username) DO UPDATE SET role=EXCLUDED.role,projects=EXCLUDED.projects,full_name=EXCLUDED.full_name,email=EXCLUDED.email,disabled=EXCLUDED.disabled,salt=EXCLUDED.salt,password_hash=EXCLUDED.password_hash,reset_hash=EXCLUDED.reset_hash,reset_expires=EXCLUDED.reset_expires,organization_id=EXCLUDED.organization_id,memberships=EXCLUDED.memberships`,
           [
             username,
             next.role,
@@ -240,6 +268,7 @@ function createPostgresStore({
             next.resetHash || null,
             next.resetExpires || null,
             next.organizationId || UserManagement.ORGANIZATION_ID,
+            JSON.stringify(next.memberships || []),
           ],
         );
         return next;
@@ -379,6 +408,16 @@ function createPostgresStore({
     },
     async deleteSession(key) {
       await pool.query(`DELETE FROM ${ns}.auth_sessions WHERE key=$1`, [key]);
+    },
+    async revokeMembershipSessions(
+      username,
+      organizationId,
+      homeOrganizationId,
+    ) {
+      await pool.query(
+        `DELETE FROM ${ns}.auth_sessions WHERE username=$1 AND COALESCE(record->>'organizationId',$3)=$2`,
+        [username, organizationId, homeOrganizationId],
+      );
     },
     async revokeSessions(username) {
       await pool.query(`DELETE FROM ${ns}.auth_sessions WHERE username=$1`, [

@@ -157,7 +157,7 @@ test("real PostgreSQL stores original JSON and notes, enforces project filters, 
         `SELECT count(*)::int AS count FROM ${schemaName(schema)}.schema_migrations`,
       )
     ).rows[0].count,
-    10,
+    11,
   );
 });
 test("real PostgreSQL APIs enforce token scopes and preserve report text and attachment bytes", async (t) => {
@@ -1039,5 +1039,121 @@ test("real PostgreSQL role policies persist per organization and reject stale co
   assert.equal(
     await store.saveRolePermissions("missing", permissions, 0),
     null,
+  );
+});
+
+test("PostgreSQL persists admin-created organization memberships without replacing the original organization", async (t) => {
+  const api = await fixture(t, { teamMode: true });
+  const password = "postgres-membership-test-123";
+  await api.store.addUser({
+    username: "owner",
+    fullName: "Owner",
+    email: "",
+    role: "admin",
+    projects: ["*"],
+    ...hashPassword(password),
+  });
+  await api.store.addUser({
+    username: "viewer",
+    fullName: "Viewer",
+    email: "",
+    role: "viewer",
+    projects: ["web"],
+    ...hashPassword(password),
+  });
+  const login = async (username) => {
+    const result = await api.request("/api/login", {
+      method: "POST",
+      headers: { Origin: api.origin },
+      body: { username, password },
+    });
+    return {
+      Origin: api.origin,
+      Cookie: result.headers.get("set-cookie").split(";")[0],
+      "X-CSRF-Token": result.body.csrf,
+    };
+  };
+  const owner = await login("owner"),
+    viewer = await login("viewer");
+  assert.equal(
+    (
+      await api.request("/api/organizations", {
+        method: "POST",
+        headers: viewer,
+        body: { name: "No" },
+      })
+    ).status,
+    403,
+  );
+  const created = await api.request("/api/organizations", {
+    method: "POST",
+    headers: owner,
+    body: { name: "Second organization" },
+  });
+  assert.equal(created.status, 201);
+  const id = created.body.organization.id;
+  assert.equal(
+    (await api.store.getUsers()).find((row) => row.username === "owner")
+      .organizationId,
+    "default",
+  );
+  assert.equal(
+    (
+      await api.request(`/api/organizations/${id}/switch`, {
+        method: "POST",
+        headers: owner,
+        body: {},
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await api.request("/api/team/status", { headers: owner })).body
+      .organization.id,
+    id,
+  );
+  assert.equal(
+    (await api.request("/api/role-access", { headers: owner })).status,
+    200,
+  );
+  assert.equal(
+    (
+      await api.request("/api/organization/members", {
+        method: "POST",
+        headers: owner,
+        body: { username: "viewer", role: "viewer", projects: ["*"] },
+      })
+    ).status,
+    201,
+  );
+  assert.equal(
+    (
+      await api.request(`/api/organizations/${id}/switch`, {
+        method: "POST",
+        headers: viewer,
+        body: {},
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await api.request("/api/team/status", { headers: viewer })).body
+      .canCreateOrganization,
+    false,
+  );
+  assert.equal(
+    (
+      await api.request("/api/organizations/default/switch", {
+        method: "POST",
+        headers: owner,
+        body: {},
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await api.request("/api/team/status", { headers: owner })).body
+      .organizations.length,
+    2,
   );
 });

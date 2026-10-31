@@ -1,3 +1,32 @@
+let organizationSwitchPending = false;
+async function switchWorkspaceOrganization(id) {
+  if (organizationSwitchPending || loading) return;
+  if (
+    (hasUnsavedAppearance() ||
+      hasUnsavedProfile() ||
+      hasUnsavedWorkspace() ||
+      hasUnsavedOrganization()) &&
+    !confirm("Discard unsaved changes and switch organizations?")
+  )
+    return;
+  organizationSwitchPending = true;
+  try {
+    teamState = await teamRequest("/api/team/status", { cache: "no-store" });
+    await teamRequest(
+      "/api/organizations/" + encodeURIComponent(id) + "/switch",
+      { method: "POST", body: "{}" },
+    );
+    appearanceDraft = null;
+    userProfileDraft = null;
+    workspaceDraft = null;
+    organizationDraft = null;
+    history.replaceState(null, "", location.pathname + "#projects");
+    location.reload();
+  } catch (error) {
+    organizationSwitchPending = false;
+    showToast(error.message, "error");
+  }
+}
 /* Floating workspace switcher; account mutations still use the authenticated API. */
 (function () {
   const menu = document.querySelector("#workspace-menu");
@@ -22,7 +51,7 @@
       );
     const rect = anchor.getBoundingClientRect();
     const width = Math.min(304, document.documentElement.clientWidth - 16);
-    const height = Math.min(450, innerHeight - 16);
+    const height = Math.min(menu.scrollHeight || 450, innerHeight - 16);
     menu.style.left =
       Math.max(
         8,
@@ -44,6 +73,33 @@
   window.addEventListener("hashchange", close);
   document.querySelector("#workspace-menu-current").onclick = close;
   document.querySelector("#workspace-menu-projects").onclick = close;
+  document.querySelector("#workspace-menu-add-organization").onclick = () => {
+    if (!authStatus?.canCreateOrganization) return;
+    close();
+    globalThis.TomatoesReact.renderOrganizationCreate(
+      document.querySelector("#detail-content"),
+      {
+        onCreate: async (name) => {
+          teamState = await teamRequest("/api/team/status", {
+            cache: "no-store",
+          });
+          const result = await teamRequest("/api/organizations", {
+            method: "POST",
+            body: JSON.stringify({ name }),
+          });
+          try {
+            await initializeAuth();
+          } catch {
+            /* Creation succeeded; opening the organization retries authorization. */
+          }
+          return result.organization;
+        },
+        onSwitch: switchWorkspaceOrganization,
+        onToast: showToast,
+      },
+    );
+    document.querySelector("#detail").showModal();
+  };
   menu.querySelectorAll("[data-workspace-menu-link]").forEach((link) => {
     link.onclick = (event) => {
       event.preventDefault();

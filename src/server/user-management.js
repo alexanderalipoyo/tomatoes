@@ -1,6 +1,74 @@
 const ORGANIZATION_ID = "default";
+function memberships(user) {
+  if (!user) return [];
+  const home = {
+    organizationId: user.organizationId || ORGANIZATION_ID,
+    role: user.role,
+    projects: user.projects || [],
+    disabled: Boolean(user.disabled),
+  };
+  const rows = new Map([[home.organizationId, home]]);
+  for (const member of user.memberships || [])
+    rows.set(member.organizationId, member);
+  return [...rows.values()];
+}
+function forOrganization(user, organizationId = ORGANIZATION_ID) {
+  const member = memberships(user).find(
+    (row) => row.organizationId === organizationId,
+  );
+  return member
+    ? {
+        ...user,
+        ...member,
+        disabled: Boolean(user.disabled || member.disabled),
+      }
+    : null;
+}
 const belongsToOrganization = (user, organizationId = ORGANIZATION_ID) =>
-  Boolean(user) && (user.organizationId || ORGANIZATION_ID) === organizationId;
+  Boolean(forOrganization(user, organizationId));
+function updateMembership(user, value) {
+  if (
+    !(user.memberships || []).length &&
+    (user.organizationId || ORGANIZATION_ID) === value.organizationId
+  )
+    return { ...user, ...value };
+  const member = {
+    organizationId: value.organizationId,
+    role: value.role,
+    projects: value.projects,
+    disabled: Boolean(value.disabled),
+  };
+  return {
+    ...user,
+    fullName: value.fullName,
+    email: value.email,
+    memberships: [
+      ...(user.memberships || []).filter(
+        (row) => row.organizationId !== member.organizationId,
+      ),
+      member,
+    ],
+  };
+}
+function addOrganizationMembership(user, id, currentOrganizationId) {
+  if (!isGlobalAdmin(user, currentOrganizationId))
+    throw Object.assign(
+      new Error("Only organization admins can add organizations."),
+      { status: 403 },
+    );
+  if (memberships(user).length >= 100)
+    throw Object.assign(
+      new Error("This account has reached the organization limit."),
+      { status: 400 },
+    );
+  return updateMembership(user, {
+    ...user,
+    organizationId: id,
+    role: "admin",
+    projects: ["*"],
+    disabled: false,
+  });
+}
 const roles = [
   {
     id: "viewer",
@@ -109,11 +177,15 @@ function validateUser(
     disabled: value.disabled,
   };
 }
-const isGlobalAdmin = (user, organizationId = ORGANIZATION_ID) =>
-  user.role === "admin" &&
-  user.projects.includes("*") &&
-  !user.disabled &&
-  belongsToOrganization(user, organizationId);
+const isGlobalAdmin = (user, organizationId = ORGANIZATION_ID) => {
+  const member = forOrganization(user, organizationId);
+  return Boolean(
+    member &&
+    member.role === "admin" &&
+    member.projects.includes("*") &&
+    !member.disabled,
+  );
+};
 const publicUser = (user) => ({
   organizationId: user.organizationId || ORGANIZATION_ID,
   username: user.username,
@@ -125,6 +197,10 @@ const publicUser = (user) => ({
 });
 module.exports = {
   roles,
+  memberships,
+  forOrganization,
+  updateMembership,
+  addOrganizationMembership,
   validateUser,
   isGlobalAdmin,
   publicUser,

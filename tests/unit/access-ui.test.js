@@ -216,3 +216,15 @@ for (const role of ["viewer", "editor"]) {
     assert.equal(context.hasAccess("users.edit-users"), false);
   });
 }
+
+test("only organization admins can access Add organization, independently of feature grants", (t) => {
+  const { dom, context } = fixture(t, "viewer");
+  const button = dom.window.document.createElement("button");
+  button.setAttribute("data-organization-create", "");
+  dom.window.document.body.append(button);
+  context.applyFeatureAccess();
+  assert.equal(button.classList.contains("access-restricted"), true);
+  context.authStatus.canCreateOrganization = true;
+  context.applyFeatureAccess();
+  assert.equal(button.classList.contains("access-restricted"), false);
+});

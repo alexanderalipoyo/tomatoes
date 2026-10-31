@@ -92,6 +92,24 @@ function createTeamService({
     for (const [key, value] of sessions)
       if (value.username === username) sessions.delete(key);
   };
+  async function revokeMembershipSessions(
+    username,
+    organizationId,
+    homeOrganizationId,
+  ) {
+    if (store.revokeMembershipSessions)
+      return store.revokeMembershipSessions(
+        username,
+        organizationId,
+        homeOrganizationId,
+      );
+    for (const [key, record] of sessions)
+      if (
+        record.username === username &&
+        (record.organizationId || homeOrganizationId) === organizationId
+      )
+        sessions.delete(key);
+  }
   const clientAddress = (req) =>
     hosted
       ? String(req.headers["x-real-ip"] || req.socket.remoteAddress)
@@ -156,14 +174,20 @@ function createTeamService({
       return null;
     }
     const users = await store.getUsers();
-    const user = users.find((user) => user.username === saved.username);
-    if (!user || user.disabled || saved.passwordHash !== user.hash) {
+    const account = users.find((user) => user.username === saved.username);
+    if (!account || account.disabled || saved.passwordHash !== account.hash) {
       await deleteSession(key);
       return null;
     }
-    const organization = await store.getOrganization(
-      user.organizationId || "default",
+    const member = UserManagement.memberships(account).find(
+      (row) => !row.disabled,
     );
+    const user = UserManagement.forOrganization(
+      account,
+      saved.organizationId || member?.organizationId,
+    );
+    if (!user || user.disabled) return null;
+    const organization = await store.getOrganization(user.organizationId);
     if (!organization) {
       await deleteSession(key);
       return null;
@@ -175,6 +199,10 @@ function createTeamService({
     return {
       ...saved,
       organization,
+      accountOrganizationId: account.organizationId || "default",
+      organizationMemberships: UserManagement.memberships(account).filter(
+        (row) => !row.disabled,
+      ),
       permissions: AccessPolicy.resolve(
         organization.rolePermissions,
         user.role,
@@ -313,6 +341,15 @@ function createTeamService({
     }
     return value;
   }
+  function preferenceOwner(user) {
+    if (user.kind === "local") return "local";
+    const home = user.accountOrganizationId || user.organizationId;
+    return (
+      "user:" +
+      user.username +
+      (user.organizationId === home ? "" : ":org:" + user.organizationId)
+    );
+  }
   async function authenticateData(req) {
     if (!validHost(req)) throw apiError(403, "Unrecognized server host.");
     return principal(req);
@@ -326,6 +363,35 @@ function createTeamService({
         const tokens = await store.getTokens();
         send(res, 200, {
           enabled: teamMode,
+          canCreateOrganization: Boolean(
+            user && UserManagement.isGlobalAdmin(user, user.organizationId),
+          ),
+          organizations: user
+            ? (
+                await Promise.all(
+                  user.organizationMemberships.map(async (member) => {
+                    const organization = await store.getOrganization(
+                      member.organizationId,
+                    );
+                    return organization
+                      ? {
+                          ...publicOrganization(organization),
+                          role: member.role,
+                        }
+                      : null;
+                  }),
+                )
+              ).filter(Boolean)
+            : !teamMode
+              ? [
+                  publicOrganization(await store.getOrganization("default")),
+                ].filter(Boolean)
+              : [],
+          preferenceProfileId: user
+            ? preferenceOwner(user)
+            : !teamMode
+              ? "local"
+              : null,
           organization: publicOrganization(
             user?.organization ||
               (!teamMode ? await store.getOrganization("default") : null),
@@ -679,6 +745,16 @@ function createTeamService({
         return true;
       }
       const user = await principal(req);
+      if (
+        user.kind === "session" &&
+        !["GET", "HEAD"].includes(req.method) &&
+        req.headers["x-tomatoes-organization"] &&
+        req.headers["x-tomatoes-organization"] !== user.organizationId
+      )
+        throw apiError(
+          409,
+          "Your selected organization changed in another tab. Reload this page before saving.",
+        );
       if (url.pathname === "/api/change-password") {
         requireFeature(await principal(req), "my-profile.change-password");
         if (req.method !== "POST")
@@ -795,6 +871,144 @@ function createTeamService({
             "Role access changed in another session. Reload before saving.",
           );
         send(res, 200, { revision: saved.revision });
+        return true;
+      }
+      if (
+        url.pathname === "/api/organization/members" &&
+        req.method === "POST"
+      ) {
+        if (
+          user.kind !== "session" ||
+          !UserManagement.isGlobalAdmin(user, user.organizationId)
+        )
+          throw apiError(403, "Only organization admins can add members.");
+        canWrite(req, user);
+        requireFeature(user, "users.add-users");
+        requireFeature(user, "users.assign-roles");
+        requireFeature(user, "users.assign-multiple-projects");
+        const body = await bodyJSON(req, 16384);
+        if (
+          !body ||
+          Object.keys(body).some(
+            (key) => !["username", "role", "projects"].includes(key),
+          )
+        )
+          throw apiError(400, "Use username, role and projects.");
+        const changes = UserManagement.validateUser(
+          {
+            ...body,
+            fullName: "Existing member",
+            email: "",
+            disabled: false,
+            password: "not-a-credential-123",
+          },
+          true,
+          user.organizationId,
+        );
+        const projects = await store.listProjects(["*"], user.organizationId);
+        if (
+          !changes.projects.includes("*") &&
+          changes.projects.some(
+            (id) => !projects.some((project) => project.id === id),
+          )
+        )
+          throw apiError(
+            400,
+            "Choose projects that belong to the current organization.",
+          );
+        const saved = await store.manageUser(changes.username, (rows) => {
+          const operator = rows.find((row) => row.username === user.username);
+          if (!UserManagement.isGlobalAdmin(operator, user.organizationId))
+            throw apiError(403, "Your organization access has changed.");
+          const account = rows.find((row) => row.username === changes.username);
+          if (!account || account.disabled)
+            throw apiError(
+              404,
+              "An active account with this username was not found.",
+            );
+          if (
+            UserManagement.belongsToOrganization(account, user.organizationId)
+          )
+            throw apiError(
+              409,
+              "This account is already a member. Edit its existing access instead.",
+            );
+          if (UserManagement.memberships(account).length >= 100)
+            throw apiError(
+              400,
+              "This account has reached the organization limit.",
+            );
+          return UserManagement.updateMembership(account, {
+            ...account,
+            ...changes,
+            fullName: account.fullName || account.username,
+            email: account.email || "",
+          });
+        });
+        send(res, 201, {
+          user: UserManagement.publicUser(
+            UserManagement.forOrganization(saved, user.organizationId),
+          ),
+        });
+        return true;
+      }
+      if (url.pathname === "/api/organizations" && req.method === "POST") {
+        if (
+          user.kind !== "session" ||
+          !UserManagement.isGlobalAdmin(user, user.organizationId)
+        )
+          throw apiError(
+            403,
+            "Only signed-in organization admins can add organizations.",
+          );
+        canWrite(req, user);
+        const body = await bodyJSON(req, 4096);
+        if (
+          !body ||
+          Object.keys(body).some((key) => key !== "name") ||
+          !Object.hasOwn(body, "name")
+        )
+          throw apiError(400, "Enter an organization name.");
+        const { name } = require("./organization-management").validatePatch(
+          body,
+        );
+        const id = crypto.randomUUID();
+        const organization = await store.createOrganizationForUser(
+          user.username,
+          id,
+          name,
+          user.organizationId,
+        );
+        send(res, 201, { organization: publicOrganization(organization) });
+        return true;
+      }
+      const organizationSwitch = url.pathname.match(
+        /^\/api\/organizations\/([a-zA-Z0-9_.-]{1,100})\/switch$/,
+      );
+      if (organizationSwitch && req.method === "POST") {
+        if (user.kind !== "session")
+          throw apiError(403, "Sign in to switch organizations.");
+        canWrite(req, { ...user, role: "editor" });
+        const id = organizationSwitch[1];
+        const account = (await store.getUsers()).find(
+          (row) => row.username === user.username,
+        );
+        const member = UserManagement.forOrganization(account, id);
+        if (!member || member.disabled || !(await store.getOrganization(id)))
+          throw apiError(403, "This organization is outside your membership.");
+        const record = store.getSession
+          ? await store.getSession(user.key)
+          : sessions.get(user.key);
+        if (
+          !record ||
+          record.expires <= now() ||
+          record.passwordHash !== account.hash
+        )
+          throw apiError(401, "Your session has ended. Sign in again.");
+        await saveSession(user.key, { ...record, organizationId: id });
+        send(res, 200, {
+          organization: publicOrganization(await store.getOrganization(id)),
+        });
         return true;
       }
       if (url.pathname === "/api/organization") {
@@ -936,9 +1150,10 @@ function createTeamService({
           ]);
           send(res, 200, {
             users: (await store.getUsers())
-              .filter((row) =>
-                UserManagement.belongsToOrganization(row, user.organizationId),
+              .map((row) =>
+                UserManagement.forOrganization(row, user.organizationId),
               )
+              .filter(Boolean)
               .map(UserManagement.publicUser),
             organization: publicOrganization(
               await store.getOrganization(user.organizationId),
@@ -1014,7 +1229,11 @@ function createTeamService({
               403,
               "Your user-management access has changed. Sign in again.",
             );
-          const previous = rows.find((row) => row.username === target);
+          const account = rows.find((row) => row.username === target);
+          const previous = UserManagement.forOrganization(
+            account,
+            user.organizationId,
+          );
           if (
             !creating &&
             (!previous ||
@@ -1036,10 +1255,21 @@ function createTeamService({
               409,
               "This email address is already assigned to an account.",
             );
-          if (creating && previous)
+          if (creating && account)
             throw apiError(
               409,
               "This username already exists. Restore the account if it is deactivated.",
+            );
+          if (
+            changes &&
+            account &&
+            UserManagement.memberships(account).length > 1 &&
+            (changes.email !== (account.email || "") ||
+              changes.fullName !== (account.fullName || account.username))
+          )
+            throw apiError(
+              403,
+              "Shared account identity cannot be changed through organization user management. Update only this organization's role and project access.",
             );
           if (changes && previous && changes.role !== previous.role)
             requireFeature(user, "users.assign-roles");
@@ -1086,19 +1316,36 @@ function createTeamService({
             next.resetHash = null;
             next.resetExpires = null;
           }
-          return next;
+          return creating
+            ? next
+            : {
+                ...UserManagement.updateMembership(account, next),
+                resetHash: next.resetHash,
+                resetExpires: next.resetExpires,
+              };
         });
-        if (saved.disabled) await revokeSessions(target);
+        const member = UserManagement.forOrganization(
+          saved,
+          user.organizationId,
+        );
+        if (member.disabled) {
+          if (saved.disabled) await revokeSessions(target);
+          else
+            await revokeMembershipSessions(
+              target,
+              user.organizationId,
+              saved.organizationId || "default",
+            );
+        }
         send(res, creating ? 201 : 200, {
-          user: UserManagement.publicUser(saved),
+          user: UserManagement.publicUser(member),
         });
         return true;
       }
       if (url.pathname === "/api/preferences") {
         if (user.kind === "token")
           throw apiError(403, "CI tokens cannot access user preferences.");
-        const owner =
-          user.kind === "session" ? "user:" + user.username : "local";
+        const owner = preferenceOwner(user);
         const profile =
           user.kind === "session" ? user.username : "Local profile";
         if (req.method === "GET") {

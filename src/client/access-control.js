@@ -136,6 +136,8 @@ const featureSelectors = {
   "#custom-dashboard": "latest-run.custom-widgets-grouped-by-spec-paths",
 };
 function elementAccess(element) {
+  if (element.hasAttribute("data-organization-create"))
+    return Boolean(authStatus?.canCreateOrganization);
   if (element.dataset.accessView)
     return canAccessView(element.dataset.accessView);
   return (element.dataset.feature || "").split("|").some(hasAccess);
@@ -237,7 +239,9 @@ function applyFeatureAccess() {
     };
   }
   document
-    .querySelectorAll("[data-feature], [data-access-view]")
+    .querySelectorAll(
+      "[data-feature], [data-access-view], [data-organization-create]",
+    )
     .forEach((element) =>
       element.classList.toggle("access-restricted", !elementAccess(element)),
     );
@@ -256,7 +260,7 @@ for (const type of ["click", "submit", "change", "drop"])
     type,
     (event) => {
       const control = event.target.closest?.(
-        "[data-feature], [data-access-view]",
+        "[data-feature], [data-access-view], [data-organization-create]",
       );
       if (control && !elementAccess(control)) {
         event.preventDefault();

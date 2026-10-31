@@ -38,6 +38,11 @@ async function teamRequest(route, options = {}) {
     );
   const headers = {
     "Content-Type": "application/json",
+    ...(typeof authStatus !== "undefined" &&
+    authStatus?.enabled &&
+    authStatus?.organization?.id
+      ? { "X-Tomatoes-Organization": authStatus.organization.id }
+      : {}),
     ...(options.headers || {}),
   };
   if (teamState?.csrf) headers["X-CSRF-Token"] = teamState.csrf;

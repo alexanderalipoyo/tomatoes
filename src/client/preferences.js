@@ -17,11 +17,12 @@
     };
     const snapshot = () => structuredClone(state);
     const owner = (status) =>
-      status.enabled
+      status.preferenceProfileId ||
+      (status.enabled
         ? status.authenticated
           ? "user:" + status.user.username
           : null
-        : "local";
+        : "local");
     async function initialize() {
       const version = ++epoch;
       state = {

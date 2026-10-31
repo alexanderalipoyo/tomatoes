@@ -59,17 +59,29 @@ export function WorkspaceMenu() {
             <path d="m7 10 2 2 4-4"></path>
           </svg>
         </button>
+        <div id="workspace-menu-other-organizations"></div>
         <a
           className="workspace-menu-create"
           href="?settingsTab=general#workspace-settings"
           data-workspace-menu-link
           data-access-view="workspace-settings"
         >
-          <span className="workspace-menu-plus" aria-hidden="true">
-            {"+"}
+          <span className="workspace-menu-action-icon" aria-hidden="true">
+            <Icon name="settings" />
           </span>
           {"Organization settings"}
         </a>
+        <button
+          type="button"
+          className="workspace-menu-create workspace-menu-add-organization"
+          id="workspace-menu-add-organization"
+          data-organization-create
+        >
+          <span className="workspace-menu-plus" aria-hidden="true">
+            +
+          </span>
+          <span>Add organization</span>
+        </button>
       </div>
       <a
         className="workspace-menu-projects"

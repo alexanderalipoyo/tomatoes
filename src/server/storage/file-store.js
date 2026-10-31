@@ -81,6 +81,43 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
         return next;
       });
     },
+    async createOrganizationForUser(username, id, name, currentOrganizationId) {
+      return serial(async () => {
+        const users = await readJSON(file("users"), []);
+        const user = users.find((row) => row.username === username);
+        const next = UserManagement.addOrganizationMembership(
+          user,
+          id,
+          currentOrganizationId,
+        );
+        const organizations = await readJSON(file("organizations"), []);
+        if (organizations.some((row) => row.id === id))
+          throw Object.assign(new Error("Organization already exists."), {
+            status: 409,
+          });
+        const organization = {
+          id,
+          name,
+          logo: "",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        await writeJSON(file("organizations"), [
+          ...organizations,
+          organization,
+        ]);
+        try {
+          await writeJSON(
+            file("users"),
+            users.map((row) => (row.username === username ? next : row)),
+          );
+        } catch (error) {
+          await writeJSON(file("organizations"), organizations);
+          throw error;
+        }
+        return organization;
+      });
+    },
     async saveRolePermissions(id, permissions, revision) {
       return serial(async () => {
         const rows = await readJSON(file("organizations"), []);

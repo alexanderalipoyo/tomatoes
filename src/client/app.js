@@ -140,6 +140,14 @@ function renderWorkspaceIdentity() {
       : workspaceProjects[0]?.id) ||
     (authStatus?.enabled ? "" : "tomatoes");
   const organizationName = authStatus?.organization?.name || "Organization";
+  globalThis.TomatoesReact.renderOrganizations?.(
+    document.querySelector("#workspace-menu-other-organizations"),
+    {
+      organizations: authStatus?.organizations || [],
+      currentId: authStatus?.organization?.id,
+      onSwitch: switchWorkspaceOrganization,
+    },
+  );
   applyFeatureAccess();
   document.querySelectorAll("[data-organization-name]").forEach((element) => {
     element.textContent = organizationName;
