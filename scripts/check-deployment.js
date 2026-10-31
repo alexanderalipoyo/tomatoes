@@ -27,7 +27,17 @@ async function checkDeployment(origin, { request = fetch } = {}) {
         failures.push(
           `${route}: HTTP ${response.status}${response.status >= 300 && response.status < 400 ? " (redirect; check deployment protection)" : ""}`,
         );
-        await response.body?.cancel();
+        if (
+          route === "/api/team/status" &&
+          response.status === 403 &&
+          type.includes("application/json")
+        ) {
+          const payload = await response.json();
+          if (payload.error?.includes("Unrecognized server host"))
+            failures.push(
+              `Host configuration: set TOMATOES_PUBLIC_ORIGIN=${base.origin} in this Vercel project's Production environment, check TOMATOES_REPORT_BASE_URL, and redeploy. The current host is outside the configured allowlist.`,
+            );
+        } else await response.body?.cancel();
         continue;
       }
       if (route.endsWith(".js") && !/(?:javascript|ecmascript)/i.test(type))

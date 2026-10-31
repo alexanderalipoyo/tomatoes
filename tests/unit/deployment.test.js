@@ -276,3 +276,58 @@ test("startup diagnostics expose setting names and safe hints without secrets", 
     "STARTUP_FAILED",
   );
 });
+
+test("renamed deployment domains require the matching configured origin while other hosts stay blocked", async () => {
+  const { createTeamService } = require("../../src/server/team-service");
+  const store = { kind: "postgres", getTokens: async () => [] };
+  const request = {
+    method: "GET",
+    headers: { host: "tomatoes-reports.vercel.app" },
+  };
+  const route = new URL("https://tomatoes-reports.vercel.app/api/team/status");
+  const oldService = createTeamService({
+    store,
+    teamMode: true,
+    hosted: true,
+    publicOrigin: "https://tomatoes-rho.vercel.app",
+  });
+  let res = response();
+  await oldService.handle(request, res, route);
+  assert.equal(res.status, 403);
+  assert.equal(JSON.parse(res.body).error, "Unrecognized server host.");
+  const corrected = createTeamService({
+    store,
+    teamMode: true,
+    hosted: true,
+    publicOrigin: "https://tomatoes-reports.vercel.app",
+  });
+  res = response();
+  await corrected.handle(request, res, route);
+  assert.equal(res.status, 200);
+  assert.equal(JSON.parse(res.body).authenticated, false);
+  res = response();
+  await corrected.handle(
+    { ...request, headers: { host: "untrusted.example.com" } },
+    res,
+    route,
+  );
+  assert.equal(res.status, 403);
+});
+
+test("deployment verification explains an outdated public origin", async () => {
+  const { checkDeployment } = require("../../scripts/check-deployment");
+  const result = await checkDeployment("https://tomatoes-reports.vercel.app", {
+    request: async (url) =>
+      url.pathname === "/api/team/status"
+        ? Response.json({ error: "Unrecognized server host." }, { status: 403 })
+        : new Response("", { status: 404 }),
+  });
+  assert.ok(
+    result.failures.some(
+      (message) =>
+        message.includes(
+          "TOMATOES_PUBLIC_ORIGIN=https://tomatoes-reports.vercel.app",
+        ) && message.includes("redeploy"),
+    ),
+  );
+});
