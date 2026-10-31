@@ -124,7 +124,7 @@ function renderAuthScreen(message = "") {
       if (version !== authRenderVersion) return;
       await finishGoogleSignIn();
     },
-    onRefreshAccess: finishGoogleSignIn,
+    onRefreshAccess: () => finishGoogleSignIn({ refreshPending: true }),
     onSignOut: async () => {
       teamState = await teamRequest("/api/team/status", { cache: "no-store" });
       await authRequest("/api/logout", { method: "POST", body: "{}" });
@@ -239,7 +239,7 @@ document.addEventListener(
   () => void refreshSessionAccess(),
 );
 
-async function finishGoogleSignIn() {
+async function finishGoogleSignIn({ refreshPending = false } = {}) {
   await initializeAuth();
   teamState = authStatus;
   if (!authStatus.authenticated)
@@ -247,11 +247,18 @@ async function finishGoogleSignIn() {
       "Could not confirm your Google session. Please sign in again.",
     );
   if (authStatus.pendingOrganization) {
-    renderAuthScreen();
-    return;
+    if (!refreshPending) renderAuthScreen();
+    return { pendingOrganization: true };
   }
   await reloadUserPreferences();
-  await refreshHistory();
+  try {
+    await refreshHistory();
+  } catch (error) {
+    historyNotice(
+      `Signed in, but browser import history could not be loaded: ${error.message}`,
+      "warning",
+    );
+  }
   hideAuthScreen();
   history.replaceState(null, "", location.pathname + "#projects");
   await navigateReportLocation();

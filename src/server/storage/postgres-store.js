@@ -2,7 +2,11 @@ const UserManagement = require("../user-management");
 const Projects = require("../../shared/project-management");
 const { Pool } = require("pg");
 const { databaseConfig } = require("../config");
-const { schemaName, migrateSchema } = require("../database/schema");
+const {
+  schemaName,
+  migrateSchema,
+  LATEST_SCHEMA_VERSION,
+} = require("../database/schema");
 function createPostgresStore({
   pool = new Pool(databaseConfig()),
   schema = "tomatoes",
@@ -197,7 +201,8 @@ function createPostgresStore({
     async ready() {
       try {
         const result = await pool.query(
-          `SELECT version FROM ${ns}.schema_migrations WHERE version=12`,
+          `SELECT version FROM ${ns}.schema_migrations WHERE version=$1`,
+          [LATEST_SCHEMA_VERSION],
         );
         if (!result.rows.length) throw new Error("missing");
       } catch (error) {

@@ -76,3 +76,40 @@ test("authentication refuses remote HTTP while allowing HTTPS and loopback devel
   await context.authRequest("/api/login", {});
   assert.equal(calls, 2);
 });
+
+test("Google login continues to the app when browser import history cannot load", async () => {
+  const calls = [];
+  const context = {
+    authStatus: { authenticated: true, pendingOrganization: false },
+    teamState: null,
+    initializeAuth: async () => {},
+    reloadUserPreferences: async () => {},
+    refreshHistory: async () => {
+      throw new Error("Browser storage unavailable");
+    },
+    historyNotice: (message) => calls.push(message),
+    hideAuthScreen: () => calls.push("hide"),
+    history: { replaceState: () => {} },
+    location: { pathname: "/" },
+    navigateReportLocation: async () => calls.push("navigate"),
+    showToast: () => {},
+    renderAuthScreen: () => calls.push("auth"),
+  };
+  vm.runInNewContext(
+    source.slice(source.indexOf("async function finishGoogleSignIn")),
+    context,
+  );
+  await context.finishGoogleSignIn();
+  assert.ok(calls.includes("navigate"));
+  assert.ok(
+    calls.some((message) => message.includes("browser import history")),
+  );
+  context.authStatus.pendingOrganization = true;
+  calls.length = 0;
+  await context.finishGoogleSignIn({ refreshPending: true });
+  assert.deepEqual(
+    calls,
+    [],
+    "access checks preserve the pending page and its feedback",
+  );
+});

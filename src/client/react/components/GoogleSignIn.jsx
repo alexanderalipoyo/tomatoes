@@ -120,19 +120,30 @@ export function GoogleSignIn({ enabled, mode, onChallenge, onCredential }) {
 export function PendingAccess({ user, onRefresh, onSignOut }) {
   const [pending, setPending] = useState(false),
     [message, setMessage] = useState("");
-  async function action(callback) {
-    if (pending) return;
+  const busy = useRef(false),
+    alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  async function action(callback, checking = false) {
+    if (busy.current) return;
+    busy.current = true;
     setPending(true);
     setMessage("");
     try {
       await callback();
-      setMessage(
-        "No organization membership yet. Ask an administrator to add your Gmail address in Users.",
-      );
+      if (alive.current && checking)
+        setMessage(
+          "No organization membership yet. Ask an administrator to add your Gmail address in Users.",
+        );
     } catch (error) {
-      setMessage(error.message);
+      if (alive.current) setMessage(error.message);
     } finally {
-      setPending(false);
+      busy.current = false;
+      if (alive.current) setPending(false);
     }
   }
   return (
@@ -157,7 +168,7 @@ export function PendingAccess({ user, onRefresh, onSignOut }) {
         <button
           className="button primary"
           disabled={pending}
-          onClick={() => action(onRefresh)}
+          onClick={() => action(onRefresh, true)}
         >
           Check access
         </button>

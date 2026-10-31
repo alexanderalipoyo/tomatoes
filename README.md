@@ -435,3 +435,7 @@ Organization switching requires an active membership and a valid session/CSRF to
 ### Gmail signup and Google login
 
 Google Identity Services sign-in is available alongside password login. Set `TOMATOES_GOOGLE_CLIENT_ID`, enable team sign-in, and apply database migration 012. New Gmail signups wait for organization membership; admins assign their Gmail address through Users / Add an existing account. Existing verified Gmail members retain their roles and projects. See [Google sign-in setup](docs/google-sign-in.md) for Google Cloud origins, local and Vercel configuration, validations, and account approval.
+
+### Before deploying database changes
+
+Run `npm run db:verify:production` against the production configuration before deploying. This read-only check compares every required migration with the database and exits unsuccessfully if one is missing. Apply missing migrations with `npm run db:migrate:production`, then repeat the check. For a CI environment with database variables already configured, run `node scripts/check-schema.js` directly. The production build remains independent of database access and never runs migrations automatically.

@@ -9,22 +9,25 @@ function schemaName(value) {
     throw new Error("Invalid database schema name.");
   return '"' + value + '"';
 }
+const MIGRATIONS = [
+  [2, "002-user-preferences.sql"],
+  [3, "003-user-management.sql"],
+  [4, "004-password-recovery.sql"],
+  [5, "005-hosted-runtime.sql"],
+  [6, "006-projects.sql"],
+  [7, "007-user-organization.sql"],
+  [8, "008-organizations.sql"],
+  [9, "009-organization-logo.sql"],
+  [10, "010-role-permissions.sql"],
+  [11, "011-organization-memberships.sql"],
+  [12, "012-google-auth.sql"],
+];
+const REQUIRED_MIGRATIONS = [1, ...MIGRATIONS.map(([version]) => version)];
+const LATEST_SCHEMA_VERSION = REQUIRED_MIGRATIONS.at(-1);
 async function migrateSchema(client, schema) {
   const ns = schemaName(schema);
   await client.query(initialSQL.replaceAll("__SCHEMA__", ns));
-  for (const [version, filename] of [
-    [2, "002-user-preferences.sql"],
-    [3, "003-user-management.sql"],
-    [4, "004-password-recovery.sql"],
-    [5, "005-hosted-runtime.sql"],
-    [6, "006-projects.sql"],
-    [7, "007-user-organization.sql"],
-    [8, "008-organizations.sql"],
-    [9, "009-organization-logo.sql"],
-    [10, "010-role-permissions.sql"],
-    [11, "011-organization-memberships.sql"],
-    [12, "012-google-auth.sql"],
-  ]) {
+  for (const [version, filename] of MIGRATIONS) {
     const applied = await client.query(
       `SELECT version FROM ${ns}.schema_migrations WHERE version=$1`,
       [version],
@@ -38,4 +41,9 @@ async function migrateSchema(client, schema) {
     }
   }
 }
-module.exports = { schemaName, migrateSchema };
+module.exports = {
+  schemaName,
+  migrateSchema,
+  REQUIRED_MIGRATIONS,
+  LATEST_SCHEMA_VERSION,
+};

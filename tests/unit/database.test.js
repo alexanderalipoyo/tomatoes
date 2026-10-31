@@ -164,3 +164,50 @@ test("hosted CA certificates can be supplied without packaging a private certifi
   assert.equal(config.ssl.ca, "TEST\nCERTIFICATE");
   assert.equal(config.ssl.rejectUnauthorized, true);
 });
+
+test("schema preflight detects missing migrations with read-only queries and closes the connection", async () => {
+  const { checkSchema } = require("../../scripts/check-schema");
+  const { REQUIRED_MIGRATIONS } = require("../../src/server/database/schema");
+  const calls = [];
+  let versions = REQUIRED_MIGRATIONS.filter((version) => version !== 12);
+  class FakeClient {
+    constructor(config) {
+      calls.push(config);
+    }
+    async connect() {}
+    async query(sql) {
+      calls.push(sql);
+      return { rows: versions.map((version) => ({ version })) };
+    }
+    async end() {
+      calls.push("closed");
+    }
+  }
+  const missing = await checkSchema({ ClientType: FakeClient });
+  assert.equal(missing.ready, false);
+  assert.deepEqual(missing.missing, [12]);
+  assert.equal(calls[0].options, "-c default_transaction_read_only=on");
+  assert.match(calls[1], /^SELECT version FROM/);
+  assert.equal(calls.at(-1), "closed");
+  versions = REQUIRED_MIGRATIONS;
+  assert.equal((await checkSchema({ ClientType: FakeClient })).ready, true);
+});
+
+test("schema preflight treats an uninitialized database as missing all migrations", async () => {
+  const { checkSchema } = require("../../scripts/check-schema");
+  let closed = false;
+  class EmptyClient {
+    async connect() {}
+    async query() {
+      throw Object.assign(new Error("missing table"), { code: "42P01" });
+    }
+    async end() {
+      closed = true;
+    }
+  }
+  const result = await checkSchema({ ClientType: EmptyClient });
+  assert.equal(result.ready, false);
+  assert.ok(result.missing.includes(1));
+  assert.ok(result.missing.includes(12));
+  assert.equal(closed, true);
+});

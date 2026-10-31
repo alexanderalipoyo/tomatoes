@@ -1238,3 +1238,35 @@ test("Google button sends the server nonce to Google and verifies a returned cre
     delete dom.window.google;
   }
 });
+
+test("pending access blocks rapid repeated checks and preserves useful feedback", async () => {
+  const { PendingAccess } = loadComponent("components/GoogleSignIn.jsx");
+  let calls = 0,
+    finish;
+  const state = await mount(
+    React.createElement(PendingAccess, {
+      user: { fullName: "Member", email: "member@gmail.com" },
+      onRefresh: async () => {
+        calls++;
+        await new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+      onSignOut: async () => {},
+    }),
+  );
+  try {
+    const button = state.host.querySelector("button");
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    assert.equal(calls, 1);
+    assert.equal(button.disabled, true);
+    await act(async () => finish());
+    assert.equal(button.disabled, false);
+    assert.match(state.host.textContent, /No organization membership yet/);
+  } finally {
+    await state.cleanup();
+  }
+});
