@@ -173,7 +173,17 @@ try {
         if (device.state !== "Booted")
           command("xcrun", ["simctl", "boot", device.udid]);
         command("xcrun", ["simctl", "bootstatus", device.udid, "-b"]);
-        command("open", ["-a", "Simulator"]);
+        const developerDir = command("xcode-select", ["-p"], true).trim();
+        const simulatorApp = [
+          path.join(developerDir, "Applications/Simulator.app"),
+          path.join(developerDir, "../Applications/Simulator.app"),
+          "/Applications/Simulator.app",
+        ].find((candidate) => existsSync(candidate));
+        if (simulatorApp) command("open", ["-a", simulatorApp]);
+        else
+          console.warn(
+            "Simulator.app is missing; launching on the booted simulator without its window.",
+          );
         command("xcrun", ["simctl", "install", device.udid, app]);
         command("xcrun", [
           "simctl",
