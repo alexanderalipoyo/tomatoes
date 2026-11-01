@@ -3,10 +3,28 @@ const reportServerLinks = new Map();
 let pendingReportNavigation = false;
 let loadedReportLinkKey = null;
 let failedReportLinkKey = null;
+function knownReportServerId(id, entry = null) {
+  const serverId =
+    reportServerLinks.get(id) ||
+    entry?.serverId ||
+    (typeof historyEntries !== "undefined"
+      ? historyEntries.find((item) => item.id === id)?.serverId
+      : null);
+  return ReportLinks.validId(serverId) ? serverId : null;
+}
+async function rememberReportServerLink(id, serverId) {
+  if (!ReportLinks.validId(serverId)) return;
+  reportServerLinks.set(id, serverId);
+  try {
+    await ImportHistory.updateDetails(id, { serverId });
+  } catch {
+    // A shared report remains available even when browser storage is full.
+  }
+}
 function reportHref(id) {
   return ReportLinks.build(location.href, {
     importId: id,
-    serverId: reportServerLinks.get(id),
+    serverId: knownReportServerId(id),
     view: "runs",
   });
 }
@@ -48,7 +66,7 @@ function updateReportURL({
   if (serverId) reportServerLinks.set(activeHistoryId, serverId);
   const url = ReportLinks.build(location.href, {
     importId: activeHistoryId,
-    serverId: reportServerLinks.get(activeHistoryId),
+    serverId: knownReportServerId(activeHistoryId),
     view: dashboard ? "runs" : undefined,
   });
   if (url !== location.href)
@@ -188,7 +206,7 @@ async function copyHistoryReportLink(id, button) {
   button.disabled = true;
   try {
     const saved = await ImportHistory.get(id);
-    let serverId = reportServerLinks.get(id);
+    let serverId = knownReportServerId(id, saved.entry);
     if (!serverId) {
       try {
         const compact = JSON.stringify(
@@ -221,7 +239,7 @@ async function copyHistoryReportLink(id, button) {
                 continue;
               if (await serverMatchesImport(server, id)) {
                 serverId = candidate;
-                reportServerLinks.set(id, serverId);
+                await rememberReportServerLink(id, serverId);
                 break;
               }
             } catch {

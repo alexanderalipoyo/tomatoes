@@ -12,7 +12,7 @@ function projectReportLink(run) {
   return ReportLinks.build(location.href, {
     ...(run.source === "server"
       ? { serverId: run.id }
-      : { importId: run.id, serverId: reportServerLinks.get(run.id) }),
+      : { importId: run.id, serverId: knownReportServerId(run.id, run) }),
     view: "runs",
   });
 }

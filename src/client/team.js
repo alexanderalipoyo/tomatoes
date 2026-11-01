@@ -181,6 +181,7 @@ async function uploadBrowserReport(
       }),
     },
   );
+  if (entry) await rememberReportServerLink(entry.id, saved.run.id);
   const attachments = entry ? await ImportHistory.listEvidence(entry.id) : [];
   for (const attachment of attachments) {
     const bytes = new Uint8Array(await attachment.blob.arrayBuffer());
@@ -198,7 +199,6 @@ async function uploadBrowserReport(
     });
     await allowPaint();
   }
-  if (entry) reportServerLinks.set(entry.id, saved.run.id);
   return saved.run;
 }
 async function restoreSharedEvidence(saved, localId) {

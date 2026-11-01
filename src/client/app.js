@@ -865,6 +865,7 @@ async function loadReport(file = currentFile, options = {}) {
       if (result.saved && result.run) slackRunId = result.run.id;
     }
     if (serverCopy && activeHistoryId) {
+      await rememberReportServerLink(activeHistoryId, serverCopy.run.id);
       try {
         if (!previousHistoryIds.has(activeHistoryId)) {
           await ImportHistory.updateDetails(activeHistoryId, {

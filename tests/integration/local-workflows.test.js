@@ -364,6 +364,81 @@ test("local browser publishing checks origin and rejects invalid reports and hos
     400,
   );
 });
+test("an existing viewer session lists and opens a new admin import in its assigned project", async (t) => {
+  const api = await serviceFixture(t, { teamMode: true });
+  await writeJSON(path.join(api.dataDir, "users.json"), [
+    {
+      username: "owner",
+      role: "admin",
+      projects: ["*"],
+      ...hashPassword("temporary-test-password"),
+    },
+    {
+      username: "reader",
+      role: "viewer",
+      projects: ["web"],
+      ...hashPassword("temporary-test-password"),
+    },
+    {
+      username: "outsider",
+      role: "viewer",
+      projects: ["private"],
+      ...hashPassword("temporary-test-password"),
+    },
+  ]);
+  async function signIn(username) {
+    const result = await api.request("/api/login", {
+      method: "POST",
+      headers: { Origin: api.origin },
+      body: JSON.stringify({ username, password: "temporary-test-password" }),
+    });
+    assert.equal(result.status, 200);
+    return {
+      Cookie: result.headers.get("set-cookie").split(";")[0],
+      Origin: api.origin,
+      "X-CSRF-Token": result.body.csrf,
+    };
+  }
+  const viewer = await signIn("reader"),
+    outsider = await signIn("outsider"),
+    admin = await signIn("owner");
+  assert.equal(
+    (await api.request("/api/runs", { headers: viewer })).body.runs.length,
+    0,
+  );
+  const imported = await api.request("/api/imports", {
+    method: "POST",
+    headers: admin,
+    body: JSON.stringify({
+      reportText: JSON.stringify(fixture(), null, 2),
+      name: "new-admin-report.json",
+      metadata: { project: "web", branch: "main" },
+    }),
+  });
+  assert.equal(imported.status, 201);
+  const listing = await api.request("/api/runs?includeArchived=1", {
+    headers: viewer,
+  });
+  assert.equal(listing.status, 200);
+  assert.equal(listing.body.runs[0].id, imported.body.run.id);
+  assert.equal(
+    (
+      await api.request("/api/runs/" + imported.body.run.id, {
+        headers: viewer,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await api.request("/api/runs/" + imported.body.run.id, {
+        headers: outsider,
+      })
+    ).status,
+    404,
+  );
+});
+
 test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and logout", async (t) => {
   const api = await serviceFixture(t, {
     teamMode: true,

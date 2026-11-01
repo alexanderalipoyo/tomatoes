@@ -173,6 +173,7 @@
           notes: previous?.notes || "",
           deletedAt: null,
           archivedAt: previous?.archivedAt || null,
+          serverId: previous?.serverId || null,
           counts: { ...report.counts },
           specs: report.specs.length,
           passRate: report.passRate,
