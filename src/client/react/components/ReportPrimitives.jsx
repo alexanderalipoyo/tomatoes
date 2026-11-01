@@ -1,7 +1,7 @@
-export function Badge({ status = "unknown" }) {
+export function Badge({ status = "unknown", label }) {
   return (
     <span className={`status-badge ${status}`}>
-      {status[0].toUpperCase() + status.slice(1)}
+      {label || status[0].toUpperCase() + status.slice(1)}
     </span>
   );
 }

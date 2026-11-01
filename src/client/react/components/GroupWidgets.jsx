@@ -1,7 +1,56 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Groups from "../../../shared/dashboard-groups";
 import { Badge } from "./ReportPrimitives";
 import { Modal } from "./Modal";
+const DISPLAY_STATUSES = [
+  "all",
+  "failed",
+  "passed",
+  "no-failures",
+  "incomplete",
+  "unknown",
+  "empty",
+];
+const DISPLAY_SORTS = [
+  "saved",
+  "name-asc",
+  "name-desc",
+  "failed",
+  "pass-asc",
+  "pass-desc",
+  "tests",
+  "duration",
+];
+function readWidgetDisplay(key) {
+  try {
+    const value = key ? JSON.parse(window.localStorage.getItem(key)) : null;
+    return {
+      query: typeof value?.query === "string" ? value.query.slice(0, 1000) : "",
+      groupName:
+        typeof value?.groupName === "string"
+          ? value.groupName.slice(0, 1000)
+          : "",
+      status: DISPLAY_STATUSES.includes(value?.status) ? value.status : "all",
+      sort: DISPLAY_SORTS.includes(value?.sort) ? value.sort : "saved",
+    };
+  } catch {
+    return { query: "", groupName: "", status: "all", sort: "saved" };
+  }
+}
+function pathSubgroups(group) {
+  return [
+    ...new Set(
+      group.paths.flatMap((path) => {
+        const segments = Groups.normalizePath(path).split("/");
+        return segments[0] === "cypress" &&
+          ["e2e", "smoke"].includes(segments[1]) &&
+          segments[2]
+          ? [segments.slice(0, 3).join("/")]
+          : [];
+      }),
+    ),
+  ];
+}
 export function GroupMetrics({ stats, metrics, duration }) {
   const counts = stats.counts;
   const values = [
@@ -50,10 +99,16 @@ export function GroupDashboard({
   duration,
   onSpec,
   canManage = false,
+  profileId,
 }) {
   const [selected, setSelected] = useState(null);
-  const [query, setQuery] = useState("");
-  const [groupName, setGroupName] = useState("");
+  const storageKey =
+    profileId && profileId !== "unavailable"
+      ? "tomatoes-widget-display-v1:" + profileId
+      : null;
+  const [initialDisplay] = useState(() => readWidgetDisplay(storageKey));
+  const [query, setQuery] = useState(initialDisplay.query);
+  const [groupName, setGroupName] = useState(initialDisplay.groupName);
   const groupNames = useMemo(
     () =>
       [...new Set(groups.map((group) => group.name))].sort((a, b) =>
@@ -62,18 +117,38 @@ export function GroupDashboard({
     [groups],
   );
   const subgroups = useMemo(
-    () => [
-      ...new Set(
-        groupNames.flatMap((name) => {
-          const match = name.match(/^((?:E2E|SMOKE)\s*:\s*.+?)\s+-\s+.+$/);
-          return match ? [match[1]] : [];
-        }),
-      ),
-    ],
-    [groupNames],
+    () =>
+      [...new Set(groups.flatMap(pathSubgroups))].sort().map((path) => {
+        const [, type, partner] = path.split("/");
+        return {
+          value: "subgroup:" + path,
+          path,
+          label:
+            type.toUpperCase() +
+            " : " +
+            partner.replaceAll("-", " ").toUpperCase(),
+        };
+      }),
+    [groups],
   );
-  const [status, setStatus] = useState("all");
-  const [sort, setSort] = useState("saved");
+  const activeGroupName =
+    groupNames.includes(groupName) ||
+    subgroups.some((item) => item.value === groupName)
+      ? groupName
+      : "";
+  const [status, setStatus] = useState(initialDisplay.status);
+  const [sort, setSort] = useState(initialDisplay.sort);
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({ query, groupName: activeGroupName, status, sort }),
+      );
+    } catch {
+      /* Filtering remains available when browser storage is unavailable. */
+    }
+  }, [storageKey, query, activeGroupName, status, sort]);
   const entries = useMemo(
     () =>
       groups.map((group) => {
@@ -85,7 +160,9 @@ export function GroupDashboard({
             : stats.counts.unknown
               ? "unknown"
               : stats.counts.passed
-                ? "passed"
+                ? stats.counts.pending || stats.counts.skipped
+                  ? "no-failures"
+                  : "passed"
                 : "incomplete";
         return { group, stats, result };
       }),
@@ -95,10 +172,11 @@ export function GroupDashboard({
     const search = query.trim().toLowerCase();
     const filtered = entries.filter(
       ({ group, result }) =>
-        (!groupName ||
-          group.name === groupName ||
-          (subgroups.includes(groupName) &&
-            group.name.startsWith(groupName + " - "))) &&
+        (!activeGroupName ||
+          group.name === activeGroupName ||
+          pathSubgroups(group).some(
+            (path) => "subgroup:" + path === activeGroupName,
+          )) &&
         (status === "all" || status === result) &&
         (!search ||
           [group.name, ...group.paths].some((value) =>
@@ -117,7 +195,7 @@ export function GroupDashboard({
       duration: (a, b) => b.stats.duration - a.stats.duration,
     }[sort];
     return compare ? filtered.sort(compare) : filtered;
-  }, [entries, query, groupName, subgroups, status, sort]);
+  }, [entries, query, activeGroupName, status, sort]);
   function resetDisplay() {
     setQuery("");
     setGroupName("");
@@ -162,15 +240,15 @@ export function GroupDashboard({
             <label>
               Group name
               <select
-                value={groupName}
+                value={activeGroupName}
                 onChange={(event) => setGroupName(event.target.value)}
               >
                 <option value="">All groups</option>
                 {!!subgroups.length && (
                   <optgroup label="Subgroups">
-                    {subgroups.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
+                    {subgroups.map(({ value, label }) => (
+                      <option key={value} value={value}>
+                        {label}
                       </option>
                     ))}
                   </optgroup>
@@ -193,6 +271,9 @@ export function GroupDashboard({
                 <option value="all">All statuses</option>
                 <option value="failed">Failed</option>
                 <option value="passed">Passed</option>
+                <option value="no-failures">
+                  No failures (some tests not run)
+                </option>
                 <option value="incomplete">Incomplete</option>
                 <option value="unknown">Unknown</option>
                 <option value="empty">No matching tests</option>
@@ -218,7 +299,10 @@ export function GroupDashboard({
               className="button"
               onClick={resetDisplay}
               disabled={
-                !query && !groupName && status === "all" && sort === "saved"
+                !query &&
+                !activeGroupName &&
+                status === "all" &&
+                sort === "saved"
               }
             >
               Reset display
@@ -251,7 +335,14 @@ export function GroupDashboard({
                         {group.paths.length} paths
                       </p>
                     </div>
-                    {!!stats.counts.total && <Badge status={result} />}
+                    {!!stats.counts.total && (
+                      <Badge
+                        status={result === "no-failures" ? "passed" : result}
+                        label={
+                          result === "no-failures" ? "No failures" : undefined
+                        }
+                      />
+                    )}
                   </div>
                   <GroupMetrics
                     stats={stats}

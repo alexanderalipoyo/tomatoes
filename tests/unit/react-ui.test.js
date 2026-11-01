@@ -1419,7 +1419,7 @@ test("custom widgets combine search and status, sort metrics, and reset saved or
 test("custom widget subgroup dropdown includes every partner's roles without crossing test types", async () => {
   const { GroupDashboard } = loadComponent("components/GroupWidgets.jsx");
   const names = [
-    "E2E : HIPAA COMP - EMPLOYEE",
+    "Renamed employee widget",
     "E2E : HIPAA COMP - MANAGER",
     "E2E : INTERNAL BPP - MANAGER",
     "SMOKE : HIPAA COMP - PARTNER ADMIN",
@@ -1428,7 +1428,13 @@ test("custom widget subgroup dropdown includes every partner's roles without cro
   const groups = names.map((name, index) => ({
     id: String(index),
     name,
-    paths: ["cypress/e2e/example"],
+    paths: [
+      ["cypress/e2e/hipaa-comp/employee"],
+      ["cypress/e2e/hipaa-comp/manager"],
+      ["cypress/e2e/internal-bpp/manager"],
+      ["cypress/smoke/hipaa-comp/partner-admin"],
+      ["cypress/e2e/hipaa-comp-extra/manager"],
+    ][index],
     metrics: ["passRate"],
   }));
   const state = await mount(
@@ -1459,16 +1465,188 @@ test("custom widget subgroup dropdown includes every partner's roles without cro
         (el) => el.textContent === "E2E : INTERNAL BPP",
       ),
     );
-    await choose("E2E : HIPAA COMP");
+    await choose("subgroup:cypress/e2e/hipaa-comp");
     assert.deepEqual(visible(), names.slice(0, 2));
-    await choose("E2E : INTERNAL BPP");
+    await choose("subgroup:cypress/e2e/internal-bpp");
     assert.deepEqual(visible(), [names[2]]);
-    await choose("SMOKE : HIPAA COMP");
+    await choose("subgroup:cypress/smoke/hipaa-comp");
     assert.deepEqual(visible(), [names[3]]);
     await choose(names[0]);
     assert.deepEqual(visible(), [names[0]]);
     await choose("");
     assert.deepEqual(visible(), names);
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("widget display restores browser choices per account and tolerates unavailable storage", async () => {
+  const { GroupDashboard } = loadComponent("components/GroupWidgets.jsx");
+  const key = "tomatoes-widget-display-v1:user:widget-test";
+  const choices = {
+    query: "smoke",
+    groupName: "subgroup:cypress/smoke/hipaa-comp",
+    status: "empty",
+    sort: "name-desc",
+  };
+  const props = {
+    groups: [
+      {
+        id: "smoke",
+        name: "Renamed smoke",
+        paths: ["cypress/smoke/hipaa-comp/partner-admin"],
+        metrics: ["passRate"],
+      },
+    ],
+    report: { specs: [] },
+    duration: String,
+    sourceName: "test",
+    onSpec: () => {},
+  };
+  window.localStorage.setItem(key, JSON.stringify(choices));
+  let state;
+  try {
+    state = await mount(
+      React.createElement(GroupDashboard, {
+        ...props,
+        profileId: "user:widget-test",
+      }),
+    );
+    assert.equal(
+      state.host.querySelector('input[type="search"]').value,
+      "smoke",
+    );
+    assert.deepEqual(
+      [...state.host.querySelectorAll("select")].map((el) => el.value),
+      [choices.groupName, "empty", "name-desc"],
+    );
+    assert.equal(state.host.querySelectorAll("article").length, 1);
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Reset display")
+        .click(),
+    );
+    assert.deepEqual(JSON.parse(window.localStorage.getItem(key)), {
+      query: "",
+      groupName: "",
+      status: "all",
+      sort: "saved",
+    });
+    await state.cleanup();
+    state = null;
+    window.localStorage.setItem(key, JSON.stringify(choices));
+    state = await mount(
+      React.createElement(GroupDashboard, {
+        ...props,
+        profileId: "user:another-widget-test",
+      }),
+    );
+    assert.equal(state.host.querySelector('input[type="search"]').value, "");
+    await state.cleanup();
+    state = null;
+    window.localStorage.setItem(
+      key,
+      '{"status":"invalid","sort":"invalid","query":42,"groupName":"removed"}',
+    );
+    state = await mount(
+      React.createElement(GroupDashboard, {
+        ...props,
+        profileId: "user:widget-test",
+      }),
+    );
+    assert.deepEqual(
+      [...state.host.querySelectorAll("select")].map((el) => el.value),
+      ["", "all", "saved"],
+    );
+    await state.cleanup();
+    state = null;
+    const storage = Object.getOwnPropertyDescriptor(window, "localStorage");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw Error("Storage disabled");
+      },
+    });
+    try {
+      state = await mount(
+        React.createElement(GroupDashboard, {
+          ...props,
+          profileId: "user:widget-test",
+        }),
+      );
+      assert.equal(state.host.querySelectorAll("article").length, 1);
+    } finally {
+      Object.defineProperty(window, "localStorage", storage);
+    }
+  } finally {
+    if (state) await state.cleanup();
+    window.localStorage.removeItem(key);
+    window.localStorage.removeItem(
+      "tomatoes-widget-display-v1:user:another-widget-test",
+    );
+  }
+});
+
+test("widget badges distinguish fully passed runs from runs with unexecuted tests", async () => {
+  const { GroupDashboard } = loadComponent("components/GroupWidgets.jsx");
+  const cases = [
+    ["passed"],
+    ["passed", "pending"],
+    ["passed", "skipped"],
+    ["pending"],
+    ["passed", "failed"],
+    ["passed", "unknown"],
+  ];
+  const groups = cases.map((_, i) => ({
+    id: String(i),
+    name: "Group " + i,
+    paths: ["cypress/e2e/test/" + i],
+    metrics: ["outcomes"],
+  }));
+  const report = normalizeReport({
+    stats: {},
+    results: cases.map((statuses, i) => ({
+      file: "cypress/e2e/test/" + i + "/spec.cy.js",
+      tests: statuses.map((state) => ({ state, duration: 0 })),
+      suites: [],
+    })),
+  });
+  const state = await mount(
+    React.createElement(GroupDashboard, {
+      groups,
+      report,
+      duration: String,
+      sourceName: "test",
+      onSpec: () => {},
+    }),
+  );
+  try {
+    assert.deepEqual(
+      [...state.host.querySelectorAll("article .status-badge")].map(
+        (el) => el.textContent,
+      ),
+      [
+        "Passed",
+        "No failures",
+        "No failures",
+        "Incomplete",
+        "Failed",
+        "Unknown",
+      ],
+    );
+    const select = [...state.host.querySelectorAll("label")]
+      .find((el) => el.textContent.includes("Result status"))
+      .querySelector("select");
+    await act(async () => {
+      select.value = "no-failures";
+      select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    });
+    assert.deepEqual(
+      [...state.host.querySelectorAll("article h3")].map(
+        (el) => el.textContent,
+      ),
+      ["Group 1", "Group 2"],
+    );
   } finally {
     await state.cleanup();
   }
