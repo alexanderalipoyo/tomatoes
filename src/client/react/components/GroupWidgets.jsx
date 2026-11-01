@@ -52,6 +52,78 @@ export function GroupDashboard({
   canManage = false,
 }) {
   const [selected, setSelected] = useState(null);
+  const [query, setQuery] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const groupNames = useMemo(
+    () =>
+      [...new Set(groups.map((group) => group.name))].sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [groups],
+  );
+  const subgroups = useMemo(
+    () => [
+      ...new Set(
+        groupNames.flatMap((name) => {
+          const match = name.match(/^((?:E2E|SMOKE)\s*:\s*.+?)\s+-\s+.+$/);
+          return match ? [match[1]] : [];
+        }),
+      ),
+    ],
+    [groupNames],
+  );
+  const [status, setStatus] = useState("all");
+  const [sort, setSort] = useState("saved");
+  const entries = useMemo(
+    () =>
+      groups.map((group) => {
+        const stats = Groups.groupStats(report, group);
+        const result = !stats.counts.total
+          ? "empty"
+          : stats.counts.failed
+            ? "failed"
+            : stats.counts.unknown
+              ? "unknown"
+              : stats.counts.passed
+                ? "passed"
+                : "incomplete";
+        return { group, stats, result };
+      }),
+    [groups, report],
+  );
+  const visible = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    const filtered = entries.filter(
+      ({ group, result }) =>
+        (!groupName ||
+          group.name === groupName ||
+          (subgroups.includes(groupName) &&
+            group.name.startsWith(groupName + " - "))) &&
+        (status === "all" || status === result) &&
+        (!search ||
+          [group.name, ...group.paths].some((value) =>
+            value.toLowerCase().includes(search),
+          )),
+    );
+    const compare = {
+      "name-asc": (a, b) => a.group.name.localeCompare(b.group.name),
+      "name-desc": (a, b) => b.group.name.localeCompare(a.group.name),
+      failed: (a, b) => b.stats.counts.failed - a.stats.counts.failed,
+      "pass-asc": (a, b) =>
+        (a.stats.passRate ?? Infinity) - (b.stats.passRate ?? Infinity),
+      "pass-desc": (a, b) =>
+        (b.stats.passRate ?? -Infinity) - (a.stats.passRate ?? -Infinity),
+      tests: (a, b) => b.stats.counts.total - a.stats.counts.total,
+      duration: (a, b) => b.stats.duration - a.stats.duration,
+    }[sort];
+    return compare ? filtered.sort(compare) : filtered;
+  }, [entries, query, groupName, subgroups, status, sort]);
+  function resetDisplay() {
+    setQuery("");
+    setGroupName("");
+    setStatus("all");
+    setSort("saved");
+  }
   return (
     <>
       {error ? (
@@ -73,9 +145,99 @@ export function GroupDashboard({
         </div>
       ) : (
         <>
+          <div
+            className="custom-widget-controls"
+            role="group"
+            aria-label="Widget display controls"
+          >
+            <label className="custom-widget-search">
+              Search widgets
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Group name or path"
+              />
+            </label>
+            <label>
+              Group name
+              <select
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+              >
+                <option value="">All groups</option>
+                {!!subgroups.length && (
+                  <optgroup label="Subgroups">
+                    {subgroups.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Individual groups">
+                  {groupNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </label>
+            <label>
+              Result status
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+              >
+                <option value="all">All statuses</option>
+                <option value="failed">Failed</option>
+                <option value="passed">Passed</option>
+                <option value="incomplete">Incomplete</option>
+                <option value="unknown">Unknown</option>
+                <option value="empty">No matching tests</option>
+              </select>
+            </label>
+            <label>
+              Sort widgets
+              <select
+                value={sort}
+                onChange={(event) => setSort(event.target.value)}
+              >
+                <option value="saved">Saved order</option>
+                <option value="name-asc">Name: A to Z</option>
+                <option value="name-desc">Name: Z to A</option>
+                <option value="failed">Failed tests: most first</option>
+                <option value="pass-asc">Pass rate: lowest first</option>
+                <option value="pass-desc">Pass rate: highest first</option>
+                <option value="tests">Total tests: most first</option>
+                <option value="duration">Duration: longest first</option>
+              </select>
+            </label>
+            <button
+              className="button"
+              onClick={resetDisplay}
+              disabled={
+                !query && !groupName && status === "all" && sort === "saved"
+              }
+            >
+              Reset display
+            </button>
+          </div>
+          <p className="widget-footnote" role="status">
+            Showing {visible.length} of {groups.length} widgets
+          </p>
+          {!visible.length && (
+            <div className="custom-widget-empty">
+              <h3>No widgets match</h3>
+              <p>Try another name, path, or result status.</p>
+              <button className="button" onClick={resetDisplay}>
+                Clear filters
+              </button>
+            </div>
+          )}
           <div className="custom-widget-grid">
-            {groups.map((group) => {
-              const stats = Groups.groupStats(report, group);
+            {visible.map(({ group, stats, result }) => {
               return (
                 <article
                   key={group.id}
@@ -89,19 +251,7 @@ export function GroupDashboard({
                         {group.paths.length} paths
                       </p>
                     </div>
-                    {!!stats.counts.total && (
-                      <Badge
-                        status={
-                          stats.counts.failed
-                            ? "failed"
-                            : stats.counts.unknown
-                              ? "unknown"
-                              : stats.counts.passed
-                                ? "passed"
-                                : "incomplete"
-                        }
-                      />
-                    )}
+                    {!!stats.counts.total && <Badge status={result} />}
                   </div>
                   <GroupMetrics
                     stats={stats}

@@ -1286,3 +1286,190 @@ test("pending access blocks rapid repeated checks and preserves useful feedback"
     await state.cleanup();
   }
 });
+
+test("custom widgets combine search and status, sort metrics, and reset saved order", async () => {
+  const { GroupDashboard } = loadComponent("components/GroupWidgets.jsx");
+  const report = normalizeReport({
+    stats: {},
+    results: [
+      {
+        file: "cypress/e2e/a/spec.cy.js",
+        tests: [{ state: "passed", duration: 100 }],
+        suites: [],
+      },
+      {
+        file: "cypress/smoke/b/spec.cy.js",
+        tests: [
+          { state: "failed", duration: 500 },
+          { state: "failed", duration: 300 },
+        ],
+        suites: [],
+      },
+      {
+        file: "cypress/e2e/c/spec.cy.js",
+        tests: [{ state: "pending", duration: 0 }],
+        suites: [],
+      },
+    ],
+  });
+  const groups = [
+    {
+      id: "b",
+      name: "Zulu smoke",
+      paths: ["cypress/smoke/b"],
+      metrics: ["passRate"],
+    },
+    { id: "a", name: "Alpha", paths: ["cypress/e2e/a"], metrics: ["passRate"] },
+    {
+      id: "c",
+      name: "Pending",
+      paths: ["cypress/e2e/c"],
+      metrics: ["passRate"],
+    },
+    { id: "empty", name: "Empty", paths: ["missing"], metrics: ["passRate"] },
+  ];
+  const original = JSON.stringify(groups);
+  const state = await mount(
+    React.createElement(GroupDashboard, {
+      groups,
+      report,
+      sourceName: "test",
+      duration: String,
+      onSpec: () => {},
+    }),
+  );
+  const names = () =>
+    [...state.host.querySelectorAll("article h3")].map((el) => el.textContent);
+  const change = async (label, value) =>
+    act(async () => {
+      const field = [...state.host.querySelectorAll("label")]
+        .find((el) => el.textContent.includes(label))
+        .querySelector("input,select");
+      const prototype =
+        field.tagName === "INPUT"
+          ? dom.window.HTMLInputElement.prototype
+          : dom.window.HTMLSelectElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, "value").set.call(
+        field,
+        value,
+      );
+      field.dispatchEvent(
+        new dom.window.Event(field.tagName === "INPUT" ? "input" : "change", {
+          bubbles: true,
+        }),
+      );
+    });
+  try {
+    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending", "Empty"]);
+    await change("Group name", "Alpha");
+    assert.deepEqual(names(), ["Alpha"]);
+    await change("Result status", "failed");
+    assert.equal(names().length, 0);
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Reset display")
+        .click(),
+    );
+    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending", "Empty"]);
+    await change("Group name", "Zulu smoke");
+    await change("Search widgets", "  CYPRESS/SMOKE  ");
+    assert.deepEqual(names(), ["Zulu smoke"]);
+    await change("Result status", "passed");
+    assert.equal(names().length, 0);
+    assert.match(state.host.textContent, /No widgets match/);
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Clear filters")
+        .click(),
+    );
+    assert.equal(state.host.querySelectorAll("select")[0].value, "");
+    for (const [sort, expected] of [
+      ["name-asc", ["Alpha", "Empty", "Pending", "Zulu smoke"]],
+      ["name-desc", ["Zulu smoke", "Pending", "Empty", "Alpha"]],
+      ["failed", ["Zulu smoke", "Alpha", "Pending", "Empty"]],
+      ["pass-asc", ["Zulu smoke", "Pending", "Alpha", "Empty"]],
+      ["pass-desc", ["Alpha", "Zulu smoke", "Pending", "Empty"]],
+      ["duration", ["Zulu smoke", "Alpha", "Pending", "Empty"]],
+      ["tests", ["Zulu smoke", "Alpha", "Pending", "Empty"]],
+    ]) {
+      await change("Sort widgets", sort);
+      assert.deepEqual(names(), expected, sort);
+    }
+    for (const [status, expected] of [
+      ["passed", "Alpha"],
+      ["failed", "Zulu smoke"],
+      ["incomplete", "Pending"],
+      ["empty", "Empty"],
+    ]) {
+      await change("Result status", status);
+      assert.deepEqual(names(), [expected]);
+    }
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Reset display")
+        .click(),
+    );
+    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending", "Empty"]);
+    assert.equal(JSON.stringify(groups), original);
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("custom widget subgroup dropdown includes every partner's roles without crossing test types", async () => {
+  const { GroupDashboard } = loadComponent("components/GroupWidgets.jsx");
+  const names = [
+    "E2E : HIPAA COMP - EMPLOYEE",
+    "E2E : HIPAA COMP - MANAGER",
+    "E2E : INTERNAL BPP - MANAGER",
+    "SMOKE : HIPAA COMP - PARTNER ADMIN",
+    "E2E : HIPAA COMP EXTRA - MANAGER",
+  ];
+  const groups = names.map((name, index) => ({
+    id: String(index),
+    name,
+    paths: ["cypress/e2e/example"],
+    metrics: ["passRate"],
+  }));
+  const state = await mount(
+    React.createElement(GroupDashboard, {
+      groups,
+      report: { specs: [] },
+      sourceName: "test",
+      duration: String,
+      onSpec: () => {},
+    }),
+  );
+  const select = [...state.host.querySelectorAll("label")]
+    .find((el) => el.textContent.includes("Group name"))
+    .querySelector("select");
+  const choose = async (value) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(
+        dom.window.HTMLSelectElement.prototype,
+        "value",
+      ).set.call(select, value);
+      select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    });
+  const visible = () =>
+    [...state.host.querySelectorAll("article h3")].map((el) => el.textContent);
+  try {
+    assert.ok(
+      [...select.querySelectorAll('optgroup[label="Subgroups"] option')].some(
+        (el) => el.textContent === "E2E : INTERNAL BPP",
+      ),
+    );
+    await choose("E2E : HIPAA COMP");
+    assert.deepEqual(visible(), names.slice(0, 2));
+    await choose("E2E : INTERNAL BPP");
+    assert.deepEqual(visible(), [names[2]]);
+    await choose("SMOKE : HIPAA COMP");
+    assert.deepEqual(visible(), [names[3]]);
+    await choose(names[0]);
+    assert.deepEqual(visible(), [names[0]]);
+    await choose("");
+    assert.deepEqual(visible(), names);
+  } finally {
+    await state.cleanup();
+  }
+});
