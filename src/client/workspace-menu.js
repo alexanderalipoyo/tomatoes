@@ -113,7 +113,7 @@ async function switchWorkspaceOrganization(id) {
   });
   document.querySelector("#workspace-menu-profile").onclick = () => {
     close();
-    location.hash = "profile";
+    location.hash = ReportLinks.tab("profile");
   };
   const signOutButtons = document.querySelectorAll("[data-sign-out]");
   signOutButtons.forEach((button) => {

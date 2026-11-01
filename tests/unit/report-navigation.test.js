@@ -41,6 +41,8 @@ test("workspace and history routes bypass report lookup even with malformed or p
     "#workspace-settings",
     "#team",
     "#history",
+    "#my-profile",
+    "#import-history",
   ]) {
     const f = fixture(hash);
     vm.runInNewContext("failedReportLinkKey = location.search", f.context);
@@ -57,6 +59,22 @@ test("entering a report page after an independent page lazily restores the selec
   await pinned.context.navigateReportLocation();
   assert.equal(pinned.calls[0].historyId, "a".repeat(64));
   assert.equal(pinned.calls[0].fromURL, true);
+});
+
+test("readable report URLs restore the exact shared report", async () => {
+  for (const hash of [
+    "#latest-run",
+    "#test-results",
+    "#failed-tests",
+    "#compare-runs",
+    "#flaky-tests",
+    "#report-settings",
+  ]) {
+    const f = fixture(hash, "?server=" + "b".repeat(64));
+    await f.context.navigateReportLocation();
+    assert.equal(f.calls[0].serverId, "b".repeat(64));
+    assert.equal(f.calls[0].fromURL, true);
+  }
 });
 test("returning to an unavailable report restores its error view rather than leaving workspace content visible", async () => {
   const f = fixture("#results", "?import=" + "a".repeat(64));

@@ -6,7 +6,7 @@ export function MobileNavigation() {
       aria-labelledby="navigation-title"
     >
       <div className="mobile-navigation-heading">
-        <a href="#runs" className="mobile-drawer-brand">
+        <a href="#latest-run" className="mobile-drawer-brand">
           <img src="/assets/tomatoes-logo.svg" width="38" height="38" alt="" />
           <strong id="navigation-title">{"tomatoes"}</strong>
         </a>
@@ -44,24 +44,24 @@ export function MobileNavigation() {
         <option value="">Select a project</option>
       </select>
       <nav aria-label="Mobile project navigation">
-        <a href="#runs" data-view="runs">
+        <a href="#latest-run" data-view="runs">
           <span data-icon="runs"></span>
           {"Latest run"}
         </a>
-        <a href="#results" data-view="results">
+        <a href="#test-results" data-view="results">
           <span data-icon="folder"></span>
           {"Test results"}
         </a>
-        <a href="#failures" data-view="failures">
+        <a href="#failed-tests" data-view="failures">
           <span data-icon="failure"></span>
           {"Failed tests"}
         </a>
-        <a href="#history" data-view="history">
+        <a href="#import-history" data-view="history">
           <span data-icon="clock"></span>
           {"Import history"}
         </a>
         <div className="side-label">{"INSIGHTS"}</div>
-        <a href="#compare" data-view="compare">
+        <a href="#compare-runs" data-view="compare">
           <span data-icon="branch"></span>
           {"Compare runs"}
         </a>
@@ -69,7 +69,7 @@ export function MobileNavigation() {
           <span data-icon="chart"></span>
           {"Analytics"}
         </a>
-        <a href="#flaky" data-view="flaky">
+        <a href="#flaky-tests" data-view="flaky">
           <span data-icon="flake"></span>
           {"Flaky tests"}
         </a>
@@ -79,7 +79,7 @@ export function MobileNavigation() {
           <span data-icon="folder"></span>
           {"Projects"}
         </a>
-        <a href="#profile" data-view="profile">
+        <a href="#my-profile" data-view="profile">
           <span data-icon="profile"></span>
           {"My profile"}
         </a>
@@ -91,7 +91,7 @@ export function MobileNavigation() {
           <span data-icon="settings"></span>
           {"Settings"}
         </a>
-        <a href="#settings" data-view="settings">
+        <a href="#report-settings" data-view="settings">
           <span data-icon="chart"></span>
           {"Report settings"}
         </a>

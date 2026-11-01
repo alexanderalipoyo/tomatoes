@@ -66,7 +66,7 @@ export function GroupDashboard({
             to see.
           </p>
           {canManage && (
-            <a className="button" href="#settings">
+            <a className="button" href="#report-settings">
               Set up your widgets
             </a>
           )}
@@ -294,7 +294,7 @@ export function GroupWidgetEditor({
           </h2>
           <p>Create named spec groups for your Latest run dashboard.</p>
         </div>
-        <a className="widget-link" href="#runs">
+        <a className="widget-link" href="#latest-run">
           View dashboard →
         </a>
       </div>

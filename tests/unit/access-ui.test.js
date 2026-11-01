@@ -22,6 +22,7 @@ function fixture(t, role) {
     MutationObserver: dom.window.MutationObserver,
     requestAnimationFrame: () => {},
     AccessPolicy: Policy,
+    ReportLinks: require("../../src/shared/report-links"),
     authStatus: {
       enabled: true,
       authenticated: true,

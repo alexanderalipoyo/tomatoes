@@ -32,9 +32,12 @@ test("analytics tracks hash pages once and strips report identifiers and reset t
   assert.deepEqual(views, [{ route: "/app/results", path: "/app/results" }]);
   listeners.hashchange();
   assert.equal(views.length, 1);
+  browser.location.hash = "#test-results";
+  listeners.hashchange();
+  assert.equal(views[1].path, "/app/test-results");
   browser.location.hash = "#reset-password?token=private-reset-token";
   listeners.hashchange();
-  assert.equal(views[1].path, "/app/reset-password");
+  assert.equal(views[2].path, "/app/reset-password");
   const event = options.beforeSend({
     type: "pageview",
     url: "https://example.com/?import=private-report#reset-password?token=private-reset-token",

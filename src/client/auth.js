@@ -93,7 +93,7 @@ function hideAuthScreen() {
 }
 function renderAuthScreen(message = "") {
   const version = ++authRenderVersion;
-  if (!isAuthRoute()) authReturnHash = location.hash.slice(1) || "runs";
+  if (!isAuthRoute()) authReturnHash = ReportLinks.view(location.hash);
   document.body.classList.add("auth-mode");
   document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
   const popover = document.querySelector("#workspace-menu");
@@ -183,7 +183,9 @@ async function submitAuth(fields, route, version) {
   if (version !== authRenderVersion) return;
   hideAuthScreen();
   const url = new URL(location.href);
-  url.hash = login.passwordChangeRecommended ? "profile" : authReturnHash;
+  url.hash = ReportLinks.tab(
+    login.passwordChangeRecommended ? "profile" : authReturnHash,
+  );
   history.replaceState(null, "", url);
   await navigateReportLocation();
   showToast(
@@ -225,7 +227,7 @@ async function refreshSessionAccess() {
       return;
     }
     if (before !== sessionAccessSignature()) {
-      const current = location.hash.slice(1) || "runs";
+      const current = ReportLinks.view(location.hash);
       if (!canAccessView(current) || current === "projects") navigate();
     }
   })().finally(() => {

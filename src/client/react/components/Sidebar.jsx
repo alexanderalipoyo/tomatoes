@@ -1,7 +1,7 @@
 export function Sidebar() {
   return (
     <aside className="sidebar">
-      <a className="brand" href="#runs" aria-label="Tomatoes home">
+      <a className="brand" href="#latest-run" aria-label="Tomatoes home">
         <img
           className="brand-mark"
           src="/assets/tomatoes-logo.svg"
@@ -45,23 +45,23 @@ export function Sidebar() {
         <option value="">Select a project</option>
       </select>
       <nav aria-label="Project navigation">
-        <a href="#runs" data-view="runs" className="active">
+        <a href="#latest-run" data-view="runs" className="active">
           <span data-icon="runs"></span>
           {"Latest run"}
           <span className="nav-count">{"1"}</span>
         </a>
-        <a href="#results" data-view="results">
+        <a href="#test-results" data-view="results">
           <span data-icon="folder"></span>
           {"Test results"}
         </a>
-        <a href="#failures" data-view="failures">
+        <a href="#failed-tests" data-view="failures">
           <span data-icon="failure"></span>
           {"Failed tests"}
           <span className="nav-count" id="failure-count">
             {"—"}
           </span>
         </a>
-        <a href="#history" data-view="history">
+        <a href="#import-history" data-view="history">
           <span data-icon="clock"></span>
           {"Import history"}
           <span className="nav-count" id="history-count">
@@ -69,7 +69,7 @@ export function Sidebar() {
           </span>
         </a>
         <div className="side-label analytics-label">{"INSIGHTS"}</div>
-        <a href="#compare" data-view="compare">
+        <a href="#compare-runs" data-view="compare">
           <span data-icon="branch"></span>
           {"Compare runs"}
         </a>
@@ -77,7 +77,7 @@ export function Sidebar() {
           <span data-icon="chart"></span>
           {"Analytics"}
         </a>
-        <a href="#flaky" data-view="flaky">
+        <a href="#flaky-tests" data-view="flaky">
           <span data-icon="flake"></span>
           {"Flaky tests"}
         </a>
@@ -87,7 +87,7 @@ export function Sidebar() {
           <span data-icon="folder"></span>
           {"Projects"}
         </a>
-        <a href="#profile" data-view="profile">
+        <a href="#my-profile" data-view="profile">
           <span data-icon="profile"></span>
           {"My profile"}
         </a>
@@ -99,7 +99,7 @@ export function Sidebar() {
           <span data-icon="settings"></span>
           {"Settings"}
         </a>
-        <a href="#settings" data-view="settings">
+        <a href="#report-settings" data-view="settings">
           <span data-icon="chart"></span>
           {"Report settings"}
         </a>

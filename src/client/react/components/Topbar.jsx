@@ -18,7 +18,11 @@ export function Topbar() {
           <path d="M4 6h16M4 12h16M4 18h16"></path>
         </svg>
       </button>
-      <a className="mobile-wordmark" href="#runs" aria-label="Tomatoes home">
+      <a
+        className="mobile-wordmark"
+        href="#latest-run"
+        aria-label="Tomatoes home"
+      >
         <img src="/assets/tomatoes-logo.svg" width="28" height="28" alt="" />
         <strong data-workspace-name>{"Select a project"}</strong>
       </a>

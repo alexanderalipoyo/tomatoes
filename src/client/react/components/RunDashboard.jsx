@@ -245,7 +245,7 @@ export function DashboardWidgets({
         title="Failure hotspots"
         description="Specs ranked by failed tests"
         action={
-          <a className="widget-link" href="#failures">
+          <a className="widget-link" href="#failed-tests">
             All failures →
           </a>
         }

@@ -25,7 +25,9 @@ npm install
 npm start
 ```
 
-Open [Tomatoes](http://localhost:3000/#runs).
+Open [Tomatoes](http://localhost:3000/#latest-run).
+
+Each tab has a readable URL, such as `#test-results`, `#failed-tests`, `#import-history`, or `#report-settings`. The browser tab title also identifies the current page. Report identifiers remain in the URL so saved links reopen the same report; older URLs such as `#runs` and `#results` still work.
 
 The project includes a sample run in `examples/reports/results.json`, originally supplied as `index.json`. You can explore it immediately or choose **Import report** to open your own JSON file.
 

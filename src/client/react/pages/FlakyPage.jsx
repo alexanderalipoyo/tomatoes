@@ -93,7 +93,7 @@ export function FlakyPage({
             Import another run with the same test names and spec paths to
             compare outcomes.
           </p>
-          <a className="button" href="#history">
+          <a className="button" href="#import-history">
             View import history
           </a>
         </article>

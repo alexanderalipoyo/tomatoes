@@ -1,4 +1,24 @@
 (function (root) {
+  const tabs = {
+    runs: "latest-run",
+    results: "test-results",
+    failures: "failed-tests",
+    history: "import-history",
+    compare: "compare-runs",
+    flaky: "flaky-tests",
+    profile: "my-profile",
+    settings: "report-settings",
+  };
+  const views = Object.fromEntries(
+    Object.entries(tabs).map(([view, tab]) => [tab, view]),
+  );
+  function view(hash = "") {
+    const name = hash.replace(/^#/, "").split("?")[0];
+    return views[name] || name || "runs";
+  }
+  function tab(name) {
+    return tabs[name] || name;
+  }
   const validId = (id) => typeof id === "string" && /^[a-f0-9]{64}$/.test(id);
   function read(value) {
     const url = new URL(value, "http://localhost");
@@ -28,8 +48,8 @@
       url.searchParams.set("server", serverId);
     }
     if (view) {
-      url.hash = view;
-      if (!["results", "failures"].includes(view))
+      url.hash = tab(view);
+      if (!["results", "failures"].includes(views[view] || view))
         url.searchParams.delete("spec");
     }
     return url.href;
@@ -60,7 +80,7 @@
       "This report is not available in this browser. Import it again, or use a link that includes an available server copy.",
     );
   }
-  const api = { validId, read, build, resolve };
+  const api = { validId, view, tab, read, build, resolve };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ReportLinks = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

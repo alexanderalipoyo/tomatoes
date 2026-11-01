@@ -66,7 +66,7 @@ export function ComparisonForm({ entries, selection, formatDate }) {
         <div className="history-empty">
           <h3>Import another report to compare runs</h3>
           <p>Two distinct saved reports are required.</p>
-          <a className="button" href="#history">
+          <a className="button" href="#import-history">
             Open history
           </a>
         </div>

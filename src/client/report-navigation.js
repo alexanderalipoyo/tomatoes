@@ -98,7 +98,7 @@ function isReportIndependentView() {
     "workspace-settings",
     "team",
     "history",
-  ].includes(location.hash.slice(1));
+  ].includes(ReportLinks.view(location.hash));
 }
 async function navigateReportLocation() {
   if (typeof authStatus !== "undefined" && authStatus?.enabled)
@@ -173,12 +173,12 @@ async function navigateReportLocation() {
         const latest = await teamRequest("/api/runs?limit=1");
         if (latest.runs.length) {
           url.searchParams.set("server", latest.runs[0].id);
-          url.hash = "runs";
+          url.hash = ReportLinks.tab("runs");
           history.replaceState(null, "", url);
           await navigateReportLocation();
           return;
         }
-        url.hash = "profile";
+        url.hash = ReportLinks.tab("profile");
       } else url.hash = "projects";
       history.replaceState(null, "", url);
       navigate();

@@ -6,7 +6,7 @@ export function RunOverview() {
       <div className="dashboard-grid" id="dashboard-widgets"></div>
       <div className="dashboard-actions">
         <span>{"Explore the complete run, spec by spec."}</span>
-        <a className="button" href="#results">
+        <a className="button" href="#test-results">
           {"Browse all results →"}
         </a>
       </div>

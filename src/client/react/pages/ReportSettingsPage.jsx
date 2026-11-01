@@ -64,7 +64,7 @@ export function ReportSettingsPage({
               <button className="button" id="revalidate-report">
                 Revalidate report
               </button>
-              <a className="button" href="#history">
+              <a className="button" href="#import-history">
                 Import history →
               </a>
               <button className="button" type="button" id="export-run-summary">

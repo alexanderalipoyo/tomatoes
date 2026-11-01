@@ -28,6 +28,14 @@ async function startWebAnalytics({
     "login",
     "forgot-password",
     "reset-password",
+    "latest-run",
+    "test-results",
+    "failed-tests",
+    "import-history",
+    "compare-runs",
+    "flaky-tests",
+    "my-profile",
+    "report-settings",
   ]);
   let previous;
   const currentPath = () => {

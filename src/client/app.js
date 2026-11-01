@@ -233,7 +233,7 @@ async function openWorkspaceProject(id) {
     url.searchParams.set("project", id);
     if (payload.runs.length) {
       url.searchParams.set("server", payload.runs[0].id);
-      url.hash = "runs";
+      url.hash = ReportLinks.tab("runs");
     } else {
       report = null;
       currentFile = null;
@@ -333,8 +333,8 @@ function openTests(spec, status = "all") {
   $("#status").value = status;
   syncReportSpecURL();
   page = 1;
-  if (location.hash !== "#results") {
-    location.hash = "results";
+  if (ReportLinks.view(location.hash) !== "results") {
+    location.hash = ReportLinks.tab("results");
   }
   navigate();
   $("#results-section").scrollIntoView({ behavior: "smooth" });
@@ -362,7 +362,7 @@ function navigate(force = false) {
   }
   hideAuthScreen();
   if (loading && force !== true) return;
-  view = location.hash.slice(1) || "runs";
+  view = ReportLinks.view(location.hash);
   if (view === "team") {
     const url = new URL(location.href);
     url.hash = "workspace-settings";
@@ -473,6 +473,13 @@ function navigate(force = false) {
       "Manage display preferences, inspect your source, and export reports.",
     ],
   };
+  const canonicalTab = ReportLinks.tab(view);
+  if (location.hash !== "#" + canonicalTab) {
+    const url = new URL(location.href);
+    url.hash = canonicalTab;
+    history.replaceState(null, "", url);
+  }
+  document.title = `${labels[view][0]} | Tomatoes`;
   $("#page-title").textContent =
     view === "runs" && isPreviousImport() ? "Previous import" : labels[view][0];
   $("#page-description").textContent =

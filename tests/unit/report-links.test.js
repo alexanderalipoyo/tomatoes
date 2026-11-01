@@ -1,8 +1,48 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { read, build, resolve } = require("../../src/shared/report-links");
+const {
+  read,
+  build,
+  resolve,
+  view,
+  tab,
+} = require("../../src/shared/report-links");
 const first = "a".repeat(64),
   second = "b".repeat(64);
+
+test("each navigation tab has a readable URL while legacy links keep their page", () => {
+  for (const [internal, readable] of Object.entries({
+    runs: "latest-run",
+    results: "test-results",
+    failures: "failed-tests",
+    history: "import-history",
+    compare: "compare-runs",
+    analytics: "analytics",
+    flaky: "flaky-tests",
+    profile: "my-profile",
+    settings: "report-settings",
+    projects: "projects",
+    users: "users",
+    "workspace-settings": "workspace-settings",
+    "role-access": "role-access",
+    integrations: "integrations",
+  })) {
+    assert.equal(tab(internal), readable);
+    assert.equal(view("#" + readable), internal);
+    assert.equal(view("#" + internal), internal);
+    const url = new URL(
+      build("https://example.com/?spec=4", { serverId: first, view: internal }),
+    );
+    assert.equal(url.hash, "#" + readable);
+    assert.equal(read(url.href).serverId, first);
+    assert.equal(
+      url.searchParams.has("spec"),
+      ["results", "failures"].includes(internal),
+    );
+  }
+  assert.equal(view("#reset-password?token=private-token"), "reset-password");
+  assert.equal(view(""), "runs");
+});
 test("report URLs retain the exact import while switching views", () => {
   const dashboard = build("http://localhost:3000/?theme=light#history", {
     importId: first,

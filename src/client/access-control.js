@@ -233,9 +233,9 @@ function applyFeatureAccess() {
       quickNav.dataset.accessSignature = signature;
     }
     if (typeof location !== "undefined")
-      quickNav.value = location.hash.slice(1) || "runs";
+      quickNav.value = ReportLinks.view(location.hash);
     quickNav.onchange = () => {
-      location.hash = quickNav.value;
+      location.hash = ReportLinks.tab(quickNav.value);
     };
   }
   document

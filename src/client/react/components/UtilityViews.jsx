@@ -174,10 +174,10 @@ export function AccessDenied() {
         Your role cannot open this page. Contact your organization
         administrator.
       </p>
-      <a className="button" href="#runs">
+      <a className="button" href="#latest-run">
         Latest run
       </a>{" "}
-      <a className="button" href="#profile">
+      <a className="button" href="#my-profile">
         My profile
       </a>
     </article>

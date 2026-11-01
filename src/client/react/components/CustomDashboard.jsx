@@ -14,7 +14,11 @@ export function CustomDashboard() {
           </h2>
           <p id="custom-dashboard-source"></p>
         </div>
-        <a className="button" href="#settings" data-access-view="settings">
+        <a
+          className="button"
+          href="#report-settings"
+          data-access-view="settings"
+        >
           {"My widget settings"}
         </a>
       </div>

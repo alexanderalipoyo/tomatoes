@@ -170,7 +170,7 @@ export function AnalyticsPage({
               <h2>Saved-run trends</h2>
               <p>Registered-test pass rate, ordered by run start</p>
             </div>
-            <a className="widget-link" href="#history">
+            <a className="widget-link" href="#import-history">
               History →
             </a>
           </div>
