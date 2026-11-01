@@ -29,6 +29,7 @@ async function startWebAnalytics({
     "forgot-password",
     "reset-password",
     "latest-run",
+    "previous-runs",
     "test-results",
     "failed-tests",
     "import-history",

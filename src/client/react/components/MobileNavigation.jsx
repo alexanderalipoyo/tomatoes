@@ -48,6 +48,10 @@ export function MobileNavigation() {
           <span data-icon="runs"></span>
           {"Latest run"}
         </a>
+        <a href="#previous-runs" data-view="previous-runs">
+          <span data-icon="clock"></span>
+          {"Previous runs"}
+        </a>
         <a href="#test-results" data-view="results">
           <span data-icon="folder"></span>
           {"Test results"}

@@ -174,6 +174,7 @@
           deletedAt: null,
           archivedAt: previous?.archivedAt || null,
           serverId: previous?.serverId || null,
+          serverReceivedAt: previous?.serverReceivedAt || null,
           counts: { ...report.counts },
           specs: report.specs.length,
           passRate: report.passRate,

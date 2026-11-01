@@ -1051,6 +1051,7 @@
   }
   const pages = {
     runs: "Latest run",
+    "previous-runs": "Latest run",
     results: "Test results",
     failures: "Failed tests",
     history: "Import history",

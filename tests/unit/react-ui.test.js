@@ -68,6 +68,22 @@ async function mount(component) {
     },
   };
 }
+test("desktop and mobile navigation separate Previous runs from Latest run", () => {
+  const { Sidebar } = loadComponent("components/Sidebar.jsx");
+  const { MobileNavigation } = loadComponent("components/MobileNavigation.jsx");
+  for (const Component of [Sidebar, MobileNavigation]) {
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(React.createElement(Component));
+    assert.equal(
+      host.querySelector('[data-view="runs"]').getAttribute("href"),
+      "#latest-run",
+    );
+    const previous = host.querySelector('[data-view="previous-runs"]');
+    assert.equal(previous.getAttribute("href"), "#previous-runs");
+    assert.match(previous.textContent, /Previous runs/);
+  }
+});
+
 test("React auth submits once while pending and renders server errors as text", async () => {
   let reject,
     calls = 0;

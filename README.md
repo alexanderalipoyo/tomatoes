@@ -29,6 +29,8 @@ Open [Tomatoes](http://localhost:3000/#latest-run).
 
 Each tab has a readable URL, such as `#test-results`, `#failed-tests`, `#import-history`, or `#report-settings`. The browser tab title also identifies the current page. Report identifiers remain in the URL so saved links reopen the same report; older URLs such as `#runs` and `#results` still work.
 
+**Latest run** opens the newest active import in the selected project, using import time rather than the report's execution date. Older report links open their dashboard under **Previous runs** (`#previous-runs`). Opening an older report does not replace Latest run; choose Latest run to return to the newest import. Previous runs shows an empty state when the project has only one active report.
+
 The project includes a sample run in `examples/reports/results.json`, originally supplied as `index.json`. You can explore it immediately or choose **Import report** to open your own JSON file.
 
 ## Bring in a Cypress report

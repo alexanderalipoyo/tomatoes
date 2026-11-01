@@ -373,6 +373,7 @@ function navigate(force = false) {
   if (
     ![
       "runs",
+      "previous-runs",
       "results",
       "failures",
       "analytics",
@@ -442,6 +443,10 @@ function navigate(force = false) {
       "Latest run",
       "A snapshot of test health, failures, and execution from your latest run.",
     ],
+    "previous-runs": [
+      "Previous runs",
+      "Dashboard and test results for the selected earlier import in this project.",
+    ],
     compare: [
       "Compare runs",
       "Identify regressions, fixes, and performance changes between saved reports.",
@@ -480,13 +485,16 @@ function navigate(force = false) {
     history.replaceState(null, "", url);
   }
   document.title = `${labels[view][0]} | Tomatoes`;
-  $("#page-title").textContent =
-    view === "runs" && isPreviousImport() ? "Previous import" : labels[view][0];
-  $("#page-description").textContent =
-    view === "runs" && isPreviousImport()
-      ? "Dashboard and test results for the selected saved report."
-      : labels[view][1];
+  $("#page-title").textContent = labels[view][0];
+  $("#page-description").textContent = labels[view][1];
   renderWorkspaceIdentity();
+  document
+    .querySelectorAll(
+      'nav a[data-view="runs"], nav a[data-view="previous-runs"]',
+    )
+    .forEach((link) => {
+      link.href = dashboardTabHref(link.dataset.view);
+    });
   $("#refresh").hidden = isReportIndependentView();
   if (isReportIndependentView()) {
     $("#load-state").hidden = true;
@@ -495,14 +503,20 @@ function navigate(force = false) {
       $("#report-footer").textContent = "Your local workspace";
     }
   }
-  $("#overview").hidden = view !== "runs";
+  const dashboard = ["runs", "previous-runs"].includes(view);
+  $("#overview").hidden = !dashboard;
+  $("#previous-run-notice").hidden = view !== "previous-runs";
   $("#results-section").hidden = !["results", "failures"].includes(view);
-  $("#alternate").hidden = ["runs", "results", "failures", "history"].includes(
-    view,
-  );
-  $("#dashboard-widgets").hidden = view !== "runs";
-  $("#custom-dashboard").hidden = view !== "runs";
-  $(".dashboard-actions").hidden = view !== "runs";
+  $("#alternate").hidden = [
+    "runs",
+    "previous-runs",
+    "results",
+    "failures",
+    "history",
+  ].includes(view);
+  $("#dashboard-widgets").hidden = !dashboard;
+  $("#custom-dashboard").hidden = !dashboard;
+  $(".dashboard-actions").hidden = !dashboard;
   $("#history-section").hidden = view !== "history";
   applyFeatureAccess();
   if (!canAccessView(view)) {
@@ -563,11 +577,7 @@ function navigate(force = false) {
   renderResults();
 }
 function isPreviousImport() {
-  return Boolean(
-    activeHistoryId &&
-    historyEntries.length &&
-    historyEntries[0].id !== activeHistoryId,
-  );
+  return selectedDashboardView === "previous-runs";
 }
 function historyNotice(message, type = "info") {
   if (message) showToast(message, type);
@@ -669,6 +679,7 @@ async function loadReport(file = currentFile, options = {}) {
     currentFile,
     activeHistoryId,
     sourceName,
+    selectedDashboardView,
     page,
     grouping,
     search: $("#search").value,
@@ -872,7 +883,11 @@ async function loadReport(file = currentFile, options = {}) {
       if (result.saved && result.run) slackRunId = result.run.id;
     }
     if (serverCopy && activeHistoryId) {
-      await rememberReportServerLink(activeHistoryId, serverCopy.run.id);
+      await rememberReportServerLink(
+        activeHistoryId,
+        serverCopy.run.id,
+        serverCopy.run.receivedAt,
+      );
       try {
         if (!previousHistoryIds.has(activeHistoryId)) {
           await ImportHistory.updateDetails(activeHistoryId, {
@@ -897,14 +912,22 @@ async function loadReport(file = currentFile, options = {}) {
       history.replaceState(null, "", nextURL);
       appliedReportSpecLink = null;
     }
+    const dashboard =
+      options.openDashboard ||
+      options.recordImport ||
+      ["runs", "previous-runs"].includes(ReportLinks.view(location.hash));
+    if (!pendingReportNavigation) {
+      await classifyDashboard(options);
+      renderSummary();
+    }
     updateReportURL({
       replace: Boolean(
         options.restore ||
         options.fromURL ||
         (!options.recordImport && !options.openDashboard),
       ),
-      dashboard: options.openDashboard,
-      serverId: options.serverId,
+      dashboard,
+      serverId: options.serverId || slackRunId,
     });
     $("#run-summary .eyebrow").textContent = isPreviousImport()
       ? "PREVIOUS IMPORT"
@@ -919,8 +942,15 @@ async function loadReport(file = currentFile, options = {}) {
     options.onError?.(error);
     showToast(`Report import failed: ${error.message}`, "error");
     if (report !== previous.report) {
-      ({ report, currentFile, activeHistoryId, sourceName, page, grouping } =
-        previous);
+      ({
+        report,
+        currentFile,
+        activeHistoryId,
+        sourceName,
+        selectedDashboardView,
+        page,
+        grouping,
+      } = previous);
       $("#report-content").hidden = !report;
       if (report) {
         populateSpecFilter();
@@ -1054,17 +1084,24 @@ document
   .forEach((element) =>
     globalThis.TomatoesReact.renderIcon(element, element.dataset.icon),
   );
-document.querySelectorAll('nav a[data-view="runs"]').forEach((link) =>
-  link.addEventListener("click", (event) => {
-    if (isPreviousImport() && !loading) {
+document
+  .querySelectorAll('a[href="#latest-run"], nav a[data-view="previous-runs"]')
+  .forEach((link) =>
+    link.addEventListener("click", (event) => {
+      if (
+        event.button !== 0 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
       event.preventDefault();
-      loadReport(null, {
-        historyId: historyEntries[0].id,
-        openDashboard: true,
-      });
-    }
-  }),
-);
+      void openDashboardTab(
+        link.dataset.view === "previous-runs" ? "previous-runs" : "runs",
+      );
+    }),
+  );
 $("#open-navigation").onclick = () => {
   if (!loading) $("#mobile-navigation").showModal();
 };

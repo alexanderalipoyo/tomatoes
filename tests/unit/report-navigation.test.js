@@ -4,11 +4,17 @@ const vm = require("node:vm");
 const fs = require("node:fs");
 const path = require("node:path");
 const ReportLinks = require("../../src/shared/report-links");
+const ProjectCatalog = require("../../src/shared/project-catalog");
 function fixture(hash, search = "?import=invalid") {
   const calls = [];
   const elements = {};
   const context = {
-    location: { hash, search, href: "http://localhost/" + search + hash },
+    location: new URL("http://localhost/" + search + hash),
+    URL,
+    AbortSignal,
+    ProjectCatalog,
+    ImportHistory: { list: async () => [] },
+    teamRequest: async () => ({ runs: [] }),
     canAccessView: () => true,
     authRequiresLogin: () => false,
     isAuthRoute: () => false,
@@ -23,6 +29,14 @@ function fixture(hash, search = "?import=invalid") {
       return true;
     },
     $: (selector) => (elements[selector] ||= {}),
+  };
+  context.history = {
+    replaceState: (a, b, url) => {
+      context.location.href = String(url);
+    },
+    pushState: (a, b, url) => {
+      context.location.href = String(url);
+    },
   };
   vm.runInNewContext(
     fs.readFileSync(
@@ -59,6 +73,152 @@ test("entering a report page after an independent page lazily restores the selec
   await pinned.context.navigateReportLocation();
   assert.equal(pinned.calls[0].historyId, "a".repeat(64));
   assert.equal(pinned.calls[0].fromURL, true);
+});
+
+const dashboardRecord = (id, receivedAt) => ({
+  id: id.repeat(64),
+  receivedAt,
+  metadata: { project: "web" },
+});
+test("Latest run selects the newest project import even when the viewer last opened an older run", async () => {
+  const f = fixture("#latest-run", "?project=web");
+  f.context.teamRequest = async (route) => {
+    assert.equal(route, "/api/runs?limit=2&project=web");
+    return { runs: [dashboardRecord("b", 300), dashboardRecord("a", 200)] };
+  };
+  f.context.ImportHistory.list = async () => [
+    {
+      id: "c".repeat(64),
+      serverId: "a".repeat(64),
+      lastImportedAt: 9999,
+      metadata: { project: "web" },
+    },
+  ];
+  await f.context.navigateReportLocation();
+  assert.equal(f.calls[0].serverId, "b".repeat(64));
+  assert.equal(f.calls[0].dashboardView, "runs");
+  assert.equal(f.context.location.hash, "#latest-run");
+});
+
+test("Previous runs selects the next older import and never falls back to the latest", async () => {
+  const f = fixture("#previous-runs", "?project=web");
+  f.context.teamRequest = async () => ({
+    runs: [dashboardRecord("b", 300), dashboardRecord("a", 200)],
+  });
+  await f.context.navigateReportLocation();
+  assert.equal(f.calls[0].serverId, "a".repeat(64));
+  assert.equal(f.calls[0].dashboardView, "previous-runs");
+  assert.equal(f.context.location.hash, "#previous-runs");
+  const single = fixture("#previous-runs", "?project=web");
+  single.context.teamRequest = async () => ({
+    runs: [dashboardRecord("b", 300)],
+  });
+  await single.context.navigateReportLocation();
+  assert.deepEqual(single.calls, ["navigate"]);
+  assert.match(
+    single.elements["#load-state"].textContent,
+    /No previous runs yet/,
+  );
+});
+
+test("older pinned dashboards use Previous runs while the actual latest uses Latest run", async () => {
+  const f = fixture("#latest-run", "?server=" + "a".repeat(64));
+  Object.assign(f.context, {
+    report: { metadata: { project: "web" } },
+    activeHistoryId: "c".repeat(64),
+    teamRequest: async () => ({
+      runs: [dashboardRecord("b", 300), dashboardRecord("a", 200)],
+    }),
+  });
+  assert.equal(
+    await f.context.classifyDashboard({ serverId: "a".repeat(64) }),
+    "previous-runs",
+  );
+  f.context.updateReportURL({
+    replace: true,
+    dashboard: true,
+    serverId: "a".repeat(64),
+  });
+  assert.equal(f.context.location.hash, "#previous-runs");
+  assert.equal(
+    await f.context.classifyDashboard({ serverId: "b".repeat(64) }),
+    "runs",
+  );
+  f.context.updateReportURL({
+    replace: true,
+    dashboard: true,
+    serverId: "b".repeat(64),
+  });
+  assert.equal(f.context.location.hash, "#latest-run");
+});
+
+test("dashboard tab links drop the previous report identity and retain its project", () => {
+  const f = fixture("#previous-runs", "?project=web&server=" + "a".repeat(64));
+  const latest = new URL(f.context.dashboardTabHref("runs"));
+  assert.equal(latest.hash, "#latest-run");
+  assert.equal(latest.searchParams.get("project"), "web");
+  assert.equal(latest.searchParams.has("server"), false);
+  assert.equal(latest.searchParams.has("import"), false);
+});
+
+test("shared-only older reports still route to Previous runs when browser storage is unavailable", async () => {
+  const f = fixture("#latest-run", "?server=" + "a".repeat(64));
+  Object.assign(f.context, {
+    report: { metadata: { project: "web" } },
+    ImportHistory: {
+      list: async () => {
+        throw new Error("Storage blocked");
+      },
+    },
+    teamRequest: async () => ({
+      runs: [dashboardRecord("b", 300), dashboardRecord("a", 200)],
+    }),
+  });
+  assert.equal(
+    await f.context.classifyDashboard({ serverId: "a".repeat(64) }),
+    "previous-runs",
+  );
+  f.context.updateReportURL({
+    replace: true,
+    dashboard: true,
+    serverId: "a".repeat(64),
+  });
+  assert.equal(f.context.location.hash, "#previous-runs");
+  assert.equal(
+    ReportLinks.read(f.context.location.href).serverId,
+    "a".repeat(64),
+  );
+  assert.equal(ReportLinks.read(f.context.location.href).importId, null);
+});
+
+test("a failed shared listing cannot relabel an older browser report as Latest run", async () => {
+  const f = fixture("#latest-run", "?project=web");
+  f.context.authStatus = { enabled: true, authenticated: true };
+  f.context.initializeAuth = async () => {};
+  f.context.teamRequest = async () => {
+    throw new Error("Connection unavailable");
+  };
+  f.context.ImportHistory.list = async () => [
+    { id: "a".repeat(64), lastImportedAt: 99, metadata: { project: "web" } },
+  ];
+  await f.context.navigateReportLocation();
+  assert.deepEqual(f.calls, ["navigate"]);
+  assert.match(f.elements["#load-state"].textContent, /Connection unavailable/);
+});
+
+test("a slow latest-run lookup cannot overwrite a tab the user navigated to", async () => {
+  const f = fixture("#latest-run", "?project=web");
+  let finish;
+  f.context.teamRequest = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const navigation = f.context.navigateReportLocation();
+  f.context.location.hash = "projects";
+  finish({ runs: [dashboardRecord("b", 300)] });
+  await navigation;
+  assert.equal(f.context.location.hash, "#projects");
+  assert.deepEqual(f.calls, []);
 });
 
 test("readable report URLs restore the exact shared report", async () => {
@@ -137,7 +297,7 @@ test("failed shared report navigation preserves the server error", async () => {
   assert.equal(displayed, error);
 });
 
-test("new signed-in users see their organization projects instead of a bundled sample", async () => {
+test("Latest run stays empty for a signed-in project with no imports instead of showing a bundled sample", async () => {
   const f = fixture("#runs", "");
   f.context.authStatus = {
     enabled: true,
@@ -153,11 +313,15 @@ test("new signed-in users see their organization projects instead of a bundled s
     },
   };
   await f.context.navigateReportLocation();
-  assert.equal(f.context.location.hash, "#projects");
+  assert.equal(f.context.location.hash, "#runs");
   assert.deepEqual(f.calls, ["navigate"]);
+  assert.match(
+    f.elements["#load-state"].textContent,
+    /No reports have been imported/,
+  );
 });
 
-test("unavailable browser storage still navigates authenticated users to shared projects", async () => {
+test("unavailable browser storage leaves authenticated shared-report navigation usable", async () => {
   const f = fixture("#runs", "");
   Object.assign(f.context, {
     authStatus: { enabled: true, authenticated: true },
@@ -179,7 +343,7 @@ test("unavailable browser storage still navigates authenticated users to shared 
     notice = message;
   };
   await f.context.navigateReportLocation();
-  assert.equal(f.context.location.hash, "#projects");
+  assert.equal(f.context.location.hash, "#runs");
   assert.deepEqual(f.calls, ["navigate"]);
   assert.match(notice, /still open shared reports/);
 });

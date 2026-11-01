@@ -206,6 +206,7 @@ function applyFeatureAccess() {
   if (quickNav) {
     const choices = [
       ["runs", "Latest run"],
+      ["previous-runs", "Previous runs"],
       ["results", "Test results"],
       ["failures", "Failed tests"],
       ["history", "Import history"],
@@ -235,7 +236,9 @@ function applyFeatureAccess() {
     if (typeof location !== "undefined")
       quickNav.value = ReportLinks.view(location.hash);
     quickNav.onchange = () => {
-      location.hash = ReportLinks.tab(quickNav.value);
+      if (["runs", "previous-runs"].includes(quickNav.value))
+        void openDashboardTab(quickNav.value);
+      else location.hash = ReportLinks.tab(quickNav.value);
     };
   }
   document

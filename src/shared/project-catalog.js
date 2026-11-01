@@ -1,6 +1,15 @@
 (function (root) {
   function time(run) {
-    return Date.parse(run.start || "") || run.importedAt || run.receivedAt || 0;
+    return (
+      Number(
+        run.serverReceivedAt ||
+          run.receivedAt ||
+          run.lastImportedAt ||
+          run.importedAt,
+      ) ||
+      Date.parse(run.start || "") ||
+      0
+    );
   }
   function runsForProject(serverRuns, browserImports, name, archived = false) {
     const seen = new Set();
@@ -93,7 +102,43 @@
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
-  const api = { summarize, runsForProject };
+  function importedRuns(serverRuns = [], browserImports = [], project = "") {
+    const active = (run) =>
+      !run.deletedAt &&
+      !run.archivedAt &&
+      (!project || run.metadata?.project === project);
+    const shared = serverRuns.filter(active);
+    const seen = new Set();
+    return [
+      ...shared.map((run) => ({ ...run, source: "server" })),
+      ...browserImports
+        .filter(active)
+        .filter((run) => !run.serverId || !shared.length)
+        .map((run) => ({ ...run, source: "browser" })),
+    ]
+      .filter((run) => {
+        const key =
+          run.source === "server"
+            ? run.id
+            : run.serverId || "browser:" + run.id;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => {
+        const imported = (run) =>
+          Number(
+            run.source === "server"
+              ? run.receivedAt || run.importedAt || 0
+              : run.serverReceivedAt ||
+                  run.lastImportedAt ||
+                  run.importedAt ||
+                  0,
+          );
+        return imported(b) - imported(a) || a.id.localeCompare(b.id);
+      });
+  }
+  const api = { summarize, runsForProject, importedRuns };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.ProjectCatalog = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

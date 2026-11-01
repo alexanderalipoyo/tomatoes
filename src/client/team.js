@@ -181,7 +181,12 @@ async function uploadBrowserReport(
       }),
     },
   );
-  if (entry) await rememberReportServerLink(entry.id, saved.run.id);
+  if (entry)
+    await rememberReportServerLink(
+      entry.id,
+      saved.run.id,
+      saved.run.receivedAt,
+    );
   const attachments = entry ? await ImportHistory.listEvidence(entry.id) : [];
   for (const attachment of attachments) {
     const bytes = new Uint8Array(await attachment.blob.arrayBuffer());

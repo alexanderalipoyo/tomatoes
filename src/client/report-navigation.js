@@ -3,6 +3,150 @@ const reportServerLinks = new Map();
 let pendingReportNavigation = false;
 let loadedReportLinkKey = null;
 let failedReportLinkKey = null;
+let selectedDashboardView = "runs";
+function dashboardProject() {
+  return (
+    new URL(location.href).searchParams.get("project") ||
+    (typeof report !== "undefined" ? report?.metadata?.project : "") ||
+    (typeof currentWorkspaceProject !== "undefined"
+      ? currentWorkspaceProject
+      : "") ||
+    ""
+  );
+}
+async function dashboardRuns(project) {
+  const results = await Promise.allSettled([
+    ImportHistory.list(),
+    teamRequest(
+      "/api/runs?limit=2" +
+        (project ? "&project=" + encodeURIComponent(project) : ""),
+      { cache: "no-store", signal: AbortSignal.timeout(15000) },
+    ),
+  ]);
+  if (
+    results[1].status === "rejected" &&
+    typeof authStatus !== "undefined" &&
+    authStatus?.enabled
+  )
+    throw results[1].reason;
+  const browser = results[0].status === "fulfilled" ? results[0].value : [];
+  if (results[0].status === "rejected" && typeof historyNotice === "function")
+    historyNotice(
+      "Browser history is unavailable. You can still open shared reports from Projects.",
+      "warning",
+    );
+  const server = results[1].status === "fulfilled" ? results[1].value.runs : [];
+  return ProjectCatalog.importedRuns(server, browser, project);
+}
+function matchesDashboardRun(run, historyId, serverId) {
+  return Boolean(
+    run &&
+    (run.source === "server"
+      ? run.id === serverId
+      : run.id === historyId || (run.serverId && run.serverId === serverId)),
+  );
+}
+async function classifyDashboard(options = {}) {
+  if (options.recordImport) selectedDashboardView = "runs";
+  else if (options.dashboardView) selectedDashboardView = options.dashboardView;
+  else {
+    const runs = await dashboardRuns(report.metadata.project || "");
+    selectedDashboardView = matchesDashboardRun(
+      runs[0],
+      activeHistoryId,
+      options.serverId || knownReportServerId(activeHistoryId),
+    )
+      ? "runs"
+      : "previous-runs";
+  }
+  return selectedDashboardView;
+}
+function dashboardTabHref(target) {
+  const url = new URL(ReportLinks.build(location.href, { view: target }));
+  const project = dashboardProject();
+  if (project) url.searchParams.set("project", project);
+  return url.href;
+}
+async function openDashboardTab(target) {
+  if (loading) return;
+  history.pushState(null, "", dashboardTabHref(target));
+  await navigateReportLocation();
+}
+function showEmptyDashboard(target, message) {
+  selectedDashboardView = target;
+  navigate();
+  $("#report-content").hidden = true;
+  $("#load-state").hidden = false;
+  $("#load-state").textContent = message;
+}
+async function openDashboardSelection(target) {
+  if (!canAccessView(target)) {
+    navigate();
+    return;
+  }
+  const requestedURL = location.href;
+  try {
+    const runs = await dashboardRuns(dashboardProject());
+    if (location.href !== requestedURL || loading) return;
+    const selected = runs[target === "runs" ? 0 : 1];
+    if (!selected) {
+      if (
+        target === "runs" &&
+        !(typeof authStatus !== "undefined" && authStatus?.enabled)
+      ) {
+        await loadReport(null, {
+          restore: true,
+          openDashboard: true,
+          dashboardView: "runs",
+        });
+        return;
+      }
+      showEmptyDashboard(
+        target,
+        target === "runs"
+          ? "No reports have been imported in this project yet."
+          : "No previous runs yet. Older imports in this project will appear here.",
+      );
+      return;
+    }
+    const url = new URL(
+      ReportLinks.build(location.href, {
+        ...(selected.source === "server"
+          ? { serverId: selected.id }
+          : {
+              importId: selected.id,
+              serverId: knownReportServerId(selected.id, selected),
+            }),
+        view: target,
+      }),
+    );
+    if (selected.metadata?.project)
+      url.searchParams.set("project", selected.metadata.project);
+    history.replaceState(null, "", url);
+    failedReportLinkKey = null;
+    const route = ReportLinks.read(url.href);
+    let error;
+    const success = await loadReport(null, {
+      historyId: route.importId,
+      serverId: route.serverId,
+      fromURL: true,
+      openDashboard: true,
+      dashboardView: target,
+      onError: (issue) => {
+        error = issue;
+      },
+    });
+    if (!success)
+      showReportLinkError(
+        error || new Error("This report could not be loaded."),
+      );
+  } catch (error) {
+    showEmptyDashboard(
+      target,
+      `Could not load ${target === "runs" ? "the latest run" : "previous runs"}: ${error.message}`,
+    );
+  }
+}
 function knownReportServerId(id, entry = null) {
   const serverId =
     reportServerLinks.get(id) ||
@@ -12,11 +156,14 @@ function knownReportServerId(id, entry = null) {
       : null);
   return ReportLinks.validId(serverId) ? serverId : null;
 }
-async function rememberReportServerLink(id, serverId) {
+async function rememberReportServerLink(id, serverId, receivedAt) {
   if (!ReportLinks.validId(serverId)) return;
   reportServerLinks.set(id, serverId);
   try {
-    await ImportHistory.updateDetails(id, { serverId });
+    await ImportHistory.updateDetails(id, {
+      serverId,
+      ...(receivedAt ? { serverReceivedAt: receivedAt } : {}),
+    });
   } catch {
     // A shared report remains available even when browser storage is full.
   }
@@ -25,7 +172,7 @@ function reportHref(id) {
   return ReportLinks.build(location.href, {
     importId: id,
     serverId: knownReportServerId(id),
-    view: "runs",
+    view: "previous-runs",
   });
 }
 async function reportTextHash(text, project = "", branch = "") {
@@ -61,17 +208,24 @@ function updateReportURL({
   replace = false,
   dashboard = false,
   serverId,
+  dashboardView = selectedDashboardView,
 } = {}) {
-  if (!activeHistoryId || pendingReportNavigation) return;
-  if (serverId) reportServerLinks.set(activeHistoryId, serverId);
-  const url = ReportLinks.build(location.href, {
-    importId: activeHistoryId,
-    serverId: knownReportServerId(activeHistoryId),
-    view: dashboard ? "runs" : undefined,
-  });
-  if (url !== location.href)
+  if (pendingReportNavigation || (!activeHistoryId && !serverId && !dashboard))
+    return;
+  if (serverId && activeHistoryId)
+    reportServerLinks.set(activeHistoryId, serverId);
+  const url = new URL(
+    ReportLinks.build(location.href, {
+      importId: activeHistoryId,
+      serverId: serverId || knownReportServerId(activeHistoryId),
+      view: dashboard ? dashboardView : undefined,
+    }),
+  );
+  if (typeof report !== "undefined" && report?.metadata?.project)
+    url.searchParams.set("project", report.metadata.project);
+  if (url.href !== location.href)
     history[replace ? "replaceState" : "pushState"](null, "", url);
-  loadedReportLinkKey = ReportLinks.read(url).key;
+  loadedReportLinkKey = ReportLinks.read(url.href).key;
   failedReportLinkKey = null;
 }
 function showReportLinkError(error) {
@@ -121,6 +275,12 @@ async function navigateReportLocation() {
     route = ReportLinks.read(location.href);
   } catch (error) {
     showReportLinkError(error);
+    return;
+  }
+  const target = ReportLinks.view(location.hash);
+  const dashboard = ["runs", "previous-runs"].includes(target);
+  if (dashboard && !route.importId && !route.serverId) {
+    await openDashboardSelection(target);
     return;
   }
   if (failedReportLinkKey === location.search) {
@@ -185,7 +345,25 @@ async function navigateReportLocation() {
       return;
     }
     await loadReport(null, { restore: true });
-  } else navigate();
+  } else {
+    if (dashboard && report) {
+      try {
+        await classifyDashboard({ serverId: route.serverId });
+        updateReportURL({
+          replace: true,
+          dashboard: true,
+          serverId: route.serverId,
+        });
+      } catch (error) {
+        showEmptyDashboard(
+          target,
+          `Could not check the latest run: ${error.message}`,
+        );
+        return;
+      }
+    }
+    navigate();
+  }
 }
 function openHistoryReportLink(event) {
   if (
@@ -255,7 +433,7 @@ async function copyHistoryReportLink(id, button) {
     const url = ReportLinks.build(location.href, {
       importId: id,
       serverId,
-      view: "runs",
+      view: "previous-runs",
     });
     try {
       await navigator.clipboard.writeText(url);

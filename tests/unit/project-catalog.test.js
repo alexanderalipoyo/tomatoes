@@ -1,6 +1,68 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { summarize } = require("../../src/shared/project-catalog");
+const { importedRuns } = require("../../src/shared/project-catalog");
+
+test("latest and previous imports are project-scoped and use import time rather than execution date", () => {
+  const rows = importedRuns(
+    [
+      {
+        id: "new",
+        receivedAt: 300,
+        start: "2020-01-01",
+        metadata: { project: "web" },
+      },
+      {
+        id: "old",
+        receivedAt: 200,
+        start: "2030-01-01",
+        metadata: { project: "web" },
+      },
+      { id: "other", receivedAt: 1000, metadata: { project: "private" } },
+      {
+        id: "archived",
+        receivedAt: 900,
+        archivedAt: 1,
+        metadata: { project: "web" },
+      },
+    ],
+    [
+      {
+        id: "opened-old",
+        serverId: "old",
+        lastImportedAt: 10000,
+        metadata: { project: "web" },
+      },
+      { id: "local", lastImportedAt: 250, metadata: { project: "web" } },
+      {
+        id: "trash",
+        lastImportedAt: 999,
+        deletedAt: 1,
+        metadata: { project: "web" },
+      },
+    ],
+    "web",
+  );
+  assert.deepEqual(
+    rows.map((row) => row.id),
+    ["new", "local", "old"],
+  );
+  const cards = summarize([
+    {
+      id: "new",
+      receivedAt: 300,
+      start: "2020-01-01",
+      metadata: { project: "web" },
+    },
+    {
+      id: "old",
+      receivedAt: 200,
+      start: "2030-01-01",
+      metadata: { project: "web" },
+    },
+  ]);
+  assert.equal(cards[0].latest.id, "new");
+});
 function run(
   id,
   project,

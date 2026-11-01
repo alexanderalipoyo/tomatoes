@@ -3,6 +3,17 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const Policy = require("../../src/shared/access-policy");
+
+test("Previous runs uses the existing dashboard permissions without granting wider project access", () => {
+  for (const role of ["viewer", "editor", "admin"]) {
+    const permissions = Policy.resolve({}, role);
+    assert.equal(
+      Policy.page(permissions, "previous-runs"),
+      Policy.page(permissions, "runs"),
+    );
+  }
+  assert.equal(Policy.page({}, "previous-runs"), false);
+});
 test("access catalog matches every supplied 0/1 matrix cell", () => {
   const lines = fs
     .readFileSync(path.join(__dirname, "../../docs/access-matrix.tsv"), "utf8")

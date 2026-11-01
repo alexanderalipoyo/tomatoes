@@ -13,7 +13,7 @@ function projectReportLink(run) {
     ...(run.source === "server"
       ? { serverId: run.id }
       : { importId: run.id, serverId: knownReportServerId(run.id, run) }),
-    view: "runs",
+    view: "previous-runs",
   });
 }
 function renderProjects(host) {
