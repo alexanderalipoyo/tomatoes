@@ -1707,3 +1707,223 @@ test("widget settings open in a modal and sharing changes only after a successfu
     await state.cleanup();
   }
 });
+
+test("tag picker searches, reuses existing casing, creates tags, and supports keyboard selection", async () => {
+  const { TagPicker, ReportTags } = loadComponent("components/ReportTags.jsx");
+  const state = await mount(
+    React.createElement(TagPicker, {
+      inputId: "test-tags",
+      onChange: (values) => {
+        assert.ok(Array.isArray(values));
+      },
+      initialTags: ["Regression"],
+      suggestions: ["Smoke", "Nightly"],
+      required: true,
+    }),
+  );
+  const input = state.host.querySelector('[role="combobox"]');
+  const tags = () =>
+    JSON.parse(state.host.querySelector('[type="hidden"]').value);
+  const type = async (value) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(
+        dom.window.HTMLInputElement.prototype,
+        "value",
+      ).set.call(input, value);
+      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+  try {
+    await type("SMO");
+    assert.equal(state.host.querySelectorAll('[role="option"]').length, 1);
+    await act(async () => state.host.querySelector('[role="option"]').click());
+    assert.deepEqual(tags(), ["Regression", "Smoke"]);
+    await type("Release 2026");
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Add tag")
+        .click(),
+    );
+    assert.deepEqual(tags(), ["Regression", "Smoke", "Release 2026"]);
+    await type("Nigh");
+    await act(async () =>
+      input.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          bubbles: true,
+        }),
+      ),
+    );
+    await act(async () =>
+      input.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+        }),
+      ),
+    );
+    assert.ok(tags().includes("Nightly"));
+    await act(async () =>
+      state.host.querySelector('[aria-label="Remove tag Smoke"]').click(),
+    );
+    assert.equal(tags().includes("Smoke"), false);
+    const html = renderToStaticMarkup(
+      React.createElement(ReportTags, { tags: ["<script>alert(1)</script>"] }),
+    );
+    assert.doesNotMatch(html, /<script>/);
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("existing report tag editor validates, reports save outcomes, and supports cancel", async () => {
+  const { ReportTagEditor } = loadComponent("components/ReportTags.jsx");
+  let calls = 0,
+    saved = 0,
+    cancelled = 0,
+    fail = true;
+  const errors = [];
+  const state = await mount(
+    React.createElement(ReportTagEditor, {
+      entry: { name: "Legacy report", metadata: {} },
+      suggestions: ["Smoke"],
+      save: async () => {
+        calls++;
+        if (fail) throw Error("Server unavailable");
+      },
+      onSaved: () => saved++,
+      onCancel: () => cancelled++,
+      onError: (message) => errors.push(message),
+    }),
+  );
+  const submit = async () =>
+    act(async () =>
+      state.host
+        .querySelector("form")
+        .dispatchEvent(
+          new dom.window.Event("submit", { bubbles: true, cancelable: true }),
+        ),
+    );
+  try {
+    await submit();
+    assert.equal(calls, 0);
+    assert.deepEqual(errors, []);
+    assert.match(state.host.textContent, /at least one tag/);
+    await act(async () => state.host.querySelector('[role="option"]').click());
+    await submit();
+    assert.equal(calls, 1);
+    assert.equal(saved, 0);
+    assert.match(state.host.textContent, /Server unavailable/);
+    assert.deepEqual(errors, ["Server unavailable"]);
+    fail = false;
+    await submit();
+    assert.equal(saved, 1);
+    assert.equal(
+      state.host.querySelector("form").getAttribute("aria-busy"),
+      "false",
+    );
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((button) => button.textContent === "Cancel")
+        .click(),
+    );
+    assert.equal(cancelled, 1);
+    assert.equal(calls, 2);
+    assert.equal(
+      JSON.parse(state.host.querySelector('[type="hidden"]').value)[0],
+      "Smoke",
+    );
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("import history combines branch and tag filters, handles legacy reports, and resets without changing latest", async () => {
+  const { HistoryBrowser } = loadComponent("components/HistoryBrowser.jsx");
+  const counts = { total: 1, passed: 1, failed: 0, pending: 0, skipped: 0 };
+  const entries = [
+    {
+      id: "latest",
+      name: "Latest run",
+      metadata: { branch: "main", tags: ["PRODUCTION"] },
+    },
+    {
+      id: "older",
+      name: "Older run",
+      metadata: { branch: "develop", tags: ["production", "Smoke"] },
+    },
+    { id: "legacy", name: "Legacy run", metadata: {} },
+  ].map((entry) => ({
+    ...entry,
+    status: "passed",
+    counts,
+    passRate: 100,
+    duration: 10,
+    lastImportedAt: 1,
+    start: "2026-01-01",
+  }));
+  const calls = [];
+  const state = await mount(
+    React.createElement(HistoryBrowser, {
+      entries,
+      activeId: "older",
+      formatDate: String,
+      duration: String,
+      href: () => "#runs",
+      tag: (id) => calls.push(id),
+      edit: () => {},
+      trash: () => {},
+    }),
+  );
+  const choose = async (id, value) =>
+    act(async () => {
+      const select = state.host.querySelector(id);
+      select.value = value;
+      select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    });
+  const titles = () =>
+    [...state.host.querySelectorAll("article h3")].map((el) => el.textContent);
+  try {
+    assert.deepEqual(titles(), ["Latest run", "Older run", "Legacy run"]);
+    assert.equal(
+      state.host.querySelectorAll("#history-tag-filter option").length,
+      4,
+    );
+    await choose("#history-tag-filter", JSON.stringify("production"));
+    assert.deepEqual(titles(), ["Latest run", "Older run"]);
+    await choose("#history-branch-filter", JSON.stringify("develop"));
+    assert.deepEqual(titles(), ["Older run"]);
+    assert.match(
+      state.host.querySelector('[role="status"]').textContent,
+      /Showing 1 of 3/,
+    );
+    assert.doesNotMatch(
+      state.host.querySelector("article").textContent,
+      /Latest import/,
+    );
+    assert.match(state.host.querySelector("article").textContent, /Viewing/);
+    await act(async () =>
+      state.host.querySelector("[data-tag-history]").click(),
+    );
+    assert.deepEqual(calls, ["older"]);
+    await choose("#history-tag-filter", JSON.stringify("smoke"));
+    await choose("#history-branch-filter", JSON.stringify("main"));
+    assert.match(state.host.textContent, /No reports match these filters/);
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Show all reports")
+        .click(),
+    );
+    assert.equal(titles().length, 3);
+    await choose("#history-tag-filter", "null");
+    await choose("#history-branch-filter", "null");
+    assert.deepEqual(titles(), ["Legacy run"]);
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Reset filters")
+        .click(),
+    );
+    assert.equal(titles().length, 3);
+  } finally {
+    await state.cleanup();
+  }
+});

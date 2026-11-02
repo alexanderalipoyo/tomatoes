@@ -128,6 +128,12 @@ Choose **Projects** from workspace navigation to search project cards built from
 
 Before browsing or dropping a report, choose an existing branch from previous runs in the current project, select **Create a new branch...**, or keep **Use branch from report**. The last successfully used branch is saved per project in user preferences and selected again when it still exists. Branch choices use accessible server runs and this browser's history. Importing identical JSON on different branches keeps separate results while preserving the original file; existing report URLs remain supported.
 
+## Report tags
+
+New JSON imports require at least one tag before browsing or dropping the file. The tag picker searches tags from accessible reports in the selected project. Choose an existing tag or type a new one and select **Add tag**. Tags are case-insensitively deduplicated, with up to 10 tags of 50 characters each.
+
+Tags appear on run summaries, import-history cards, and shared report identities. Use **Add tags / Edit tags** on an opened report or **Edit tags** in Import history to tag older reports. Saving updates the linked server copy and browser history while preserving the original JSON, report identity, and import time. Older untagged reports remain readable. Server tag suggestions and edits enforce existing project and organization access; editing uses the report-notes permission. CI publishing and restoring historical imports continue to accept legacy reports.
+
 ## User preferences
 
 Open the workspace menu and choose **Manage profile** to edit your first name, last name, and optional contact email. Changes save to your profile in the database and update the name shown throughout Tomatoes. Workspace navigation on this page contains **Projects**, **My profile**, **Settings**, **Report settings**, and **Integration**. Email is stored as a contact detail; email notifications are not enabled.

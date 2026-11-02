@@ -168,7 +168,14 @@
           end: report.end,
           duration: report.duration,
           status: report.status,
-          metadata: previous?.metadata || report.metadata || {},
+          metadata: previous?.metadata
+            ? {
+                ...previous.metadata,
+                ...(touch && report.metadata?.tags
+                  ? { tags: report.metadata.tags }
+                  : {}),
+              }
+            : report.metadata || {},
           label: previous?.label || "",
           notes: previous?.notes || "",
           deletedAt: null,

@@ -254,6 +254,9 @@ function renderSummary() {
     report,
     sourceName,
     previous: isPreviousImport(),
+    onEditTags: hasAccess("import-history.edit-report-notes")
+      ? () => ReportTags.edit()
+      : null,
     brand: workspaceBranding(
       report.metadata?.project || currentWorkspaceProject,
     ),
@@ -600,6 +603,7 @@ function renderHistory() {
     duration,
     href: reportHref,
     edit: editHistoryEntry,
+    tag: (id) => ReportTags.edit(id),
     trash: trashHistoryEntry,
     exportPDF: exportReportPDF,
     copyLink: copyHistoryReportLink,
@@ -818,11 +822,35 @@ async function loadReport(file = currentFile, options = {}) {
         ...next.metadata,
         project: options.project,
       });
+    if (file && options.recordImport)
+      ReportData.normalizeTags(options.tags, true);
+    if (options.tags !== undefined)
+      next.metadata = ReportData.normalizeMetadata({
+        ...next.metadata,
+        tags: options.tags,
+      });
     if (options.branch !== undefined)
       next.metadata = ReportData.normalizeMetadata({
         ...next.metadata,
         branch: options.branch,
       });
+    const linkedTagServer =
+      saved?.entry.serverId ||
+      (saved ? knownReportServerId(saved.entry.id) : null);
+    if (linkedTagServer && !options.recordImport) {
+      try {
+        const latest = await teamRequest(
+          "/api/runs/" + linkedTagServer + "/tags",
+        );
+        next.metadata = ReportData.normalizeMetadata({
+          ...next.metadata,
+          tags: latest.tags,
+        });
+        await ImportHistory.updateMetadata(saved.entry.id, next.metadata);
+      } catch {
+        /* Keep the saved tags available when the server cannot be reached. */
+      }
+    }
     if (!canAccessBrowserImport({ metadata: next.metadata }))
       throw new Error(
         "Choose one of your assigned projects before importing this report.",
@@ -889,6 +917,8 @@ async function loadReport(file = currentFile, options = {}) {
         serverCopy.run.receivedAt,
       );
       try {
+        if (serverCopy.run.metadata?.tags)
+          await ImportHistory.updateMetadata(activeHistoryId, report.metadata);
         if (!previousHistoryIds.has(activeHistoryId)) {
           await ImportHistory.updateDetails(activeHistoryId, {
             label: serverCopy.run.label || "",
@@ -1039,11 +1069,15 @@ ReportImport.setup({
   isBusy: () => loading || document.body.classList.contains("is-rendering"),
   prepareImport: async () => {
     await ImportProjects.prepare();
-    if ($("#import-dialog").open) await ImportBranches.prepare();
+    if ($("#import-dialog").open) {
+      await ImportBranches.prepare();
+      await ReportTags.prepare();
+    }
   },
   getImportOptions: () => ({
     ...ImportProjects.options(),
     ...ImportBranches.options(),
+    ...ReportTags.options(),
   }),
   importFile: async (file, options) => {
     const success = await loadReport(file, { recordImport: true, ...options });

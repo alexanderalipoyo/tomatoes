@@ -50,7 +50,8 @@ import { RoleAccessPage } from "./pages/RoleAccessPage";
 import { ProjectAccessPicker } from "./components/ProjectAccessPicker";
 import { ProjectEditor } from "./components/ProjectEditor";
 import { ResultHeaders, ResultRows } from "./components/ResultRows";
-import { HistoryCards } from "./components/HistoryCards";
+import { TagPicker, ReportTagEditor } from "./components/ReportTags";
+import { HistoryBrowser } from "./components/HistoryBrowser";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import {
@@ -190,6 +191,12 @@ export const applicationBridge = {
   renderHistoryTools(host) {
     this.renderPage(host, <HistoryTools />);
   },
+  renderTagPicker(host, props) {
+    render(host, <TagPicker key={props.pickerKey} {...props} />);
+  },
+  renderReportTagEditor(host, props) {
+    this.renderPage(host, <ReportTagEditor {...props} />);
+  },
   renderHistoryEdit(host, props) {
     this.renderPage(host, <HistoryEdit {...props} />);
   },
@@ -265,7 +272,7 @@ export const applicationBridge = {
     render("#results-body", <ResultRows {...props} />);
   },
   renderHistory(props) {
-    render("#history-list", <HistoryCards {...props} />);
+    render("#history-list", <HistoryBrowser {...props} />);
   },
   renderRunSummary(props) {
     render("#run-summary", <RunSummary {...props} />);

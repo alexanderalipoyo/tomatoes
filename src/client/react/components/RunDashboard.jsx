@@ -1,3 +1,4 @@
+import { ReportTags } from "./ReportTags";
 import { RunIdentity } from "../pages/SharingPage";
 import { Icon } from "./Icon";
 const outcomes = ["passed", "failed", "pending", "skipped", "unknown"];
@@ -14,6 +15,7 @@ export function RunSummary({
   report,
   sourceName,
   previous,
+  onEditTags,
   brand,
   formatDate,
   duration,
@@ -30,6 +32,14 @@ export function RunSummary({
           </span>{" "}
           {sourceName}
         </h2>
+        <div className="report-tag-toolbar">
+          <ReportTags tags={report.metadata?.tags || []} />
+          {onEditTags && (
+            <button className="button" onClick={onEditTags}>
+              {report.metadata?.tags?.length ? "Edit tags" : "Add tags"}
+            </button>
+          )}
+        </div>
         <p className="report-workspace-brand">
           <img
             className="workspace-logo"
@@ -51,7 +61,11 @@ export function RunSummary({
           {report.specs.length} specs · {report.failedSpecs} with failures
         </span>
       </div>
-      <RunIdentity metadata={report.metadata || {}} branding={() => brand} />
+      <RunIdentity
+        metadata={report.metadata || {}}
+        branding={() => brand}
+        showTags={false}
+      />
     </>
   );
 }

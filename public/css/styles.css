@@ -2618,3 +2618,293 @@ body.is-rendering {
   outline-offset: 3px;
   border-radius: 2px;
 }
+
+/* Report tags and reusable tag picker */
+.report-tags,
+.report-tag-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+.report-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--theme-surface-raised, #f5f8f7);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.report-tag button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  min-width: 24px;
+  min-height: 24px;
+}
+.report-tag-entry {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.report-tag-picker label {
+  display: block;
+  margin: 16px 0 8px;
+  font-size: 13px;
+}
+.report-tag-entry input {
+  min-width: 0;
+  flex: 1;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--theme-surface, #fff);
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.report-tag-entry > button {
+  flex-shrink: 0;
+}
+.report-tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+.report-tag-options button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--theme-surface, #fff);
+  color: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.report-tag-options [aria-selected="true"] {
+  outline: 2px solid var(--theme-accent-text, #14835e);
+  outline-offset: -2px;
+}
+#import-dialog {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 600px) {
+  .report-tag-entry input {
+    font-size: 16px;
+  }
+}
+
+/* Compact tag editing, independent of the report detail sheet. */
+#detail:has(.report-tag-editor) {
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  max-width: 560px;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 28px;
+  border-radius: 16px;
+}
+#detail:has(.report-tag-editor) .dialog-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  margin: 0;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+}
+.report-tag-editor .dialog-heading {
+  margin-bottom: 24px;
+  padding-right: 32px;
+}
+#detail .report-tag-editor .dialog-heading h2 {
+  margin: 6px 0;
+  padding: 0;
+}
+.report-tag-source {
+  margin: 0;
+  color: var(--theme-muted, #657580);
+  font-size: 12px;
+}
+.report-tag-picker {
+  min-width: 0;
+  margin: 18px 0;
+}
+.report-tag-picker label {
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+.report-tag-selected:empty,
+.report-tag-options:empty {
+  display: none;
+}
+.report-tag-selected {
+  margin: 0 0 12px;
+}
+.report-tag {
+  line-height: 1.5;
+  color: var(--theme-accent-text, #187953);
+  background: var(--theme-accent-surface, #edf8f2);
+  border-radius: 8px;
+}
+.report-tag > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.report-tag button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  padding: 0;
+  border-radius: 4px;
+  font-size: 17px;
+  line-height: 1;
+}
+.report-tag button:hover {
+  background: var(--theme-surface, #fff);
+}
+.report-tag-entry input,
+.report-tag-entry > .button {
+  box-sizing: border-box;
+  height: 44px;
+  margin: 0;
+}
+.report-tag-entry input:focus-visible,
+.report-tag-options button:focus-visible {
+  outline: 2px solid var(--theme-accent-text, #187953);
+  outline-offset: 2px;
+}
+.report-tag-picker .widget-footnote {
+  margin: 10px 0 0;
+  line-height: 1.6;
+  color: var(--theme-muted, #657580);
+}
+.report-tag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  margin-top: 24px;
+}
+.report-tag-actions > div,
+.report-tag-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.report-tag-actions > div {
+  margin-left: auto;
+}
+.report-tag-toolbar {
+  margin: 12px 0;
+}
+.report-tag-toolbar .report-tags {
+  margin: 0;
+  min-width: 0;
+}
+.report-tag-toolbar > .button {
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  #detail:has(.report-tag-editor) {
+    padding: 24px 20px;
+  }
+  .report-tag-actions > div {
+    width: 100%;
+  }
+  .report-tag-actions > div > .button {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+.report-tag-actions > .widget-footnote {
+  margin: 0;
+}
+#toast {
+  text-align: left;
+}
+
+/* Keep history filters and card metadata aligned as controls wrap. */
+.history-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--theme-surface, #fff);
+  margin: 20px 0 0;
+}
+.history-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.history-filters select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  font-weight: 400;
+  color: var(--theme-text, #283641);
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-overflow: ellipsis;
+}
+.history-filters > .button {
+  height: 44px;
+  margin: 0;
+  justify-content: center;
+}
+.history-filter-count {
+  margin: 12px 0 18px;
+  font-size: 12px;
+  color: var(--theme-muted, #657580);
+}
+.history-filters select:focus-visible {
+  outline: 2px solid var(--theme-accent-text, #187953);
+  outline-offset: 2px;
+}
+.history-card .history-card-title {
+  align-items: flex-start;
+}
+.history-card .history-card-title > div:first-child {
+  flex: 1;
+}
+.history-card .history-branch {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .history-filters {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .history-filters select {
+    font-size: 16px;
+  }
+}

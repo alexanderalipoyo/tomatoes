@@ -17,6 +17,7 @@ test("project import choices use saved names but submit stable keys and refresh 
     ProjectManagement,
     AbortController,
     AbortSignal,
+    ReportTags: { prepare: async () => {} },
     ImportBranches: {
       prepare: async () => {
         branches++;

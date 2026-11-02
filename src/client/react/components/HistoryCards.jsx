@@ -1,11 +1,14 @@
+import { ReportTags } from "./ReportTags";
 const number = (value) => value.toLocaleString("en-US");
 export function HistoryCards({
   entries,
   activeId,
+  latestId = entries[0]?.id,
   formatDate,
   duration,
   href,
   edit,
+  tag,
   trash,
   exportPDF,
   copyLink,
@@ -18,7 +21,7 @@ export function HistoryCards({
         <p>Import a valid Mochawesome JSON report to start your history.</p>
       </div>
     );
-  return entries.map((entry, index) => (
+  return entries.map((entry) => (
     <article
       key={entry.id}
       className={`history-card ${entry.id === activeId ? "is-current" : ""}`}
@@ -28,12 +31,18 @@ export function HistoryCards({
           <span className={`status-badge ${entry.status}`}>
             {entry.status[0].toUpperCase() + entry.status.slice(1)}
           </span>
-          {index === 0 && <span className="history-tag">Latest import</span>}
+          {entry.id === latestId && (
+            <span className="history-tag">Latest import</span>
+          )}
           {entry.id === activeId && (
             <span className="history-tag current-tag">Viewing</span>
           )}
           <h3>{entry.label || entry.name}</h3>
           {entry.label && <p>Source: {entry.name}</p>}
+          <p className="history-branch">
+            <strong>Branch:</strong> {entry.metadata?.branch || "No branch"}
+          </p>
+          <ReportTags tags={entry.metadata?.tags || []} />
           {entry.notes && <p className="history-note">{entry.notes}</p>}
           <p>
             {entry.source === "bundled" ? "Bundled report saved" : "Imported"}{" "}
@@ -42,6 +51,15 @@ export function HistoryCards({
           <p>Run started {formatDate(entry.start)}</p>
         </div>
         <div className="history-actions">
+          {tag && (
+            <button
+              className="button"
+              data-tag-history={entry.id}
+              onClick={() => tag(entry.id)}
+            >
+              Edit tags
+            </button>
+          )}
           <button
             className="button"
             data-manage-history={entry.id}

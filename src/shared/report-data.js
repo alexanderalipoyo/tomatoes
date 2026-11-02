@@ -13,6 +13,33 @@
       text
     );
   }
+  function normalizeTags(value, required = false) {
+    if (!Array.isArray(value) || value.length > 10)
+      throw new Error("Choose up to 10 report tags.");
+    const seen = new Set();
+    const tags = [];
+    for (const item of value) {
+      if (
+        typeof item !== "string" ||
+        !item.trim() ||
+        item.trim().length > 50 ||
+        /[\x00-\x1f\x7f]/.test(item)
+      )
+        throw new Error(
+          "Each tag must contain 1 to 50 characters without control characters.",
+        );
+      const tag = item.trim();
+      if (!seen.has(tag.toLowerCase())) {
+        seen.add(tag.toLowerCase());
+        tags.push(tag);
+      }
+    }
+    if (required && !tags.length)
+      throw new Error(
+        "Add at least one tag before importing or saving a report.",
+      );
+    return tags;
+  }
   function normalizeMetadata(value = {}) {
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error("Run metadata must be an object.");
@@ -38,6 +65,7 @@
       throw new Error(
         "Project must use letters, numbers, dots, underscores, or hyphens (up to 80 characters).",
       );
+    if (value.tags !== undefined) result.tags = normalizeTags(value.tags);
     if (result.buildUrl) {
       let url;
       try {
@@ -581,6 +609,7 @@
   const api = {
     reportIdentityText,
     normalizeMetadata,
+    normalizeTags,
     normalizeAttempts,
     retryStats,
     insightStats,

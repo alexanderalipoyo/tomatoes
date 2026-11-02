@@ -66,6 +66,7 @@ const featureSelectors = {
   "#workspace-general-form":
     "settings-general.configure-project-website|settings-general.configure-fallback-project-logo",
   "#appearance-form": "settings-appearance.save-appearance-preferences",
+  "[data-tag-history]": "import-history.edit-report-notes",
   "#custom-widget-form":
     "report-settings.create-custom-spec-group-widgets|report-settings.edit-custom-widgets",
   "[data-edit-widget]": "report-settings.edit-custom-widgets",

@@ -18,6 +18,7 @@ for (const name of [
   "report-navigation",
   "import-history",
   "report-import",
+  "report-tags",
   "import-branches",
   "import-projects",
   "preferences",

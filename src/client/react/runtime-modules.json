@@ -14,6 +14,7 @@
   "/js/custom-widgets.js",
   "/js/import-history.js",
   "/js/report-import.js",
+  "/js/report-tags.js",
   "/js/import-branches.js",
   "/js/project-management.js",
   "/js/import-projects.js",

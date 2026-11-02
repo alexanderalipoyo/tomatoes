@@ -1289,6 +1289,63 @@ function createTeamService({
         send(res, 200, { organization: publicOrganization(organization) });
         return true;
       }
+      const tagsProject = url.pathname.match(
+        /^\/api\/projects\/([a-zA-Z0-9][a-zA-Z0-9_.-]{0,79})\/tags$/,
+      );
+      if (req.method === "GET" && tagsProject) {
+        if (user.kind === "token")
+          throw apiError(403, "Tag suggestions require browser access.");
+        if (!canAccess(user, tagsProject[1]))
+          throw apiError(403, "This project is outside your access scope.");
+        const rows = await store.listRuns(user.projectScopes, tagsProject[1]);
+        const tags = new Map();
+        for (const row of rows)
+          for (const tag of row.metadata?.tags || [])
+            tags.set(tag.toLowerCase(), tag);
+        send(res, 200, {
+          tags: [...tags.values()].sort((a, b) => a.localeCompare(b)),
+        });
+        return true;
+      }
+      const runTags = url.pathname.match(/^\/api\/runs\/([a-f0-9]{64})\/tags$/);
+      if (runTags) {
+        if (req.method === "GET") {
+          if (user.kind === "token")
+            throw apiError(403, "Report tag lookup requires browser access.");
+          const tags = await store.getRunTags(runTags[1], user.projectScopes);
+          if (tags === null)
+            throw apiError(
+              404,
+              "Report not found in your accessible projects.",
+            );
+          send(res, 200, { tags });
+          return true;
+        }
+        if (req.method !== "PATCH")
+          throw apiError(405, "Use PATCH to update report tags.");
+        if (user.kind === "token")
+          throw apiError(403, "CI tokens cannot edit report tags.");
+        requireFeature(user, "import-history.edit-report-notes");
+        canWrite(req, { ...user, role: "editor" });
+        const body = await bodyJSON(req, 4096);
+        if (!body || Object.keys(body).some((key) => key !== "tags"))
+          throw apiError(400, "Only report tags can be changed here.");
+        let tags;
+        try {
+          tags = ReportData.normalizeTags(body.tags, true);
+        } catch (error) {
+          throw apiError(400, error.message);
+        }
+        const run = await store.updateRunTags(
+          runTags[1],
+          user.projectScopes,
+          tags,
+        );
+        if (!run)
+          throw apiError(404, "Report not found in your accessible projects.");
+        send(res, 200, { run });
+        return true;
+      }
       const branchesMatch = url.pathname.match(
         /^\/api\/projects\/([a-zA-Z0-9][a-zA-Z0-9_.-]{0,79})\/branches$/,
       );
@@ -1863,6 +1920,11 @@ function createTeamService({
           throw apiError(
             400,
             "Select a project and branch before importing a report.",
+          );
+        if (url.pathname === "/api/imports" && !metadata.tags?.length)
+          throw apiError(
+            400,
+            "Add at least one tag before importing a report.",
           );
         if (!canAccess(user, metadata.project))
           throw apiError(403, "This project is outside your access scope.");

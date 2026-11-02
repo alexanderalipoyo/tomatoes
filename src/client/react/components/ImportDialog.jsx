@@ -60,6 +60,7 @@ export function ImportDialog() {
           }
         </p>
       </div>
+      <div id="import-tags-host" />
       <div className="report-drop-zone" id="report-drop-zone">
         <svg
           className="import-upload-icon"

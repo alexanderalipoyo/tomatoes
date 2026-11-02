@@ -190,3 +190,37 @@ test("browsers without gzip decompression fall back to authorized chunks", async
   assert.equal(requests, 2);
   assert.equal(loaded.originalText, source.originalText);
 });
+
+test("team saves use the signed-in session token before Sharing is opened", async () => {
+  const vm = require("node:vm");
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const requests = [];
+  const context = {
+    authStatus: {
+      enabled: true,
+      organization: { id: "org" },
+      csrf: "current-session",
+    },
+    fetch: async (route, options) => {
+      requests.push({ route, options });
+      return { ok: true, status: 200, json: async () => ({}) };
+    },
+  };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, "../../src/client/team.js"), "utf8"),
+    context,
+  );
+  await context.teamRequest("/api/runs/" + id + "/tags", {
+    method: "PATCH",
+    body: JSON.stringify({ tags: ["Production"] }),
+  });
+  assert.equal(requests[0].options.headers["X-CSRF-Token"], "current-session");
+  assert.equal(requests[0].options.headers["X-Tomatoes-Organization"], "org");
+  vm.runInNewContext('teamState = { csrf: "older-token" }', context);
+  await context.teamRequest("/api/runs/" + id + "/tags", {
+    method: "PATCH",
+    body: "{}",
+  });
+  assert.equal(requests[1].options.headers["X-CSRF-Token"], "current-session");
+});

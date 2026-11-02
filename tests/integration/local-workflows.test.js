@@ -236,7 +236,7 @@ test("CI uploads require a valid project-scoped token and reports survive servic
   });
   const payload = {
     report: fixture(),
-    metadata: { project: "web", branch: "main" },
+    metadata: { project: "web", branch: "main", tags: ["Smoke"] },
     name: "report.json",
   };
   assert.equal(
@@ -412,7 +412,7 @@ test("an existing viewer session lists and opens a new admin import in its assig
     body: JSON.stringify({
       reportText: JSON.stringify(fixture(), null, 2),
       name: "new-admin-report.json",
-      metadata: { project: "web", branch: "main" },
+      metadata: { project: "web", branch: "main", tags: ["Smoke"] },
     }),
   });
   assert.equal(imported.status, 201);
@@ -506,7 +506,7 @@ test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and l
         },
         body: JSON.stringify({
           report: fixture(),
-          metadata: { project: "web", branch: "main" },
+          metadata: { project: "web", branch: "main", tags: ["Smoke"] },
         }),
       })
     ).status,
@@ -525,7 +525,7 @@ test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and l
         headers: { Cookie: editorCookie, Origin: api.origin },
         body: JSON.stringify({
           report: fixture(),
-          metadata: { project: "web", branch: "main" },
+          metadata: { project: "web", branch: "main", tags: ["Smoke"] },
         }),
       })
     ).status,
@@ -542,7 +542,7 @@ test("team sessions enforce sign-in, CSRF, project scope, read-only roles, and l
         },
         body: JSON.stringify({
           report: fixture(),
-          metadata: { project: "web", branch: "main" },
+          metadata: { project: "web", branch: "main", tags: ["Smoke"] },
         }),
       })
     ).status,
@@ -1379,7 +1379,7 @@ test("run archiving is reversible, scoped, permission-checked, and survives reim
     other = await login("other");
   const payload = {
     report: fixture(),
-    metadata: { project: "web", branch: "main" },
+    metadata: { project: "web", branch: "main", tags: ["Smoke"] },
     name: "archivable.json",
     reportText: JSON.stringify(fixture(), null, 2),
   };
@@ -1860,7 +1860,7 @@ test("hosted shared reports omit duplicate JSON to stay below the download limit
   const record = {
     id,
     name: "large.json",
-    metadata: { project: "web", branch: "main" },
+    metadata: { project: "web", branch: "main", tags: ["Smoke"] },
     receivedAt: 1,
   };
   await store.saveRun(record, raw, text);
@@ -2649,7 +2649,7 @@ test("organization access policies enforce the supplied matrix and refresh live 
   );
   const payload = {
     report: fixture(),
-    metadata: { project: "web", branch: "main" },
+    metadata: { project: "web", branch: "main", tags: ["Smoke"] },
   };
   const upload = (route, headers) =>
     f.request(route, {
@@ -3256,4 +3256,141 @@ test("widget sharing is opt-in, organization-scoped, read-only for recipients, a
   assert.equal((await put(owner, { shareDashboardGroups: false })).status, 200);
   assert.deepEqual((await get(reader)).body.sharedDashboardGroups, []);
   assert.deepEqual((await get(owner)).body.preferences.dashboardGroups, groups);
+});
+
+test("new imports require tags and legacy reports can be tagged without changing their JSON or identity", async (t) => {
+  const api = await serviceFixture(t);
+  const metadata = { project: "tomatoes", branch: "main" };
+  const upload = (tags) =>
+    api.request("/api/imports", {
+      method: "POST",
+      headers: { Origin: api.origin },
+      body: JSON.stringify({
+        report: fixture(),
+        metadata: { ...metadata, ...(tags === undefined ? {} : { tags }) },
+      }),
+    });
+  assert.equal((await upload()).status, 400);
+  assert.equal((await upload([])).status, 400);
+  assert.equal((await upload([" "])).status, 400);
+  const imported = await upload([" Smoke ", "smoke", "Regression"]);
+  assert.equal(imported.status, 201);
+  assert.deepEqual(imported.body.run.metadata.tags, ["Smoke", "Regression"]);
+  const id = imported.body.run.id;
+  assert.deepEqual((await api.request("/api/runs/" + id + "/tags")).body.tags, [
+    "Smoke",
+    "Regression",
+  ]);
+  const before = await api.request("/api/runs/" + id);
+  const patch = (tags) =>
+    api.request("/api/runs/" + id + "/tags", {
+      method: "PATCH",
+      headers: { Origin: api.origin },
+      body: JSON.stringify({ tags }),
+    });
+  assert.equal((await patch([])).status, 400);
+  const updated = await patch(["Nightly"]);
+  assert.deepEqual((await api.request("/api/runs/" + id + "/tags")).body.tags, [
+    "Nightly",
+  ]);
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.run.id, id);
+  const after = await api.request("/api/runs/" + id);
+  assert.equal(after.body.originalText, before.body.originalText);
+  assert.deepEqual(after.body.run.metadata.tags, ["Nightly"]);
+  assert.equal(after.body.run.receivedAt, before.body.run.receivedAt);
+  assert.deepEqual(
+    (await api.request("/api/projects/tomatoes/tags")).body.tags,
+    ["Nightly"],
+  );
+  const legacy = await api.request("/api/runs", {
+    method: "POST",
+    headers: { Origin: api.origin },
+    body: JSON.stringify({
+      report: fixture(),
+      metadata: { project: "tomatoes", branch: "legacy" },
+    }),
+  });
+  assert.equal(legacy.status, 201);
+  assert.equal(
+    (
+      await api.request("/api/runs/" + legacy.body.run.id + "/tags", {
+        method: "PATCH",
+        headers: { Origin: api.origin },
+        body: JSON.stringify({ tags: ["Backfilled"] }),
+      })
+    ).status,
+    200,
+  );
+});
+
+test("tag suggestions and report tag edits enforce organization, project, role, and CSRF boundaries", async (t) => {
+  const api = await serviceFixture(t, { teamMode: true });
+  const { createFileStore } = require("../../src/server/storage/index");
+  const store = createFileStore(api.dataDir);
+  await store.saveOrganization("other", "Other", true);
+  await store.manageProject({ id: "tag-a", name: "Tag A" }, null, 1, "default");
+  await store.manageProject({ id: "tag-b", name: "Tag B" }, null, 1, "other");
+  const password = "report-tag-boundary-password";
+  for (const [username, organizationId, role, projects] of [
+    ["tag-editor", "default", "editor", ["tag-a"]],
+    ["tag-viewer", "default", "viewer", ["tag-a"]],
+    ["tag-outsider", "other", "admin", ["*"]],
+  ])
+    await store.addUser({
+      username,
+      organizationId,
+      role,
+      projects,
+      ...hashPassword(password),
+    });
+  const id = "c".repeat(64);
+  await store.saveRun(
+    {
+      id,
+      name: "Legacy",
+      metadata: { project: "tag-a", branch: "main", tags: ["Private A"] },
+      receivedAt: 1,
+    },
+    fixture(),
+  );
+  const login = async (username) => {
+    const r = await api.request("/api/login", {
+      method: "POST",
+      headers: { Origin: api.origin },
+      body: JSON.stringify({ username, password }),
+    });
+    assert.equal(r.status, 200);
+    return {
+      Cookie: r.headers.get("set-cookie").split(";")[0],
+      Origin: api.origin,
+      "X-CSRF-Token": r.body.csrf,
+    };
+  };
+  const editor = await login("tag-editor"),
+    viewer = await login("tag-viewer"),
+    outsider = await login("tag-outsider");
+  assert.deepEqual(
+    (await api.request("/api/projects/tag-a/tags", { headers: editor })).body
+      .tags,
+    ["Private A"],
+  );
+  assert.equal(
+    (await api.request("/api/projects/tag-a/tags", { headers: outsider }))
+      .status,
+    403,
+  );
+  const patch = (headers) =>
+    api.request("/api/runs/" + id + "/tags", {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ tags: ["Release"] }),
+    });
+  assert.equal((await patch(viewer)).status, 403);
+  assert.equal((await patch(outsider)).status, 404);
+  assert.equal((await patch({ ...editor, "X-CSRF-Token": "bad" })).status, 403);
+  assert.equal((await patch(editor)).status, 200);
+  assert.deepEqual((await store.getRun(id, ["tag-a"])).record.metadata.tags, [
+    "Release",
+  ]);
 });

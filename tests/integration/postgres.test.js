@@ -1297,3 +1297,26 @@ test("PostgreSQL shared widgets preserve organization boundaries and stop on uns
     groups,
   );
 });
+
+test("PostgreSQL report tags update metadata without altering source or report identity", async (t) => {
+  const api = await fixture(t);
+  const saved = record();
+  await api.store.saveRun(saved, raw(), JSON.stringify(raw()));
+  const before = await api.store.getRun(saved.id, ["web"]);
+  assert.equal(
+    await api.store.updateRunTags(saved.id, ["other"], ["No"]),
+    null,
+  );
+  const updated = await api.store.updateRunTags(saved.id, ["web"], ["Nightly"]);
+  assert.equal(updated.id, saved.id);
+  assert.deepEqual(updated.metadata.tags, ["Nightly"]);
+  const after = await api.store.getRun(saved.id, ["web"]);
+  assert.equal(after.originalText, before.originalText);
+  assert.deepEqual(after.report, before.report);
+  assert.equal(after.record.receivedAt, before.record.receivedAt);
+  await api.store.saveRun(saved, raw());
+  assert.deepEqual(
+    (await api.store.getRun(saved.id, ["web"])).record.metadata.tags,
+    ["Nightly"],
+  );
+});

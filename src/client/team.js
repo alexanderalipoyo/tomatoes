@@ -45,7 +45,9 @@ async function teamRequest(route, options = {}) {
       : {}),
     ...(options.headers || {}),
   };
-  if (teamState?.csrf) headers["X-CSRF-Token"] = teamState.csrf;
+  const csrf =
+    (typeof authStatus !== "undefined" && authStatus?.csrf) || teamState?.csrf;
+  if (csrf) headers["X-CSRF-Token"] = csrf;
   const response = await fetch(route, {
     ...options,
     headers,

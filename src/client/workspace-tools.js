@@ -318,6 +318,7 @@ if (typeof document !== "undefined") {
     };
   }
   Object.assign(globalThis, {
+    invalidateSavedAnalysis,
     appendHistoryTools,
     editHistoryEntry,
     trashHistoryEntry,

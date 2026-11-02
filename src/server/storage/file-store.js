@@ -311,6 +311,24 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
         )
         .sort((a, b) => b.receivedAt - a.receivedAt);
     },
+    async getRunTags(id, projects) {
+      const record = (await readJSON(file("runs"), [])).find(
+        (row) => row.id === id && allowed(projects, row.metadata.project),
+      );
+      return record ? record.metadata.tags || [] : null;
+    },
+    async updateRunTags(id, projects, tags) {
+      return serial(async () => {
+        const rows = await readJSON(file("runs"), []);
+        const record = rows.find(
+          (row) => row.id === id && allowed(projects, row.metadata.project),
+        );
+        if (!record) return null;
+        record.metadata = { ...record.metadata, tags };
+        await writeJSON(file("runs"), rows);
+        return record;
+      });
+    },
     async getRunSource(id, projects) {
       if (!/^[a-f0-9]{64}$/.test(id)) return null;
       const record = (await readJSON(file("runs"), [])).find(
@@ -358,6 +376,11 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
           originalText,
         );
         const previous = rows.find((row) => row.id === record.id);
+        if (record.metadata.tags === undefined && previous?.metadata?.tags)
+          record.metadata = {
+            ...record.metadata,
+            tags: previous.metadata.tags,
+          };
         await writeJSON(file("runs"), [
           {
             ...record,

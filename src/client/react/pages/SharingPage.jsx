@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ReportTags } from "../components/ReportTags";
 import { Badge } from "../components/ReportPrimitives";
 export function SharingPage({
   request,
@@ -294,7 +295,7 @@ export function SharingPage({
     </>
   );
 }
-export function RunIdentity({ metadata, branding }) {
+export function RunIdentity({ metadata, branding, showTags = true }) {
   if (!Object.values(metadata).some(Boolean)) return null;
   return (
     <div className="run-identity">
@@ -306,6 +307,9 @@ export function RunIdentity({ metadata, branding }) {
             {key === "project" ? branding(metadata[key]).name : metadata[key]}
           </span>
         ))}
+      {showTags && !!metadata.tags?.length && (
+        <ReportTags tags={metadata.tags} />
+      )}
       {metadata.buildUrl && (
         <a
           className="button"

@@ -67,6 +67,7 @@
       browse.disabled = true;
       try {
         await ImportBranches.prepare();
+        await ReportTags.prepare();
       } finally {
         browse.disabled = false;
       }
