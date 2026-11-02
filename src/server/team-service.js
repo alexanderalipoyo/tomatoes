@@ -1587,6 +1587,10 @@ function createTeamService({
         if (user.kind === "token")
           throw apiError(403, "CI tokens cannot access user preferences.");
         const owner = preferenceOwner(user);
+        const sharedWidgets = async () =>
+          user.kind === "session"
+            ? store.getSharedWidgetSetups(user.organizationId, owner)
+            : [];
         const profile =
           user.kind === "session" ? user.username : "Local profile";
         if (req.method === "GET") {
@@ -1597,6 +1601,7 @@ function createTeamService({
               : null,
             profile,
             profileId: owner,
+            sharedDashboardGroups: await sharedWidgets(),
             storage: store.kind,
           });
           return true;
@@ -1648,6 +1653,17 @@ function createTeamService({
               "settings-general.configure-fallback-project-logo",
             );
           }
+          if (Object.hasOwn(patch, "shareDashboardGroups")) {
+            if (user.kind !== "session")
+              throw apiError(
+                403,
+                "Sign in to share widgets with your organization.",
+              );
+            requireAnyFeature(user, [
+              "report-settings.create-custom-spec-group-widgets",
+              "report-settings.edit-custom-widgets",
+            ]);
+          }
           if (patch.dashboardGroups) {
             const old =
               (await store.getPreferences(owner))?.dashboardGroups || [];
@@ -1683,6 +1699,7 @@ function createTeamService({
             preferences: UserPreferences.withDefaults(saved),
             profile,
             profileId: owner,
+            sharedDashboardGroups: await sharedWidgets(),
             storage: store.kind,
           });
           return true;

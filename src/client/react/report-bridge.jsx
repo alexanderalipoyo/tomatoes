@@ -29,7 +29,12 @@ import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { FlakyPage } from "./pages/FlakyPage";
 import { Message } from "./components/ReportPrimitives";
 import { ReportSettingsPage } from "./pages/ReportSettingsPage";
-import { GroupDashboard, GroupWidgetEditor } from "./components/GroupWidgets";
+import {
+  GroupDashboard,
+  GroupWidgetEditor,
+  GroupSettingsModal,
+  GroupSettingsLauncher,
+} from "./components/GroupWidgets";
 import {
   SettingsTabs,
   AppearanceSettings,
@@ -115,6 +120,27 @@ export const applicationBridge = {
       <GroupDashboard
         key={props.profileId + JSON.stringify(props.groups)}
         {...props}
+      />,
+    );
+  },
+  renderGroupSettingsLauncher(host, props) {
+    this.renderPage(host, <GroupSettingsLauncher {...props} />);
+  },
+  openGroupSettings(props) {
+    if (document.getElementById("custom-widget-settings-dialog")) return;
+    const trigger = document.activeElement;
+    const host = document.createElement("div");
+    document.body.append(host);
+    render(
+      host,
+      <GroupSettingsModal
+        {...props}
+        onClose={() => {
+          roots.get(host)?.unmount();
+          roots.delete(host);
+          host.remove();
+          if (trigger?.isConnected) trigger.focus();
+        }}
       />,
     );
   },

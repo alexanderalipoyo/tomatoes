@@ -51,6 +51,16 @@ function createFileStore(dataDir = path.join(PROJECT_ROOT, ".tomatoes-data")) {
         return record || null;
       });
     },
+    async getSharedWidgetSetups(organizationId, excludeOwner) {
+      const rows = await readJSON(file("preferences"), []);
+      const users = await readJSON(file("users"), []);
+      return require("../shared-widgets").sharedWidgetSetups(
+        rows,
+        users,
+        organizationId,
+        excludeOwner,
+      );
+    },
     async getPreferences(owner) {
       const rows = await readJSON(file("preferences"), []);
       return rows.find((row) => row.owner === owner)?.preferences || null;

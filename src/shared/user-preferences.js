@@ -24,6 +24,7 @@
           ![
             "display",
             "dashboardGroups",
+            "shareDashboardGroups",
             "appearance",
             "profile",
             "importBranches",
@@ -35,6 +36,11 @@
         "Use display, dashboardGroups, appearance, profile, importBranches, or workspaces preference sections.",
       );
     const result = {};
+    if (Object.hasOwn(value, "shareDashboardGroups")) {
+      if (typeof value.shareDashboardGroups !== "boolean")
+        throw new Error("Widget sharing must be on or off.");
+      result.shareDashboardGroups = value.shareDashboardGroups;
+    }
     if (Object.hasOwn(value, "workspaces")) {
       if (
         !Array.isArray(value.workspaces) ||

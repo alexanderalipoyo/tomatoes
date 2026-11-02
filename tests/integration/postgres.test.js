@@ -1245,3 +1245,55 @@ test("PostgreSQL Google signup persists stable identities and consumes challenge
     "persisted-google-sub",
   );
 });
+
+test("PostgreSQL shared widgets preserve organization boundaries and stop on unshare", async (t) => {
+  const api = await fixture(t);
+  await api.store.saveOrganization("other", "Other", true);
+  const password = hashPassword("widget-postgres-test-password");
+  for (const [username, organizationId] of [
+    ["widget-owner", "default"],
+    ["widget-other", "other"],
+  ])
+    await api.store.addUser({
+      username,
+      organizationId,
+      role: "admin",
+      projects: ["*"],
+      ...password,
+    });
+  const groups = [
+    {
+      id: "g",
+      name: "Shared",
+      paths: ["cypress/e2e/a"],
+      metrics: ["passRate"],
+    },
+  ];
+  await api.store.savePreferences("user:widget-owner", {
+    dashboardGroups: groups,
+    shareDashboardGroups: true,
+  });
+  assert.deepEqual(
+    await api.store.getSharedWidgetSetups("default", "user:viewer"),
+    [{ owner: "widget-owner", groups }],
+  );
+  assert.deepEqual(
+    await api.store.getSharedWidgetSetups("other", "user:widget-other"),
+    [],
+  );
+  assert.deepEqual(
+    await api.store.getSharedWidgetSetups("default", "user:widget-owner"),
+    [],
+  );
+  await api.store.savePreferences("user:widget-owner", {
+    shareDashboardGroups: false,
+  });
+  assert.deepEqual(
+    await api.store.getSharedWidgetSetups("default", "user:viewer"),
+    [],
+  );
+  assert.deepEqual(
+    (await api.store.getPreferences("user:widget-owner")).dashboardGroups,
+    groups,
+  );
+});

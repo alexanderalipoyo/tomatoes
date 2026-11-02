@@ -1651,3 +1651,59 @@ test("widget badges distinguish fully passed runs from runs with unexecuted test
     await state.cleanup();
   }
 });
+
+test("widget settings open in a modal and sharing changes only after a successful save", async () => {
+  const { GroupSettingsModal, GroupSettingsLauncher } = loadComponent(
+    "components/GroupWidgets.jsx",
+  );
+  let opens = 0,
+    close = 0,
+    fail = true,
+    calls = 0;
+  const launcher = await mount(
+    React.createElement(GroupSettingsLauncher, { onOpen: () => opens++ }),
+  );
+  await act(async () => launcher.host.querySelector("button").click());
+  assert.equal(opens, 1);
+  await launcher.cleanup();
+  const state = await mount(
+    React.createElement(GroupSettingsModal, {
+      initialGroups: [],
+      initialSharing: false,
+      canShare: true,
+      report: { specs: [] },
+      sourceName: "test",
+      duration: String,
+      save: async (groups) => groups,
+      saveSharing: async (enabled) => {
+        calls++;
+        if (fail) throw Error("Sharing save failed");
+        return enabled;
+      },
+      onSaved: () => {},
+      onToast: () => {},
+      can: () => true,
+      onClose: () => close++,
+    }),
+  );
+  try {
+    assert.ok(state.host.querySelector("dialog[open]"));
+    const toggle = state.host.querySelector('[role="switch"]');
+    assert.equal(toggle.checked, false);
+    await act(async () => toggle.click());
+    assert.equal(toggle.checked, false);
+    assert.match(state.host.textContent, /Sharing save failed/);
+    fail = false;
+    await act(async () => toggle.click());
+    assert.equal(toggle.checked, true);
+    assert.equal(calls, 2);
+    await act(async () =>
+      [...state.host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Close widget settings")
+        .click(),
+    );
+    assert.equal(close, 1);
+  } finally {
+    await state.cleanup();
+  }
+});

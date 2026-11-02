@@ -144,9 +144,11 @@ Run `npm run db:migrate` after updating an existing installation to apply migrat
 
 ## Customized dashboard widgets
 
-Open **Report settings → Customized dashboard widgets** to create a named group from spec folders or individual files. Choose paths from the active report or enter one path per line. Folder paths include nested specs; matching is case-sensitive and does not use wildcards. Multiple paths within one group do not double-count specs.
+Open **My widget settings** on Latest run, or **Report settings → Manage widget settings**, to open the widget settings modal and create a named group from spec folders or individual files. Choose paths from the active report or enter one path per line. Folder paths include nested specs; matching is case-sensitive and does not use wildcards. Multiple paths within one group do not double-count specs.
 
-Choose test outcomes, pass rate, and cumulative test time. A live preview shows the matched specs and totals before saving. Saved groups appear in a separate **Customized dashboard widgets** section on **Latest run**. **View group results** lists matching specs and opens their test results. Groups can be edited or removed in settings.
+Choose test outcomes, pass rate, and cumulative test time. A live preview shows the matched specs and totals before saving. Saved groups appear in a separate **Customized dashboard widgets** section on **Latest run**. **View group results** lists matching specs and opens their test results. Groups can be edited or removed in the settings modal.
+
+**Share my widgets with this organization** shares your entire saved setup with active members of your current organization. Sharing is off by default. Recipients see read-only widgets labeled with the owner; their own setups are preserved. Only the owner can edit or stop sharing. Widget sharing does not grant report or project access. Members receive updates when they reload preferences or the app. Definitions remain in user preferences, so no database migration is needed.
 
 Group settings are stored in your server preference profile and reused for later imports. Widgets always recalculate from the selected report; paths with no matches show a no-data state. Groups may overlap each other, so their totals should not be added together. Pass rate includes all registered tests, and cumulative test time is the sum of recorded test durations. Group settings are not included in report JSON or browser-history backups; include the user preference table in database backups.
 

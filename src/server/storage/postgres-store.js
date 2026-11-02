@@ -228,6 +228,20 @@ function createPostgresStore({
         await migrateSchema(client, schema);
       });
     },
+    async getSharedWidgetSetups(organizationId, excludeOwner) {
+      const rows = await pool.query(
+        `SELECT owner,preferences FROM ${ns}.user_preferences WHERE preferences->>'shareDashboardGroups'='true'`,
+      );
+      const users = await pool.query(
+        `SELECT username,role,projects,disabled,organization_id AS "organizationId",memberships,google_auth AS "googleAuth" FROM ${ns}.users`,
+      );
+      return require("../shared-widgets").sharedWidgetSetups(
+        rows.rows,
+        users.rows,
+        organizationId,
+        excludeOwner,
+      );
+    },
     async getPreferences(owner) {
       const result = await pool.query(
         `SELECT preferences FROM ${ns}.user_preferences WHERE owner=$1`,

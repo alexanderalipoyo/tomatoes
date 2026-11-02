@@ -3168,3 +3168,92 @@ test("Google signup verifies one-time challenges, preserves existing roles and w
   tokenClaims = claims(value.nonce, "member@gmail.com", "different-sub");
   assert.equal((await authenticate(value)).status, 401);
 });
+
+test("widget sharing is opt-in, organization-scoped, read-only for recipients, and revocable", async (t) => {
+  const { createFileStore } = require("../../src/server/storage/index");
+  const api = await serviceFixture(t, { teamMode: true });
+  const store = createFileStore(api.dataDir);
+  await store.saveOrganization("default", "Organization A");
+  await store.saveOrganization("other", "Organization B", true);
+  const password = "widget-sharing-test-password";
+  for (const [username, organizationId, role] of [
+    ["widget-owner", "default", "admin"],
+    ["widget-reader", "default", "viewer"],
+    ["widget-outsider", "other", "admin"],
+  ]) {
+    await store.addUser({
+      username,
+      organizationId,
+      role,
+      projects: ["*"],
+      ...hashPassword(password),
+    });
+  }
+  async function login(username) {
+    const r = await api.request("/api/login", {
+      method: "POST",
+      headers: { Origin: api.origin },
+      body: JSON.stringify({ username, password }),
+    });
+    assert.equal(r.status, 200);
+    return {
+      Cookie: r.headers.get("set-cookie").split(";")[0],
+      Origin: api.origin,
+      "X-CSRF-Token": r.body.csrf,
+    };
+  }
+  const owner = await login("widget-owner"),
+    reader = await login("widget-reader"),
+    outsider = await login("widget-outsider");
+  const groups = [
+    {
+      id: "mine",
+      name: "My shared widgets",
+      paths: ["cypress/e2e/hipaa-comp/employee"],
+      metrics: ["passRate"],
+    },
+  ];
+  const put = (headers, body) =>
+    api.request("/api/preferences", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(body),
+    });
+  const get = (headers) => api.request("/api/preferences", { headers });
+  assert.equal((await put(owner, { dashboardGroups: groups })).status, 200);
+  assert.deepEqual((await get(reader)).body.sharedDashboardGroups, []);
+  assert.equal(
+    (
+      await put(
+        { ...owner, "X-CSRF-Token": "bad" },
+        { shareDashboardGroups: true },
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await put(owner, { shareDashboardGroups: "true" })).status,
+    400,
+  );
+  assert.equal((await put(owner, { shareDashboardGroups: true })).status, 200);
+  assert.deepEqual((await get(reader)).body.sharedDashboardGroups, [
+    { owner: "widget-owner", groups },
+  ]);
+  assert.deepEqual((await get(outsider)).body.sharedDashboardGroups, []);
+  assert.deepEqual((await get(owner)).body.sharedDashboardGroups, []);
+  assert.equal((await put(reader, { shareDashboardGroups: true })).status, 403);
+  assert.equal(
+    (await put(reader, { owner: "user:widget-owner", dashboardGroups: [] }))
+      .status,
+    400,
+  );
+  assert.deepEqual((await get(owner)).body.preferences.dashboardGroups, groups);
+  assert.equal(
+    (await put(owner, { display: { timeZone: "UTC", rows: 30 } })).status,
+    200,
+  );
+  assert.equal((await get(reader)).body.sharedDashboardGroups.length, 1);
+  assert.equal((await put(owner, { shareDashboardGroups: false })).status, 200);
+  assert.deepEqual((await get(reader)).body.sharedDashboardGroups, []);
+  assert.deepEqual((await get(owner)).body.preferences.dashboardGroups, groups);
+});

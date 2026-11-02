@@ -14,13 +14,14 @@ export function CustomDashboard() {
           </h2>
           <p id="custom-dashboard-source"></p>
         </div>
-        <a
+        <button
+          id="open-custom-widget-settings"
           className="button"
-          href="#report-settings"
+          type="button"
           data-access-view="settings"
         >
           {"My widget settings"}
-        </a>
+        </button>
       </div>
       <div id="custom-dashboard-content"></div>
     </section>

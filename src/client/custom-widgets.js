@@ -13,6 +13,16 @@ function readCustomWidgets() {
     state.ready && owner !== null && state.profileId === profileOwner;
   return {
     groups: ready ? state.preferences.dashboardGroups : [],
+    sharedGroups: ready
+      ? (state.sharedDashboardGroups || []).flatMap((setup) =>
+          setup.groups.map((group) => ({
+            ...group,
+            id: "shared:" + setup.owner + ":" + group.id,
+            sharedBy: setup.owner,
+          })),
+        )
+      : [],
+    sharing: ready && state.preferences.shareDashboardGroups === true,
     profileId: ready ? profileOwner : "unavailable",
     ready,
     error: ready
@@ -30,11 +40,13 @@ function showCustomSpec(id) {
   openTests(String(id), "all");
 }
 function renderCustomizedDashboard() {
-  const { groups, error, profileId } = readCustomWidgets();
+  const { groups, sharedGroups, error, profileId } = readCustomWidgets();
   $("#custom-dashboard-source").textContent =
     `Your saved widget setup, using results from ${sourceName}. Groups may overlap; each widget counts a matching spec once.`;
+  const settingsButton = $("#open-custom-widget-settings");
+  if (settingsButton) settingsButton.onclick = openCustomWidgetSettings;
   globalThis.TomatoesReact.renderGroups($("#custom-dashboard-content"), {
-    groups,
+    groups: [...groups, ...sharedGroups],
     profileId,
     canManage: canAccessView("settings"),
     error,
@@ -44,21 +56,32 @@ function renderCustomizedDashboard() {
     onSpec: showCustomSpec,
   });
 }
-function renderCustomWidgetSettings(alt) {
+function openCustomWidgetSettings() {
   const stored = readCustomWidgets();
-  globalThis.TomatoesReact.renderGroupEditor(
-    alt.querySelector("#custom-widget-settings-host"),
-    {
-      initialGroups: stored.groups,
-      preferenceError: stored.error,
-      ready: stored.ready,
-      report,
-      sourceName,
-      duration,
-      save: saveCustomWidgets,
-      onSaved: renderCustomizedDashboard,
-      onToast: showToast,
-      can: (feature) => stored.ready && hasAccess(feature),
+  globalThis.TomatoesReact.openGroupSettings({
+    initialGroups: stored.groups,
+    initialSharing: stored.sharing,
+    canShare: Boolean(authStatus?.enabled && authStatus?.authenticated),
+    preferenceError: stored.error,
+    ready: stored.ready,
+    report,
+    sourceName,
+    duration,
+    save: saveCustomWidgets,
+    saveSharing: async (enabled) => {
+      const state = await userPreferences.save({
+        shareDashboardGroups: enabled,
+      });
+      return state.preferences.shareDashboardGroups === true;
     },
+    onSaved: renderCustomizedDashboard,
+    onToast: showToast,
+    can: (feature) => stored.ready && hasAccess(feature),
+  });
+}
+function renderCustomWidgetSettings(alt) {
+  globalThis.TomatoesReact.renderGroupSettingsLauncher(
+    alt.querySelector("#custom-widget-settings-host"),
+    { onOpen: openCustomWidgetSettings },
   );
 }

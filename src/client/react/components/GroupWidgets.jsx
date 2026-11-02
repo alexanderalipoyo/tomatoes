@@ -330,6 +330,9 @@ export function GroupDashboard({
                   <div className="widget-heading">
                     <div>
                       <h3>{group.name}</h3>
+                      {group.sharedBy && (
+                        <p>Shared by {group.sharedBy} · View only</p>
+                      )}
                       <p>
                         {stats.specs.length} matching specs ·{" "}
                         {group.paths.length} paths
@@ -432,8 +435,56 @@ export function GroupDashboard({
     </>
   );
 }
+export function GroupSettingsLauncher({ onOpen }) {
+  return (
+    <section className="settings-card">
+      <h2>Customized dashboard widgets</h2>
+      <p>Manage your widgets and organization sharing.</p>
+      <button type="button" className="button" onClick={onOpen}>
+        Manage widget settings
+      </button>
+    </section>
+  );
+}
+export function GroupSettingsModal({ onClose, ...props }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal
+      labelledBy="custom-widget-settings-title"
+      onClose={onClose}
+      busy={busy}
+      id="custom-widget-settings-dialog"
+      className="custom-widget-settings-dialog"
+    >
+      <header className="custom-widget-settings-header">
+        <div>
+          <h2 id="custom-widget-settings-title">
+            Customized dashboard widgets
+          </h2>
+          <p>Manage your groups and organization sharing.</p>
+        </div>
+        <button
+          className="button"
+          type="button"
+          onClick={onClose}
+          disabled={busy}
+        >
+          Close widget settings
+        </button>
+      </header>
+      <div className="custom-widget-settings-body">
+        <GroupWidgetEditor {...props} inModal onPending={setBusy} />
+      </div>
+    </Modal>
+  );
+}
 export function GroupWidgetEditor({
   initialGroups,
+  inModal = false,
+  initialSharing = false,
+  canShare = false,
+  saveSharing,
+  onPending,
   ready = true,
   preferenceError = "",
   report,
@@ -452,6 +503,29 @@ export function GroupWidgetEditor({
     [metrics, setMetrics] = useState(["outcomes", "passRate", "duration"]),
     [pending, setPending] = useState(false),
     [error, setError] = useState("");
+  const [sharing, setSharing] = useState(initialSharing);
+  useEffect(() => {
+    onPending?.(pending);
+  }, [pending, onPending]);
+  async function toggleSharing(enabled) {
+    if (pending || !ready) return;
+    setPending(true);
+    try {
+      setSharing(await saveSharing(enabled));
+      onSaved();
+      onToast(
+        enabled
+          ? "Widgets shared with your organization."
+          : "Widget sharing turned off.",
+        "success",
+      );
+    } catch (reason) {
+      setError(reason.message);
+      onToast(reason.message, "error");
+    } finally {
+      setPending(false);
+    }
+  }
   const choices = useMemo(() => Groups.pathOptions(report), [report]);
   const preview = useMemo(() => {
     try {
@@ -528,22 +602,50 @@ export function GroupWidgetEditor({
       className="settings-card custom-widget-settings"
       aria-labelledby="custom-widget-settings-title"
     >
-      <div className="widget-heading">
-        <div>
-          <h2 id="custom-widget-settings-title">
-            Customized dashboard widgets
-          </h2>
-          <p>Create named spec groups for your Latest run dashboard.</p>
+      {!inModal && (
+        <div className="widget-heading">
+          <div>
+            <h2 id="custom-widget-settings-title">
+              Customized dashboard widgets
+            </h2>
+            <p>Create named spec groups for your Latest run dashboard.</p>
+          </div>
+          <a className="widget-link" href="#latest-run">
+            View dashboard →
+          </a>
         </div>
-        <a className="widget-link" href="#latest-run">
-          View dashboard →
-        </a>
-      </div>
+      )}
       <p>
         Your widget names, paths, metrics, and order are saved to your own user
-        preferences. Other users keep their own setup. Results use the report
-        you are viewing.
+        preferences. Shared widgets are read-only for other organization
+        members. Results use the report you are viewing.
       </p>
+      {canShare && (
+        <div className="custom-widget-sharing">
+          <label>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={sharing}
+              onChange={(event) => toggleSharing(event.target.checked)}
+              disabled={
+                pending ||
+                !ready ||
+                !(
+                  can("report-settings.create-custom-spec-group-widgets") ||
+                  can("report-settings.edit-custom-widgets")
+                )
+              }
+            />{" "}
+            Share my widgets with this organization
+          </label>
+          <p>
+            Members of your current organization can view your saved widgets.
+            Only you can edit them. Report and project access stays the same.
+            Turn this off to stop sharing.
+          </p>
+        </div>
+      )}
       {preferenceError && (
         <p className="notice" role="status">
           {preferenceError}

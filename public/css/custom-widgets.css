@@ -290,3 +290,107 @@
     font-size: 16px;
   }
 }
+
+.custom-widget-settings-dialog {
+  width: min(1100px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--theme-surface, #fff);
+}
+.custom-widget-settings-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.custom-widget-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex: 0 0 auto;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.custom-widget-settings-header h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.35;
+}
+.custom-widget-settings-header p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--theme-muted, #71828c);
+}
+.custom-widget-settings-header button {
+  flex-shrink: 0;
+}
+.custom-widget-settings-body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+.custom-widget-settings-dialog .custom-widget-settings {
+  margin: 0;
+  padding: 24px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+body:has(.custom-widget-settings-dialog[open]) {
+  overflow: hidden;
+}
+@media (max-width: 600px) {
+  .custom-widget-settings-dialog {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .custom-widget-settings-header {
+    padding: 16px;
+    gap: 12px;
+    align-items: start;
+  }
+  .custom-widget-settings-header h2 {
+    font-size: 17px;
+  }
+  .custom-widget-settings-header button {
+    max-width: 100px;
+    white-space: normal;
+  }
+  .custom-widget-settings-dialog .custom-widget-settings {
+    padding: 16px;
+  }
+}
+.custom-widget-sharing {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+.custom-widget-sharing label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+}
+.custom-widget-sharing p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.custom-widget-sharing input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--theme-accent-text, #14835e);
+}
+.custom-widget-settings .custom-widget-sharing label {
+  justify-content: flex-start;
+  margin: 0;
+}
