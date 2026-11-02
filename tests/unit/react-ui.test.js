@@ -1927,3 +1927,108 @@ test("import history combines branch and tag filters, handles legacy reports, an
     await state.cleanup();
   }
 });
+
+test("header theme selector saves changes and retains confirmed choice on failure", async () => {
+  const { ThemeSelector } = loadComponent("components/ThemeSelector.jsx");
+  let finish;
+  const notices = [],
+    calls = [];
+  let fail = false;
+  const state = await mount(
+    React.createElement(ThemeSelector, {
+      mode: "system",
+      ready: true,
+      save: (mode) => {
+        calls.push(mode);
+        return new Promise((resolve, reject) => {
+          finish = () =>
+            fail ? reject(Error("Could not save")) : resolve(mode);
+        });
+      },
+      notify: (...args) => notices.push(args),
+    }),
+  );
+  const select = state.host.querySelector("select");
+  const choose = async (value) =>
+    act(async () => {
+      select.value = value;
+      select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    });
+  try {
+    await choose("light");
+    assert.equal(select.disabled, true);
+    assert.deepEqual(calls, ["light"]);
+    await act(async () => finish());
+    assert.equal(select.value, "light");
+    assert.equal(select.disabled, false);
+    assert.equal(notices.at(-1)[1], "success");
+    fail = true;
+    await choose("dark");
+    await act(async () => finish());
+    assert.equal(select.value, "light");
+    assert.deepEqual(notices.at(-1), ["Could not save", "error"]);
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("history keeps selected filters visible when matching reports are removed or retagged", async () => {
+  const { HistoryBrowser } = loadComponent("components/HistoryBrowser.jsx");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const props = { formatDate: String, duration: String, href: () => "#runs" };
+  const entry = {
+    id: "a",
+    name: "run",
+    lastImportedAt: 1,
+    start: "2026-01-01",
+    metadata: { branch: "main", tags: ["Smoke"] },
+    status: "passed",
+    counts: { total: 1, passed: 1, failed: 0, pending: 0, skipped: 0 },
+    passRate: 100,
+    duration: 1,
+  };
+  const render = async (entries) =>
+    act(async () =>
+      root.render(React.createElement(HistoryBrowser, { ...props, entries })),
+    );
+  try {
+    await render([entry]);
+    for (const [id, value] of [
+      ["history-branch-filter", "main"],
+      ["history-tag-filter", "smoke"],
+    ]) {
+      await act(async () => {
+        const select = host.querySelector("#" + id);
+        select.value = JSON.stringify(value);
+        select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      });
+    }
+    await render([
+      { ...entry, metadata: { branch: "develop", tags: ["Nightly"] } },
+    ]);
+    assert.equal(
+      host.querySelector("#history-branch-filter").value,
+      JSON.stringify("main"),
+    );
+    assert.equal(
+      host.querySelector("#history-tag-filter").value,
+      JSON.stringify("smoke"),
+    );
+    assert.match(
+      host.querySelector("#history-tag-filter option:checked").textContent,
+      /no saved reports/,
+    );
+    assert.match(host.textContent, /No reports match these filters/);
+    await act(async () =>
+      [...host.querySelectorAll("button")]
+        .find((el) => el.textContent === "Reset filters")
+        .click(),
+    );
+    assert.equal(host.querySelectorAll("article").length, 1);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});

@@ -1,3 +1,28 @@
+/* Navigation shares the selected theme across desktop and mobile. */
+:root {
+  --nav-surface: #ffffff;
+  --nav-raised: #f3f6f8;
+  --nav-text: #405362;
+  --nav-heading: #243641;
+  --nav-muted: #667985;
+  --nav-border: #dce5e9;
+  --nav-hover: #edf3f5;
+  --nav-active: #e3f3eb;
+  --nav-active-text: #126b4c;
+  --nav-badge: #d2eade;
+}
+:root[data-theme="dark"] {
+  --nav-surface: #18232d;
+  --nav-raised: #202e39;
+  --nav-text: #b7c5d0;
+  --nav-heading: #edf3f7;
+  --nav-muted: #9bafbd;
+  --nav-border: #344650;
+  --nav-hover: #24333f;
+  --nav-active: #234439;
+  --nav-active-text: #a3edd0;
+  --nav-badge: #31574b;
+}
 /* Shared dark surfaces and text. Existing light colors remain in component fallbacks. */
 :root[data-theme="dark"] {
   --theme-surface: #1b2732;
@@ -23,6 +48,14 @@
   color-scheme: dark;
 }
 :root[data-theme="light"] {
+  --theme-surface: #fff;
+  --theme-surface-raised: #f8fafb;
+  --theme-text: #283641;
+  --theme-muted: #657580;
+  --theme-border: #e4e9ed;
+  --theme-accent-text: #187953;
+  --theme-accent-surface: #edf8f2;
+  --muted: #657580;
   color-scheme: light;
 }
 :root[data-theme="dark"] :is(input, select, textarea) {
@@ -136,7 +169,12 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 23%;
-  background: #24333f;
+  background: #fff;
+  border-right: 1px solid #d8e2e6;
+}
+.mode-preview-dark i {
+  background: #18232d;
+  border-color: #344650;
 }
 .mode-preview b {
   position: absolute;
@@ -240,15 +278,15 @@
 .mobile-workspace-identity {
   margin: 12px 0 20px;
   padding: 14px;
-  border: 1px solid #34414b;
+  border: 1px solid var(--nav-border);
   border-radius: 8px;
-  color: #e8edf0;
-  background: #202e39;
+  color: var(--nav-heading);
+  background: var(--nav-raised);
   font-size: 13px;
 }
 .mobile-workspace-identity small {
   margin-top: 5px;
-  color: #a5b0bd;
+  color: var(--nav-muted);
   font-size: 12px;
 }
 
@@ -2099,4 +2137,77 @@ select.project-picker {
 }
 #workspace-menu-other-organizations .workspace-menu-organization:hover {
   background: var(--theme-accent-surface, #e8f4ee);
+}
+
+/* Account theme shortcut beside sign-out. */
+#topbar-theme {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.topbar-theme-select {
+  box-sizing: border-box;
+  height: 40px;
+  width: 94px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--theme-text, #283641);
+  background: var(--theme-surface, #fff);
+  cursor: pointer;
+}
+.topbar-theme-select:focus-visible {
+  outline: 2px solid var(--theme-accent-text, #187953);
+  outline-offset: 2px;
+}
+.topbar-theme-select:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+@media (max-width: 640px) {
+  .topbar .mobile-wordmark {
+    flex: 1;
+    min-width: 0;
+  }
+  .topbar-actions {
+    flex-shrink: 0;
+  }
+  .topbar-theme-select {
+    width: 84px;
+    padding: 0 6px;
+  }
+}
+
+/* Keep active, hover and focus states readable in either palette. */
+.sidebar {
+  border-right: 1px solid var(--nav-border);
+}
+:is(.sidebar, #mobile-navigation) nav a {
+  border: 1px solid transparent;
+  font-weight: 500;
+}
+:is(.sidebar, #mobile-navigation) nav a.active {
+  border-color: var(--nav-badge);
+  font-weight: 650;
+}
+:is(.sidebar, #mobile-navigation) :is(a, button, select):focus-visible {
+  outline: 2px solid var(--nav-active-text);
+  outline-offset: 2px;
+}
+:is(.sidebar, #mobile-navigation) .project-picker {
+  color: var(--nav-heading);
+  background: var(--nav-raised);
+  border: 1px solid var(--nav-border);
+  border-radius: 7px;
+  padding: 10px;
+}
+:is(.sidebar, #mobile-navigation) .project-picker option {
+  color: var(--nav-heading);
+  background: var(--nav-raised);
+}
+:is(.sidebar, #mobile-navigation)
+  :is(.workspace, .mobile-workspace-identity):hover {
+  background: var(--nav-hover);
+  border-color: var(--nav-muted);
 }

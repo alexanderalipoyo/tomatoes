@@ -21,8 +21,8 @@ body:has(#mobile-navigation[open]) {
     max(24px, env(safe-area-inset-bottom));
   border: 0;
   border-radius: 0 16px 16px 0;
-  background: #18232d;
-  color: #a5b0bd;
+  background: var(--nav-surface);
+  color: var(--nav-text);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -41,12 +41,12 @@ body:has(#mobile-navigation[open]) {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #fff8ed;
+  color: var(--nav-heading);
   font-size: 24px;
   letter-spacing: -0.7px;
 }
 #close-navigation {
-  color: #cbd7dc;
+  color: var(--nav-text);
   font-size: 28px;
   min-width: 44px;
   min-height: 44px;
@@ -73,7 +73,7 @@ body:has(#mobile-navigation[open]) {
 .mobile-navigation-note {
   margin: 30px 14px 0;
   font-size: 11px;
-  color: #8599a5;
+  color: var(--nav-muted);
   line-height: 1.8;
 }
 main,

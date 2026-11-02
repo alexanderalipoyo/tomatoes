@@ -1,3 +1,4 @@
+import { ThemeSelector } from "./components/ThemeSelector";
 import {
   OrganizationList,
   OrganizationCreateForm,
@@ -99,6 +100,12 @@ export const applicationBridge = {
   },
   renderSettingsTabs(host, props) {
     this.renderPage(host, <SettingsTabs {...props} />);
+  },
+  renderTopbarTheme(props) {
+    render(
+      "#topbar-theme",
+      <ThemeSelector key={props.profileId + ":" + props.mode} {...props} />,
+    );
   },
   renderAppearance(host, props) {
     this.renderPage(host, <AppearanceSettings {...props} />);

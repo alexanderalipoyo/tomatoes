@@ -14,6 +14,16 @@ export function HistoryBrowser({ entries, ...props }) {
         .map((value) => [value.toLowerCase(), value]),
     ).entries(),
   ].sort((a, b) => a[1].localeCompare(b[1]));
+  const branchAvailable =
+    !branch ||
+    (branch === "null"
+      ? entries.some((entry) => !entry.metadata?.branch)
+      : branches.includes(JSON.parse(branch)));
+  const tagAvailable =
+    !tag ||
+    (tag === "null"
+      ? entries.some((entry) => !entry.metadata?.tags?.length)
+      : tags.some(([key]) => key === JSON.parse(tag)));
   const filtered = entries.filter(
     (entry) =>
       (!branch ||
@@ -46,6 +56,12 @@ export function HistoryBrowser({ entries, ...props }) {
             onChange={(event) => setBranch(event.target.value)}
           >
             <option value="">All branches</option>
+            {!branchAvailable && (
+              <option value={branch}>
+                {branch === "null" ? "No branch" : JSON.parse(branch)} (no saved
+                reports)
+              </option>
+            )}
             {entries.some((entry) => !entry.metadata?.branch) && (
               <option value="null">No branch</option>
             )}
@@ -64,6 +80,12 @@ export function HistoryBrowser({ entries, ...props }) {
             onChange={(event) => setTag(event.target.value)}
           >
             <option value="">All tags</option>
+            {!tagAvailable && (
+              <option value={tag}>
+                {tag === "null" ? "No tags" : JSON.parse(tag)} (no saved
+                reports)
+              </option>
+            )}
             {entries.some((entry) => !entry.metadata?.tags?.length) && (
               <option value="null">No tags</option>
             )}

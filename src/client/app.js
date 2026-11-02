@@ -77,6 +77,7 @@ async function reloadUserPreferences() {
   organizationDraft = null;
   preferences = state.preferences.display;
   Appearance.apply(state.preferences.appearance.colorMode);
+  renderTopbarTheme();
   renderWorkspaceIdentity();
   pageSize = preferences.rows;
   page = 1;
@@ -1240,6 +1241,28 @@ function renderWorkspaceSettings(alt) {
   else renderAppearanceSettings(panel);
 }
 
+function renderTopbarTheme() {
+  const state = userPreferences.getState();
+  globalThis.TomatoesReact.renderTopbarTheme({
+    profileId: state.profileId,
+    mode: state.preferences.appearance.colorMode,
+    ready: state.ready,
+    notify: showToast,
+    save: async (colorMode) => {
+      const saved = await userPreferences.save({ appearance: { colorMode } });
+      Appearance.apply(saved.preferences.appearance.colorMode);
+      appearanceDraft = null;
+      if (
+        view === "workspace-settings" &&
+        !isSharingSettingsView() &&
+        document.querySelector("#appearance-form")
+      )
+        renderAppearanceSettings($("#workspace-settings-panel"));
+      return saved.preferences.appearance.colorMode;
+    },
+  });
+}
+
 function renderAppearanceSettings(alt) {
   const state = userPreferences.getState();
   if (!appearanceDraft || appearanceDraft.profileId !== state.profileId)
@@ -1299,6 +1322,7 @@ function renderAppearanceSettings(alt) {
     try {
       const saved = await userPreferences.save({ appearance: { colorMode } });
       Appearance.apply(saved.preferences.appearance.colorMode);
+      renderTopbarTheme();
       showToast("Appearance saved to your user preferences.", "success");
     } catch (error) {
       showToast(error.message, "error");

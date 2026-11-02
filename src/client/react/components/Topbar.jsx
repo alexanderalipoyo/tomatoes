@@ -44,6 +44,7 @@ export function Topbar() {
         <span className="source-label" id="source-label">
           {"Loading report…"}
         </span>
+        <span id="topbar-theme"></span>
         <button
           className="button topbar-logout"
           id="topbar-logout"
