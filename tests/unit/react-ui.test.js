@@ -1360,7 +1360,10 @@ test("custom widgets combine search and status, sort metrics, and reset saved or
       );
     });
   try {
-    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending", "Empty"]);
+    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending"]);
+    assert.match(state.host.textContent, /Showing 3 of 4 widgets/);
+    await change("Group name", "Empty");
+    assert.deepEqual(names(), []);
     await change("Group name", "Alpha");
     assert.deepEqual(names(), ["Alpha"]);
     await change("Result status", "failed");
@@ -1370,7 +1373,7 @@ test("custom widgets combine search and status, sort metrics, and reset saved or
         .find((el) => el.textContent === "Reset display")
         .click(),
     );
-    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending", "Empty"]);
+    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending"]);
     await change("Group name", "Zulu smoke");
     await change("Search widgets", "  CYPRESS/SMOKE  ");
     assert.deepEqual(names(), ["Zulu smoke"]);
@@ -1384,13 +1387,13 @@ test("custom widgets combine search and status, sort metrics, and reset saved or
     );
     assert.equal(state.host.querySelectorAll("select")[0].value, "");
     for (const [sort, expected] of [
-      ["name-asc", ["Alpha", "Empty", "Pending", "Zulu smoke"]],
-      ["name-desc", ["Zulu smoke", "Pending", "Empty", "Alpha"]],
-      ["failed", ["Zulu smoke", "Alpha", "Pending", "Empty"]],
-      ["pass-asc", ["Zulu smoke", "Pending", "Alpha", "Empty"]],
-      ["pass-desc", ["Alpha", "Zulu smoke", "Pending", "Empty"]],
-      ["duration", ["Zulu smoke", "Alpha", "Pending", "Empty"]],
-      ["tests", ["Zulu smoke", "Alpha", "Pending", "Empty"]],
+      ["name-asc", ["Alpha", "Pending", "Zulu smoke"]],
+      ["name-desc", ["Zulu smoke", "Pending", "Alpha"]],
+      ["failed", ["Zulu smoke", "Alpha", "Pending"]],
+      ["pass-asc", ["Zulu smoke", "Pending", "Alpha"]],
+      ["pass-desc", ["Alpha", "Zulu smoke", "Pending"]],
+      ["duration", ["Zulu smoke", "Alpha", "Pending"]],
+      ["tests", ["Zulu smoke", "Alpha", "Pending"]],
     ]) {
       await change("Sort widgets", sort);
       assert.deepEqual(names(), expected, sort);
@@ -1399,17 +1402,17 @@ test("custom widgets combine search and status, sort metrics, and reset saved or
       ["passed", "Alpha"],
       ["failed", "Zulu smoke"],
       ["incomplete", "Pending"],
-      ["empty", "Empty"],
+      ["empty", null],
     ]) {
       await change("Result status", status);
-      assert.deepEqual(names(), [expected]);
+      assert.deepEqual(names(), expected ? [expected] : []);
     }
     await act(async () =>
       [...state.host.querySelectorAll("button")]
         .find((el) => el.textContent === "Reset display")
         .click(),
     );
-    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending", "Empty"]);
+    assert.deepEqual(names(), ["Zulu smoke", "Alpha", "Pending"]);
     assert.equal(JSON.stringify(groups), original);
   } finally {
     await state.cleanup();
@@ -1440,7 +1443,14 @@ test("custom widget subgroup dropdown includes every partner's roles without cro
   const state = await mount(
     React.createElement(GroupDashboard, {
       groups,
-      report: { specs: [] },
+      report: normalizeReport({
+        stats: {},
+        results: groups.map((group) => ({
+          file: group.paths[0] + "/spec.cy.js",
+          tests: [],
+          suites: [],
+        })),
+      }),
       sourceName: "test",
       duration: String,
       onSpec: () => {},
@@ -1520,7 +1530,7 @@ test("widget display restores browser choices per account and tolerates unavaila
       [...state.host.querySelectorAll("select")].map((el) => el.value),
       [choices.groupName, "empty", "name-desc"],
     );
-    assert.equal(state.host.querySelectorAll("article").length, 1);
+    assert.equal(state.host.querySelectorAll("article").length, 0);
     await act(async () =>
       [...state.host.querySelectorAll("button")]
         .find((el) => el.textContent === "Reset display")
@@ -1574,7 +1584,7 @@ test("widget display restores browser choices per account and tolerates unavaila
           profileId: "user:widget-test",
         }),
       );
-      assert.equal(state.host.querySelectorAll("article").length, 1);
+      assert.equal(state.host.querySelectorAll("article").length, 0);
     } finally {
       Object.defineProperty(window, "localStorage", storage);
     }

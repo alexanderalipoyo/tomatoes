@@ -171,7 +171,8 @@ export function GroupDashboard({
   const visible = useMemo(() => {
     const search = query.trim().toLowerCase();
     const filtered = entries.filter(
-      ({ group, result }) =>
+      ({ group, stats, result }) =>
+        stats.specs.length > 0 &&
         (!activeGroupName ||
           group.name === activeGroupName ||
           pathSubgroups(group).some(
