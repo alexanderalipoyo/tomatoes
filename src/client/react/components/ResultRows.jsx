@@ -1,3 +1,16 @@
+function specTitle(item) {
+  return item.tests.find((test) => test.suite)?.suite || item.name;
+}
+function specSummary(item, duration, finishedDate) {
+  const line = [
+    specTitle(item).replace(/[\r\n]+/g, " "),
+    `${item.counts.passed} Passed`,
+    `${item.counts.failed} Failed`,
+    duration(item.duration),
+    finishedDate || "Unavailable",
+  ].join(" | ");
+  return line;
+}
 function StatusBadge({ status }) {
   return (
     <span className={`status-badge ${status}`}>
@@ -17,7 +30,15 @@ export function ResultHeaders({ isTests }) {
     </tr>
   );
 }
-export function ResultRows({ items, isTests, duration, showTest, openSpec }) {
+export function ResultRows({
+  items,
+  isTests,
+  duration,
+  showTest,
+  openSpec,
+  onCopy,
+  finishedDate,
+}) {
   if (!items.length)
     return (
       <tr>
@@ -66,7 +87,7 @@ export function ResultRows({ items, isTests, duration, showTest, openSpec }) {
             data-spec={item.id}
             onClick={() => openSpec(String(item.id))}
           >
-            {item.name}
+            {specTitle(item)}
           </button>
           <small>{item.file}</small>
           <small>{item.counts.total.toLocaleString("en-US")} tests</small>
@@ -92,13 +113,22 @@ export function ResultRows({ items, isTests, duration, showTest, openSpec }) {
           {duration(item.duration)}
         </td>
         <td data-label="Details">
-          <button
-            className="button"
-            data-spec={item.id}
-            onClick={() => openSpec(String(item.id))}
-          >
-            View tests
-          </button>
+          <div className="spec-actions">
+            <button
+              className="button"
+              data-spec={item.id}
+              onClick={() => openSpec(String(item.id))}
+            >
+              View tests
+            </button>
+            <button
+              className="button"
+              aria-label={`Copy summary for ${specTitle(item)}`}
+              onClick={() => onCopy(specSummary(item, duration, finishedDate))}
+            >
+              Copy
+            </button>
+          </div>
         </td>
       </tr>
     ),

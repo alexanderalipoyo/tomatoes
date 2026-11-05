@@ -250,6 +250,120 @@ test("React shell keeps the feature host IDs unique and scripts start only after
   assert.ok(!page.includes('src="/js/app.js"'));
 });
 
+test("spec view shows only the first suite title with a filename fallback", () => {
+  const { ResultRows } = loadComponent("components/ResultRows.jsx");
+  const report = normalizeReport({
+    stats: {},
+    results: [
+      {
+        file: "multiple.cy.ts",
+        suites: [
+          {
+            title: "Account <settings>",
+            tests: [{ state: "passed" }, { state: "passed" }],
+          },
+          { title: "Profile", tests: [{ state: "passed" }] },
+        ],
+      },
+      { file: "plain.cy.ts", tests: [{ state: "passed" }] },
+    ],
+  });
+  const markup = renderToStaticMarkup(
+    React.createElement(
+      "table",
+      null,
+      React.createElement(
+        "tbody",
+        null,
+        React.createElement(ResultRows, {
+          items: report.specs,
+          isTests: false,
+          duration: String,
+          openSpec: () => {},
+        }),
+      ),
+    ),
+  );
+  const rows = new JSDOM(markup).window.document.querySelectorAll("tr");
+  assert.deepEqual(
+    Array.from(rows[0].querySelectorAll("small"), (node) => node.textContent),
+    ["multiple.cy.ts", "3 tests"],
+  );
+  assert.equal(
+    rows[0].querySelector(".result-link").textContent,
+    "Account <settings>",
+  );
+  assert.equal(
+    rows[1].querySelector(".result-link").textContent,
+    "plain.cy.ts",
+  );
+  assert.equal(rows[0].querySelector("settings"), null);
+  assert.deepEqual(
+    Array.from(rows[1].querySelectorAll("small"), (node) => node.textContent),
+    ["plain.cy.ts", "1 tests"],
+  );
+});
+
+test("each spec copies its first suite title and summary as plain text", async () => {
+  const { ResultRows } = loadComponent("components/ResultRows.jsx");
+  const copied = [];
+  const opened = [];
+  const items = [
+    {
+      id: 0,
+      name: "account.cy.ts",
+      file: "account.cy.ts",
+      tests: [{ suite: "Account" }, { suite: "Account" }, { suite: "Profile" }],
+      counts: { total: 18, passed: 14, failed: 4 },
+      duration: 63000,
+    },
+    {
+      id: 1,
+      name: "empty.cy.ts",
+      file: "empty.cy.ts",
+      tests: [],
+      counts: { total: 0, passed: 0, failed: 0 },
+      duration: 0,
+    },
+  ];
+  const state = await mount(
+    React.createElement(
+      "table",
+      null,
+      React.createElement(
+        "tbody",
+        null,
+        React.createElement(ResultRows, {
+          items,
+          isTests: false,
+          duration: (ms) => (ms === 63000 ? "1m 3s" : "0ms"),
+          finishedDate: "5 Nov 2026, 21:00:00",
+          onCopy: (text) => copied.push(text),
+          openSpec: (id) => opened.push(id),
+        }),
+      ),
+    ),
+  );
+  try {
+    const buttons = state.host.querySelectorAll(
+      'button[aria-label^="Copy summary"]',
+    );
+    assert.equal(buttons.length, 2);
+    await act(async () => buttons[0].click());
+    await act(async () => buttons[1].click());
+    assert.deepEqual(copied, [
+      "Account | 14 Passed | 4 Failed | 1m 3s | 5 Nov 2026, 21:00:00",
+      "empty.cy.ts | 0 Passed | 0 Failed | 0ms | 5 Nov 2026, 21:00:00",
+    ]);
+    await act(async () =>
+      state.host.querySelector(".spec-actions [data-spec]").click(),
+    );
+    assert.deepEqual(opened, ["0"]);
+  } finally {
+    await state.cleanup();
+  }
+});
+
 test("React result rows and history cards preserve inspection and recovery callbacks", async () => {
   const { ResultRows } = loadComponent("components/ResultRows.jsx");
   const report = normalizeReport(fixture),

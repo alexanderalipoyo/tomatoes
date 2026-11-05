@@ -322,6 +322,18 @@ function renderResults() {
     duration,
     showTest,
     openSpec: (id) => openTests(id, $("#status").value),
+    finishedDate: date(report.end).replace(/ \([^)]*\)$/, ""),
+    onCopy: async (text) => {
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast("Spec summary copied.", "success");
+      } catch {
+        showToast(
+          "Could not copy the spec summary. Please try again.",
+          "error",
+        );
+      }
+    },
   });
   $("#showing").textContent = items.length
     ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, items.length)} of ${number(items.length)} ${isTests ? "tests" : "specs"}`
