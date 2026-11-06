@@ -76,10 +76,12 @@ async function reloadUserPreferences() {
   workspaceDraft = null;
   organizationDraft = null;
   preferences = state.preferences.display;
+  resultsPageSize = [25, 50, 100, 200].includes(preferences.rows)
+    ? preferences.rows
+    : 25;
   Appearance.apply(state.preferences.appearance.colorMode);
   renderTopbarTheme();
   renderWorkspaceIdentity();
-  pageSize = preferences.rows;
   page = 1;
   stability = null;
   if (report) {
@@ -118,7 +120,7 @@ let page = 1;
 let grouping = "specs";
 let view = "runs";
 let loading = false;
-let pageSize = preferences.rows;
+let resultsPageSize = 25;
 const outcomes = ["passed", "failed", "pending", "skipped"];
 function renderWorkspaceIdentity() {
   const importId = new URL(location.href).searchParams.get("import");
@@ -288,6 +290,7 @@ function renderResults() {
   const status = view === "failures" ? "failed" : $("#status").value;
   const spec = $("#spec-filter").value;
   const isTests = grouping === "tests" || view === "failures";
+  $("#results-page-size").value = String(resultsPageSize);
   const items = (isTests ? report.tests : report.specs).filter((item) => {
     if (spec !== "all" && String(isTests ? item.specId : item.id) !== spec)
       return false;
@@ -301,7 +304,7 @@ function renderResults() {
       : `${item.file} ${item.tests.map((test) => `${test.fullTitle} ${test.error}`).join(" ")}`;
     return text.toLowerCase().includes(search);
   });
-  const pages = Math.max(1, Math.ceil(items.length / pageSize));
+  const pages = Math.max(1, Math.ceil(items.length / resultsPageSize));
   page = Math.min(Math.max(1, page), pages);
   $("#list-title").textContent =
     view === "failures"
@@ -317,7 +320,7 @@ function renderResults() {
   $("#status").disabled = view === "failures";
   $("#status").value = status;
   globalThis.TomatoesReact.renderResults({
-    items: items.slice((page - 1) * pageSize, page * pageSize),
+    items: items.slice((page - 1) * resultsPageSize, page * resultsPageSize),
     isTests,
     duration,
     showTest,
@@ -326,17 +329,17 @@ function renderResults() {
     onCopy: async (text) => {
       try {
         await navigator.clipboard.writeText(text);
-        showToast("Spec summary copied.", "success");
+        showToast("Result summary copied.", "success");
       } catch {
         showToast(
-          "Could not copy the spec summary. Please try again.",
+          "Could not copy the result summary. Please try again.",
           "error",
         );
       }
     },
   });
   $("#showing").textContent = items.length
-    ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, items.length)} of ${number(items.length)} ${isTests ? "tests" : "specs"}`
+    ? `Showing ${(page - 1) * resultsPageSize + 1}–${Math.min(page * resultsPageSize, items.length)} of ${number(items.length)} ${isTests ? "tests" : "specs"}`
     : "Showing 0 results";
   $("#page-label").textContent = `Page ${page} of ${pages}`;
   $("#prev").disabled = page === 1;
@@ -1041,6 +1044,13 @@ $("#clear").onclick = () => {
   $("#spec-filter").value = "all";
   $("#status").value = "all";
   syncReportSpecURL();
+  page = 1;
+  renderResults();
+};
+$("#results-page-size").onchange = () => {
+  const size = Number($("#results-page-size").value);
+  if (![25, 50, 100, 200].includes(size)) return;
+  resultsPageSize = size;
   page = 1;
   renderResults();
 };

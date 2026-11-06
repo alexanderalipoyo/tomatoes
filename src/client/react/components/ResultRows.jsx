@@ -1,11 +1,18 @@
 function specTitle(item) {
   return item.tests.find((test) => test.suite)?.suite || item.name;
 }
-function specSummary(item, duration, finishedDate) {
+function resultSummary(item, isTests, duration, finishedDate) {
+  const title = isTests ? item.title : specTitle(item);
+  const passed = isTests
+    ? Number(item.status === "passed")
+    : item.counts.passed;
+  const failed = isTests
+    ? Number(item.status === "failed")
+    : item.counts.failed;
   const line = [
-    specTitle(item).replace(/[\r\n]+/g, " "),
-    `${item.counts.passed} Passed`,
-    `${item.counts.failed} Failed`,
+    title.replace(/[\r\n]+/g, " "),
+    `${passed} Passed`,
+    `${failed} Failed`,
     duration(item.duration),
     finishedDate || "Unavailable",
   ].join(" | ");
@@ -70,13 +77,24 @@ export function ResultRows({
           {duration(item.duration)}
         </td>
         <td data-label="Details">
-          <button
-            className="button"
-            data-test={item.id}
-            onClick={() => showTest(Number(item.id))}
-          >
-            Inspect
-          </button>
+          <div className="spec-actions">
+            <button
+              className="button"
+              data-test={item.id}
+              onClick={() => showTest(Number(item.id))}
+            >
+              Inspect
+            </button>
+            <button
+              className="button"
+              aria-label={`Copy summary for ${item.title}`}
+              onClick={() =>
+                onCopy(resultSummary(item, true, duration, finishedDate))
+              }
+            >
+              Copy
+            </button>
+          </div>
         </td>
       </tr>
     ) : (
@@ -124,7 +142,9 @@ export function ResultRows({
             <button
               className="button"
               aria-label={`Copy summary for ${specTitle(item)}`}
-              onClick={() => onCopy(specSummary(item, duration, finishedDate))}
+              onClick={() =>
+                onCopy(resultSummary(item, false, duration, finishedDate))
+              }
             >
               Copy
             </button>

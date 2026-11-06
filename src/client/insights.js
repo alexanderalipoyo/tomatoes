@@ -106,7 +106,7 @@ function renderSettings(alt) {
     sourceName,
     zones,
     preferences,
-    pageSize,
+    pageSize: resultsPageSize,
     savedEntry,
     historyCount: historyEntries.length,
     state: userPreferences.getState(),
@@ -138,7 +138,7 @@ function renderSettings(alt) {
     }
     preferences = next;
     stability = null;
-    pageSize = next.rows;
+    resultsPageSize = [25, 50, 100, 200].includes(next.rows) ? next.rows : 25;
     page = 1;
     renderSummary();
     renderHistory();

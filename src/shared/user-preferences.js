@@ -5,7 +5,7 @@
       : root.DashboardGroups;
   const DEFAULT_APPEARANCE = { colorMode: "system" };
   const DEFAULT_PROFILE = { firstName: "", lastName: "", email: "" };
-  const DEFAULT_DISPLAY = { timeZone: "Asia/Singapore", rows: 15 };
+  const DEFAULT_DISPLAY = { timeZone: "Asia/Singapore", rows: 25 };
   function profileChanged(before, after) {
     return ["firstName", "lastName", "email"].some(
       (key) =>
@@ -116,7 +116,7 @@
         ) ||
         typeof display.timeZone !== "string" ||
         display.timeZone.length > 100 ||
-        ![15, 30, 50, 100].includes(display.rows)
+        ![15, 25, 30, 50, 100, 200].includes(display.rows)
       )
         throw new Error(
           "Choose a valid time zone and results-per-page preference.",

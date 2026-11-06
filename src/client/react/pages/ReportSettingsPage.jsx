@@ -36,7 +36,7 @@ export function ReportSettingsPage({
             <label>
               Results per page
               <select id="setting-rows" defaultValue={pageSize}>
-                {[15, 30, 50, 100].map((rows) => (
+                {[25, 50, 100, 200].map((rows) => (
                   <option key={rows} value={rows}>
                     {rows} results
                   </option>

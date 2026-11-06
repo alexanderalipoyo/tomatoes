@@ -45,6 +45,20 @@ export function ResultsTable() {
       </div>
       <div className="pagination">
         <span id="showing" role="status"></span>
+        <label id="results-page-size-control">
+          Items per page{" "}
+          <select
+            id="results-page-size"
+            defaultValue="25"
+            aria-label="Items per page"
+          >
+            {[25, 50, 100, 200].map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
         <div>
           <button id="prev" className="button" aria-label="Previous page">
             {" ←"}

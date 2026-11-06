@@ -250,6 +250,97 @@ test("React shell keeps the feature host IDs unique and scripts start only after
   assert.ok(!page.includes('src="/js/app.js"'));
 });
 
+test("spec and test results support changing page size and reset to the first page", () => {
+  const { ResultsTable } = loadComponent("components/ResultsTable.jsx");
+  const document = new JSDOM(
+    renderToStaticMarkup(React.createElement(ResultsTable)),
+  ).window.document;
+  const select = document.querySelector("#results-page-size");
+  assert.deepEqual(
+    Array.from(select.options, (option) => option.value),
+    ["25", "50", "100", "200"],
+  );
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../../src/client/app.js"),
+    "utf8",
+  );
+  let rendered;
+  const context = {
+    $: (selector) => document.querySelector(selector),
+    report: normalizeReport(fixture),
+    grouping: "tests",
+    view: "results",
+    page: 3,
+    pageSize: 15,
+    resultsPageSize: 25,
+    number: String,
+    duration: String,
+    date: () => "Unavailable",
+    showTest: () => {},
+    openTests: () => {},
+    TomatoesReact: {
+      renderResults: (props) => {
+        rendered = props;
+      },
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    source.slice(
+      source.indexOf("function renderResults() {"),
+      source.indexOf("function openTests("),
+    ),
+    context,
+  );
+  vm.runInContext(
+    source.slice(
+      source.indexOf('$("#results-page-size").onchange'),
+      source.indexOf('$("#prev").onclick'),
+    ),
+    context,
+  );
+  context.renderResults();
+  assert.equal(
+    document.querySelector("#results-page-size-control").hidden,
+    false,
+  );
+  assert.equal(rendered.items.length, 25);
+  for (const size of [25, 50, 100, 200]) {
+    context.page = 3;
+    select.value = String(size);
+    select.onchange();
+    assert.equal(context.page, 1);
+    assert.equal(rendered.items.length, size);
+    assert.equal(rendered.items[0].id, context.report.tests[0].id);
+    assert.equal(document.querySelector("#prev").disabled, true);
+    assert.ok(
+      document.querySelector("#showing").textContent.endsWith("of 1261 tests"),
+    );
+  }
+  context.page = Math.ceil(
+    context.report.tests.length / context.resultsPageSize,
+  );
+  context.renderResults();
+  assert.equal(rendered.items.length, 61);
+  assert.equal(document.querySelector("#next").disabled, true);
+  context.grouping = "specs";
+  context.page = 1;
+  context.renderResults();
+  assert.equal(
+    document.querySelector("#results-page-size-control").hidden,
+    false,
+  );
+  assert.equal(rendered.items.length, 107);
+  for (const size of [25, 50, 100, 200]) {
+    context.page = 3;
+    select.value = String(size);
+    select.onchange();
+    assert.equal(context.page, 1);
+    assert.equal(rendered.items.length, Math.min(size, 107));
+    assert.equal(document.querySelector("#next").disabled, size >= 107);
+  }
+});
+
 test("spec view shows only the first suite title with a filename fallback", () => {
   const { ResultRows } = loadComponent("components/ResultRows.jsx");
   const report = normalizeReport({
@@ -359,6 +450,56 @@ test("each spec copies its first suite title and summary as plain text", async (
       state.host.querySelector(".spec-actions [data-spec]").click(),
     );
     assert.deepEqual(opened, ["0"]);
+  } finally {
+    await state.cleanup();
+  }
+});
+
+test("each test copies its title, outcome counts, time, and finished date as plain text", async () => {
+  const { ResultRows } = loadComponent("components/ResultRows.jsx");
+  const copied = [];
+  const inspected = [];
+  const items = ["passed", "failed", "skipped"].map((status, id) => ({
+    id,
+    title: `${status} test`,
+    suite: "Suite title",
+    file: "account.cy.ts",
+    status,
+    duration: 250,
+  }));
+  const state = await mount(
+    React.createElement(
+      "table",
+      null,
+      React.createElement(
+        "tbody",
+        null,
+        React.createElement(ResultRows, {
+          items,
+          isTests: true,
+          duration: (ms) => `${ms}ms`,
+          finishedDate: "6 Nov 2026, 09:00:00",
+          onCopy: (text) => copied.push(text),
+          showTest: (id) => inspected.push(id),
+        }),
+      ),
+    ),
+  );
+  try {
+    const buttons = state.host.querySelectorAll(
+      'button[aria-label^="Copy summary"]',
+    );
+    assert.equal(buttons.length, 3);
+    for (const button of buttons) await act(async () => button.click());
+    assert.deepEqual(copied, [
+      "passed test | 1 Passed | 0 Failed | 250ms | 6 Nov 2026, 09:00:00",
+      "failed test | 0 Passed | 1 Failed | 250ms | 6 Nov 2026, 09:00:00",
+      "skipped test | 0 Passed | 0 Failed | 250ms | 6 Nov 2026, 09:00:00",
+    ]);
+    await act(async () =>
+      state.host.querySelector(".spec-actions [data-test]").click(),
+    );
+    assert.deepEqual(inspected, [0]);
   } finally {
     await state.cleanup();
   }
