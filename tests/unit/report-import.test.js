@@ -27,6 +27,7 @@ function fixture(importFile = async () => {}, config = {}) {
     click() {
       this.dispatchEvent(new Event("click"));
     }
+    focus() {}
     contains(target) {
       return target === this;
     }
@@ -34,6 +35,16 @@ function fixture(importFile = async () => {}, config = {}) {
   const elements = Object.fromEntries(
     [
       "import-dialog",
+      "import-confirm-dialog",
+      "import-selected-file",
+      "review-import",
+      "import-selected-name",
+      "import-confirm-file",
+      "import-confirm-project",
+      "import-confirm-branch",
+      "import-confirm-tags",
+      "cancel-import-confirm",
+      "proceed-import",
       "report-drop-zone",
       "report-file",
       "import-selection-error",
@@ -80,6 +91,9 @@ test("dropped and browsed reports enter the same importer with the original file
     f.fire("report-drop-zone", "drop", [file]).defaultPrevented,
     true,
   );
+  assert.equal(f.elements["import-confirm-dialog"].open, true);
+  assert.equal(f.imports.length, 0);
+  f.elements["proceed-import"].click();
   assert.equal(f.elements["import-dialog"].open, false);
   assert.equal(f.imports[0], file);
   await new Promise(setImmediate);
@@ -87,6 +101,8 @@ test("dropped and browsed reports enter the same importer with the original file
   f.elements["report-file"].files = [file];
   f.elements["report-file"].value = "report.json";
   f.fire("report-file", "change");
+  assert.equal(f.imports.length, 1);
+  f.elements["proceed-import"].click();
   assert.equal(f.imports[1], file);
   assert.equal(f.elements["report-file"].value, "");
 });
@@ -128,6 +144,7 @@ test("rendering and an in-flight import block additional drops", async () => {
   );
   f.setBusy(false);
   f.fire("report-drop-zone", "drop", [file]);
+  f.elements["proceed-import"].click();
   f.elements["import-report"].click();
   f.fire("report-drop-zone", "drop", [file]);
   assert.equal(f.imports.length, 1);
@@ -175,6 +192,7 @@ test("branch selection reaches the importer for drops and validation keeps inval
   );
   f.elements["import-report"].click();
   f.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
+  f.elements["proceed-import"].click();
   assert.deepEqual(selected, { branch: "feature/a" });
   const invalid = fixture(async () => {}, {
     getImportOptions: () => {
@@ -206,6 +224,7 @@ test("loading previous branches blocks file imports until branch options are rea
   await new Promise(setImmediate);
   assert.equal(f.elements["browse-report"].disabled, false);
   f.fire("report-drop-zone", "drop", [{ name: "report.json" }]);
+  f.elements["proceed-import"].click();
   assert.equal(f.imports.length, 1);
 });
 
@@ -257,6 +276,7 @@ test("import role capabilities distinguish browse and drag while denying imports
   drag.elements["report-file"].dispatchEvent(new Event("change"));
   assert.equal(drag.imports.length, 0);
   drag.fire("report-drop-zone", "drop", [{ name: "allowed.json" }]);
+  drag.elements["proceed-import"].click();
   assert.equal(drag.imports.length, 1);
   const browse = fixture(async () => {}, {
     canBrowse: () => true,
@@ -265,4 +285,108 @@ test("import role capabilities distinguish browse and drag while denying imports
   browse.elements["import-report"].click();
   browse.fire("report-drop-zone", "drop", [{ name: "blocked.json" }]);
   assert.equal(browse.imports.length, 0);
+});
+
+test("cancel preserves the selected file and form, and review imports updated metadata", async () => {
+  let options = { project: "portal", branch: "main", tags: ["smoke"] };
+  let imported;
+  const f = fixture(
+    async (file, metadata) => {
+      imported = { file, metadata };
+    },
+    {
+      getImportOptions: () => options,
+    },
+  );
+  const file = { name: "results.json" };
+  f.elements["import-report"].click();
+  f.fire("report-drop-zone", "drop", [file]);
+  assert.equal(f.imports.length, 0);
+  assert.equal(f.elements["import-dialog"].open, true);
+  assert.equal(f.elements["import-confirm-dialog"].open, true);
+  assert.equal(f.elements["import-confirm-file"].textContent, "results.json");
+  assert.equal(f.elements["import-confirm-branch"].textContent, "main");
+  assert.equal(f.elements["import-confirm-tags"].textContent, "smoke");
+  f.elements["cancel-import-confirm"].click();
+  assert.equal(f.elements["import-confirm-dialog"].open, false);
+  assert.equal(f.elements["import-dialog"].open, true);
+  assert.equal(f.elements["import-selected-file"].hidden, false);
+  assert.equal(f.elements["import-selected-name"].textContent, file.name);
+  assert.equal(f.imports.length, 0);
+  options = {
+    project: "portal",
+    branch: "feature/login",
+    tags: ["regression", "nightly"],
+  };
+  f.elements["review-import"].click();
+  assert.equal(
+    f.elements["import-confirm-branch"].textContent,
+    "feature/login",
+  );
+  assert.equal(
+    f.elements["import-confirm-tags"].textContent,
+    "regression, nightly",
+  );
+  f.elements["proceed-import"].click();
+  f.elements["proceed-import"].click();
+  assert.equal(f.imports.length, 1);
+  assert.equal(imported.file, file);
+  assert.deepEqual(imported.metadata, options);
+  assert.equal(f.elements["import-dialog"].open, false);
+  assert.equal(f.elements["import-confirm-dialog"].open, false);
+  await new Promise(setImmediate);
+});
+
+test("review revalidates edited mandatory fields without losing the selected file", () => {
+  let valid = true;
+  const f = fixture(async () => {}, {
+    getImportOptions: () => {
+      if (!valid) throw new Error("Choose at least one tag.");
+      return { branch: "main", tags: ["smoke"] };
+    },
+  });
+  f.elements["import-report"].click();
+  f.fire("report-drop-zone", "drop", [{ name: "results.json" }]);
+  f.elements["cancel-import-confirm"].click();
+  valid = false;
+  f.elements["review-import"].click();
+  assert.equal(f.elements["import-confirm-dialog"].open, false);
+  assert.equal(f.elements["import-dialog"].open, true);
+  assert.equal(f.elements["import-selected-file"].hidden, false);
+  assert.match(f.elements["import-selection-error"].textContent, /tag/);
+  assert.equal(f.imports.length, 0);
+  valid = true;
+  f.elements["review-import"].click();
+  assert.equal(f.elements["import-confirm-dialog"].open, true);
+});
+
+test("dismissing confirmation keeps the form, while closing import clears the pending file", () => {
+  const f = fixture();
+  f.elements["import-report"].click();
+  f.elements["report-file"].files = [{ name: "browsed.json" }];
+  f.fire("report-file", "change");
+  // Native Escape closes only the topmost dialog.
+  f.elements["import-confirm-dialog"].close();
+  assert.equal(f.elements["import-dialog"].open, true);
+  assert.equal(f.elements["import-selected-file"].hidden, false);
+  f.elements["review-import"].click();
+  assert.equal(f.elements["import-confirm-file"].textContent, "browsed.json");
+  f.elements["cancel-import-confirm"].click();
+  f.elements["close-import"].click();
+  f.elements["import-report"].click();
+  assert.equal(f.elements["import-selected-file"].hidden, true);
+  f.elements["review-import"].click();
+  assert.equal(f.elements["import-confirm-dialog"].open, false);
+  assert.equal(f.imports.length, 0);
+});
+
+test("confirmation blocks replacement drops until the user cancels", () => {
+  const f = fixture();
+  const original = { name: "original.json" };
+  f.elements["import-report"].click();
+  f.fire("report-drop-zone", "drop", [original]);
+  f.fire("report-drop-zone", "drop", [{ name: "replacement.json" }]);
+  assert.equal(f.elements["import-confirm-file"].textContent, "original.json");
+  f.elements["proceed-import"].click();
+  assert.equal(f.imports[0], original);
 });

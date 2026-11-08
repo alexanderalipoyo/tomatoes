@@ -14,10 +14,14 @@
     const zone = get("report-drop-zone");
     const input = get("report-file");
     const error = get("import-selection-error");
+    const confirmation = get("import-confirm-dialog");
+    const selected = get("import-selected-file");
+    const review = get("review-import");
+    let pendingFile = null;
     let dragDepth = 0;
     let importing = false;
     let preparing = false;
-    const busy = () => importing || preparing || isBusy();
+    const busy = () => importing || preparing || confirmation.open || isBusy();
     const isFileDrag = (event) =>
       Array.from(event.dataTransfer?.types || []).includes("Files");
     function resetDrag() {
@@ -53,15 +57,58 @@
       const options = validateOptions();
       if (options === null) return;
       clearError();
+      pendingFile = files[0];
+      get("import-selected-name").textContent = pendingFile.name;
+      selected.hidden = false;
+      showConfirmation(options);
+    }
+    function showConfirmation(options) {
+      get("import-confirm-file").textContent = pendingFile.name;
+      get("import-confirm-project").textContent =
+        options.project || "Unavailable";
+      get("import-confirm-branch").textContent =
+        options.branch || "Unavailable";
+      get("import-confirm-tags").textContent =
+        (options.tags || []).join(", ") || "None";
+      confirmation.showModal();
+    }
+    review.addEventListener("click", () => {
+      if (busy() || !pendingFile || !canImport()) return;
+      const options = validateOptions();
+      if (options !== null) showConfirmation(options);
+    });
+    get("cancel-import-confirm").addEventListener("click", () =>
+      confirmation.close(),
+    );
+    confirmation.addEventListener("close", () => {
+      if (dialog.open) review.focus();
+    });
+    get("proceed-import").addEventListener("click", async () => {
+      if (
+        importing ||
+        preparing ||
+        isBusy() ||
+        !confirmation.open ||
+        !pendingFile ||
+        !canImport()
+      )
+        return;
+      const options = validateOptions();
+      if (options === null) {
+        confirmation.close();
+        return;
+      }
+      const file = pendingFile;
       importing = true;
+      confirmation.close();
       dialog.close();
       try {
-        await importFile(files[0], options);
+        await importFile(file, options);
       } finally {
         importing = false;
         input.value = "";
       }
-    }
+    });
     get("import-report").addEventListener("click", async () => {
       if (busy() || dialog.open || !canImport()) return;
       clearError();
@@ -82,7 +129,13 @@
       }
     });
     get("close-import").addEventListener("click", () => dialog.close());
-    dialog.addEventListener("close", resetDrag);
+    dialog.addEventListener("close", () => {
+      resetDrag();
+      if (confirmation.open) confirmation.close();
+      pendingFile = null;
+      selected.hidden = true;
+      input.value = "";
+    });
     get("browse-report").addEventListener("click", () => {
       if (canBrowse() && !busy() && validateOptions() !== null) {
         clearError();
