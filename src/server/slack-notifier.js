@@ -46,6 +46,7 @@ function buildSlackMessage({ record, report, baseURL }) {
           ? "Unknown"
           : "Incomplete";
   const c = report.counts;
+  const tags = ReportData.normalizeTags(record.metadata?.tags || []);
   const outcome = `${status === "Passed" ? ":white_check_mark:" : status === "Failed" ? ":red_circle:" : ":warning:"} *${status} run*`;
   const blocks = [
     {
@@ -80,6 +81,17 @@ function buildSlackMessage({ record, report, baseURL }) {
       });
   }
   if (fields.length) blocks.push({ type: "section", fields });
+  if (tags.length)
+    blocks.push({
+      type: "section",
+      fields: [
+        {
+          type: "plain_text",
+          text: `Tags\n${tags.join(", ")}`.slice(0, 2000),
+          emoji: false,
+        },
+      ],
+    });
   if (metadata.buildUrl)
     blocks.push({
       type: "section",
@@ -125,10 +137,7 @@ function buildSlackMessage({ record, report, baseURL }) {
       (a, b) =>
         b.counts.failed - a.counts.failed || a.file.localeCompare(b.file),
     );
-  blocks.push(
-    { type: "divider" },
-    { type: "section", text: { type: "mrkdwn", text: "*Specs for Review*" } },
-  );
+  blocks.push();
   if (!review.length)
     blocks.push({
       type: "section",
@@ -160,7 +169,7 @@ function buildSlackMessage({ record, report, baseURL }) {
     context.push(`Showing 5 of ${review.length} specs for review`);
   if (retry.withEvidence)
     context.push(`Retry evidence: ${retry.withEvidence} of ${c.total} tests`);
-  else context.push("Flakiness is not inferred from failures or history");
+
   blocks.push({
     type: "context",
     elements: [{ type: "plain_text", text: context.join(" · ") }],

@@ -9,7 +9,7 @@ const {
 const record = {
   id: "a".repeat(64),
   name: "report.json",
-  metadata: { project: "web" },
+  metadata: { project: "web", tags: ["smoke", "nightly"] },
 };
 const raw = () => ({
   stats: {
@@ -44,7 +44,12 @@ test("Slack messages use recorded totals and omit invented run, author, branch a
   });
   const text = JSON.stringify(value);
   assert.match(text, /Failed run/);
-  assert.match(text, /no retry evidence/);
+  assert.doesNotMatch(text, /Specs for Review/);
+  assert.doesNotMatch(
+    text,
+    /Flaky|no retry evidence|not inferred from failures/,
+  );
+  assert.match(text, /Tags\\nsmoke, nightly/);
   assert.match(text, /25.0%/);
   assert.match(text, /20m 34s/);
   assert.doesNotMatch(text, /GitHub Actions|Alex Ali|Run #|cloud.cypress.io/);
