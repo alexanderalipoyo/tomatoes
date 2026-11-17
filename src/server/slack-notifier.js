@@ -106,7 +106,7 @@ function buildSlackMessage({ record, report, baseURL }) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*Test Results: ${status}*\n\n*<${clean(reportURL(baseURL, record.id, "failures"), 2500)}|Failed>:* ${c.failed.toLocaleString("en-US")}\n*Passed:* ${c.passed.toLocaleString("en-US")}\n*Pending:* ${c.pending.toLocaleString("en-US")}\n*${retry.withEvidence ? "Confirmed flaky (retry evidence)" : "Flaky"}:* ${retry.withEvidence ? retry.confirmed.length : "Unavailable — no retry evidence"}\n*Skipped:* ${c.skipped.toLocaleString("en-US")}${c.unknown ? `\n*Unknown:* ${c.unknown.toLocaleString("en-US")}` : ""}`,
+        text: `*Test Results: ${status}*\n\n*Failed:* ${c.failed.toLocaleString("en-US")}\n*Passed:* ${c.passed.toLocaleString("en-US")}\n*Pending:* ${c.pending.toLocaleString("en-US")}${retry.withEvidence ? `\n*Confirmed flaky (retry evidence):* ${retry.confirmed.length}` : ""}\n*Skipped:* ${c.skipped.toLocaleString("en-US")}${c.unknown ? `\n*Unknown:* ${c.unknown.toLocaleString("en-US")}` : ""}`,
       },
     },
   );
